@@ -1,0 +1,24 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # Base de datos
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/enercheck"
+
+    # JWT
+    SECRET_KEY: str = "changeme-in-production"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
+    # App
+    APP_NAME: str = "EnerCheck API"
+    APP_VERSION: str = "0.1.0"
+    DEBUG: bool = False
+
+    # Gemini Vision (OCR de boletas)
+    GEMINI_API_KEY: str = ""
+
+
+settings = Settings()

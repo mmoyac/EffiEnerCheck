@@ -1,0 +1,138 @@
+// Use dbdiagram.io para visualizar este esquema profesional
+
+// 1. ESTRUCTURA MULTI-CONDOMINIO (SaaS)
+Table condominios {
+  id integer [primary key]
+  nombre varchar // "Condominio Las Camelias"
+  rut_comunidad varchar [unique]
+  direccion varchar
+  plan_suscripcion varchar [note: 'basico, pro, premium']
+  activo boolean [default: true]
+  created_at timestamp
+}
+
+// 2. IDENTIDAD Y ACCESO (RBAC)
+Table usuarios {
+  id integer [primary key]
+  nombre varchar
+  email varchar [unique]
+  password_hash varchar
+  rol_id integer [ref: > roles.id]
+  condominio_id integer [ref: > condominios.id, note: 'NULL para Super Admin']
+  ultimo_login timestamp
+}
+
+Table roles {
+  id integer [primary key]
+  nombre varchar // 'super_admin', 'admin_condominio', 'lector', 'parcelero'
+  descripcion text
+}
+
+// 3. ASIGNACIÓN PARCELERO ↔ PARCELAS (M2M)
+Table usuario_parcelas {
+  usuario_id integer [ref: > usuarios.id]
+  parcela_id integer [ref: > parcelas.id]
+
+  indexes {
+    (usuario_id, parcela_id) [pk]
+  }
+}
+
+// 4. INFRAESTRUCTURA FÍSICA
+Table parcelas {
+  id integer [primary key]
+  condominio_id integer [ref: > condominios.id]
+  numero_parcela varchar
+  propietario_nombre varchar
+  activa boolean [default: true]
+}
+
+// 4. GESTIÓN ELÉCTRICA (MAESTRA)
+Table boletas_maestras {
+  id integer [primary key]
+  condominio_id integer [ref: > condominios.id]
+  periodo_mes date
+  url_imagen_boleta varchar
+  
+  // Control de transparencia y flujo
+  boleta_visible_usuarios boolean [default: false]
+  estado varchar [note: 'borrador, validada, publicada']
+  
+  // Control de flujo de cierre de período
+  lecturas_cerradas boolean [default: false, note: 'Lector certifica que todas las lecturas están ingresadas']
+  liquidaciones_cerradas boolean [default: false, note: 'Admin cierra el período; nada se puede modificar después']
+
+  // Totales para validación OCR
+  total_kwh_compania float
+  monto_neto_electricidad_consumida float [note: 'Base para cálculo Valor_kWh = (campo * 1.19) / total_kwh_compania']
+  monto_total_emision integer
+  monto_saldo_anterior integer
+  creado_por integer [ref: > usuarios.id]
+}
+
+// 5. DETALLES Y LECTURAS
+Table boleta_items_detalle {
+  id integer [primary key]
+  boleta_id integer [ref: > boletas_maestras.id]
+  descripcion varchar // "Transporte", "Administración", etc.
+  monto_neto_clp float
+  tipo_calculo varchar // "fijo", "variable", "informativo"
+}
+
+Table lecturas_parcelas {
+  id integer [primary key]
+  parcela_id integer [ref: > parcelas.id]
+  boleta_id integer [ref: > boletas_maestras.id]
+  lectura_anterior float
+  lectura_actual float
+  kwh_consumidos float
+  lector_id integer [ref: > usuarios.id]
+  fecha_toma timestamp
+}
+
+// 6. LIQUIDACIONES FINALES
+Table liquidaciones_parcelas {
+  id integer [primary key]
+  parcela_id integer [ref: > parcelas.id]
+  boleta_id integer [ref: > boletas_maestras.id]
+  
+  monto_energia_kwh integer
+  monto_prorrateo_variable integer
+  monto_cuota_fija integer
+  
+  total_pagar_mes integer
+  pagado boolean [default: false]
+  fecha_pago timestamp
+}
+
+// 7. NAVEGACIÓN POR ROL
+Table menus {
+  id integer [primary key]
+  label varchar          // "Dashboard", "Boletas", etc.
+  path varchar           // "/dashboard", "/boletas"
+  icon varchar           // nombre del ícono para el frontend
+  orden integer
+  parent_id integer [ref: > menus.id, note: 'Para submenús']
+  activo boolean [default: true]
+}
+
+Table menu_roles {
+  menu_id integer [ref: > menus.id]
+  rol_id integer [ref: > roles.id]
+
+  indexes {
+    (menu_id, rol_id) [pk]
+  }
+}
+
+// 8. SEGURIDAD Y TRAZABILIDAD
+Table auditoria_logs {
+  id integer [primary key]
+  condominio_id integer [ref: > condominios.id, note: 'NULL si es acción de Super Admin']
+  usuario_id integer [ref: > usuarios.id]
+  accion varchar // "LOGIN", "UPLOAD_BOLETA", "TOGGLE_VISIBILITY", "DELETE_USER"
+  detalles jsonb [note: 'Guarda el estado anterior y nuevo del dato']
+  ip_address varchar
+  created_at timestamp [default: `now()`]
+}
+

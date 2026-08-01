@@ -1,0 +1,32 @@
+# Entornos
+.env
+*.env
+!*.env.example
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Node / frontend
+node_modules/
+dist/
+*.local
+
+# Docker
+postgres_data/
+
+# Uploads en runtime (boletas escaneadas)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+
+# Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
