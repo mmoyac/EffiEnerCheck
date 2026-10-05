@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Menu, X } from 'lucide-react'
-import { Sidebar } from './Sidebar'
+import { MarcaPortal, Sidebar } from './Sidebar'
 import { Header } from './Header'
 
 export function AppLayout() {
@@ -37,7 +37,7 @@ export function AppLayout() {
           >
             {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
-          <span className="text-sm font-semibold text-slate-100">EnerCheck</span>
+          <MarcaPortal />
         </div>
 
         {/* Desktop header */}

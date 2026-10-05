@@ -4,7 +4,7 @@ Condominio Santa Laura (id=1)
 """
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.boleta import BoletaItemDetalle, BoletaMaestra
@@ -46,6 +46,8 @@ async def seed_boleta_marzo_2025(db: AsyncSession) -> None:
 
     db.add(BoletaMaestra(**BOLETA))
     await db.flush()
+    # Los inserts con id explícito no avanzan la secuencia
+    await db.execute(text("SELECT setval(pg_get_serial_sequence('boletas_maestras', 'id'), (SELECT max(id) FROM boletas_maestras))"))
 
     for item in ITEMS:
         db.add(BoletaItemDetalle(**item))

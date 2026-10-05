@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { CheckCircle2, Clock, Zap, TrendingUp, DollarSign, FileText, ImageIcon, ChevronRight, ChevronLeft } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { CheckCircle2, Clock, Zap, TrendingUp, DollarSign, FileText, ImageIcon, ChevronRight, ChevronLeft, Ticket } from 'lucide-react'
 import { boletasApi } from '../../api/boletas'
 import { liquidacionesApi } from '../../api/liquidaciones'
+import { rifasApi } from '../../api/rifas'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { Spinner } from '../../components/ui/Spinner'
 import { Alert } from '../../components/ui/Alert'
 import { Modal } from '../../components/ui/Modal'
 import { clp, kwh, periodoCorto, fecha } from '../../utils/format'
-import { useAuth } from '../../hooks/useAuth'
+import { useAuth, useModulo } from '../../hooks/useAuth'
 import { Header } from '../../components/layout/Header'
 
 export default function MiLiquidacion() {
@@ -33,6 +35,14 @@ export default function MiLiquidacion() {
     enabled: !!boletaActiva,
   })
 
+  // Sin el módulo de rifas no hay aviso (ni consulta: la API respondería 403)
+  const conRifas = useModulo('rifas')
+  const { data: rifasAbiertas = [] } = useQuery({
+    queryKey: ['rifas', 'abierta'],
+    queryFn: () => rifasApi.list('abierta'),
+    enabled: conRifas,
+  })
+
   const misLiquidaciones = liquidaciones.filter((l) =>
     misParcelas.some((p) => p.id === l.parcela_id),
   )
@@ -45,6 +55,21 @@ export default function MiLiquidacion() {
         {/* VISTA DE LISTA */}
         {!selectedBoletaId && (
           <>
+            {rifasAbiertas.map((r) => (
+              <Link
+                key={r.id}
+                to={`/mis-rifas/${r.id}`}
+                className="flex items-center gap-3 rounded-xl border border-primary-500/40 bg-primary-600/10 p-4 transition-all hover:bg-primary-600/20 active:scale-[0.98]"
+              >
+                <Ticket className="h-6 w-6 shrink-0 text-primary-400" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold text-slate-100">{r.nombre}</p>
+                  <p className="truncate text-xs text-slate-300">Rifa solidaria a beneficio de {r.beneficiario} · Toca para comprar números</p>
+                </div>
+                <ChevronRight className="h-5 w-5 shrink-0 text-primary-400" />
+              </Link>
+            ))}
+
             <div>
               <h1 className="text-xl font-bold text-slate-100">Mis liquidaciones</h1>
               <p className="text-sm text-slate-500">Selecciona un período para ver el detalle</p>

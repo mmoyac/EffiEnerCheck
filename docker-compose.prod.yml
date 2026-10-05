@@ -1,0 +1,105 @@
+# EnerCheck — PRODUCCIÓN en el VPS compartido de effi4tech.
+#
+# Vive en /root/docker/enercheck/. El pipeline copia este archivo en cada deploy y luego hace
+#   docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
+# El .env que lo acompaña (secretos) se crea a mano en el VPS y nunca viaja por el pipeline (DEPLOY.md §3.3).
+# Rollback:  TAG=<sha> docker compose -f docker-compose.prod.yml up -d
+#
+# ⚠️ En tu PC, pruébalo SIEMPRE con otro nombre de proyecto (-p enercheck_prodlocal): "enercheck" es
+# también el proyecto del docker-compose.yml de desarrollo, y sin -p reemplaza sus contenedores.
+#
+# Aislamiento: todo con prefijo enercheck. Solo el backend, el frontend (portal) y la landing van a general-net (externa,
+# NUNCA se crea aquí), que es por donde los alcanza el nginx_proxy y por donde el backend sale a Gemini.
+# La base queda en la red interna, sin salida a internet y sin puertos publicados. Sin TLS aquí: lo
+# termina el nginx_proxy (infra/nginx/enercheck.conf).
+name: enercheck
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+x-app: &app
+  restart: unless-stopped
+  logging: *logging
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: enercheck_db
+    restart: unless-stopped
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]   # la imagen oficial necesita sus capacidades para initdb
+    environment:
+      POSTGRES_USER: enercheck
+      POSTGRES_DB: enercheck
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD}
+      TZ: America/Santiago
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U enercheck -d enercheck"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [interna]
+    mem_limit: 512m
+    cpus: 1.0
+
+  backend:
+    <<: *app
+    image: ${DOCKER_USERNAME:?falta DOCKER_USERNAME}/enercheck-backend:${TAG:-latest}
+    container_name: enercheck_backend
+    env_file: .env
+    environment:
+      # POSTGRES_PASSWORD sale de secrets.token_urlsafe: solo [A-Za-z0-9_-], seguro dentro de la URL.
+      DATABASE_URL: postgresql+asyncpg://enercheck:${POSTGRES_PASSWORD}@enercheck_db:5432/enercheck
+      ENTORNO: produccion
+      TZ: America/Santiago
+    volumes:
+      - uploads:/app/uploads     # imágenes de boletas (se sirven en /uploads/)
+      - privado:/app/privado     # vouchers de transferencia (NUNCA estáticos; ver rifas.py)
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [interna, general-net]
+    mem_limit: 768m
+    cpus: 1.0
+
+  frontend:
+    <<: *app
+    image: ${DOCKER_USERNAME}/enercheck-frontend:${TAG:-latest}
+    container_name: enercheck_frontend
+    read_only: true
+    tmpfs: [/tmp, /var/cache/nginx]
+    networks: [general-net]
+    mem_limit: 64m
+    cpus: 0.25
+
+  # Landing pública del condominio: aplicación aparte del portal, con su dominio propio
+  # (infra/nginx/condominiosantalaura-landing.conf). Si se detiene, el portal y la API siguen igual.
+  landing:
+    <<: *app
+    image: ${DOCKER_USERNAME}/enercheck-landing:${TAG:-latest}
+    container_name: enercheck_landing
+    read_only: true
+    tmpfs: [/tmp, /var/cache/nginx]
+    networks: [general-net]
+    mem_limit: 64m
+    cpus: 0.25
+
+networks:
+  interna:
+    name: enercheck_interna
+    internal: true          # sin salida a internet: solo db y backend
+  general-net:
+    external: true
+    name: general-net
+
+volumes:
+  pgdata:
+    name: enercheck_pgdata
+  uploads:
+    name: enercheck_uploads
+  privado:
+    name: enercheck_privado

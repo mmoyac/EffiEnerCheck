@@ -1,0 +1,9 @@
+# Nada de secretos, datos ni archivos subidos en el contexto de build
+.env
+*.env
+uploads/
+privado/
+tests/
+**/__pycache__/
+*.pyc
+.pytest_cache/

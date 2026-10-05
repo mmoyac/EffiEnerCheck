@@ -14,7 +14,32 @@ Fórmulas (fuente: AGENTS.md §8):
   monto_energia       = valor_kwh × kwh_parcela
   total_pagar         = monto_energia + prorrateo_var + cuota_fija
 
-Los ítems de tipo "informativo" no participan del reparto.
+Clasificación de los ítems:
+  fijo        → se reparte en partes iguales entre las parcelas activas
+  variable    → se prorratea según los kWh de cada parcela
+  informativo → visible en el desglose pero FUERA del reparto
+  pendiente   → creado por el OCR, sin clasificar. Tampoco entra al reparto,
+                pero no puede llegar hasta acá: el cálculo exige estado
+                'validada' y la corroboración exige cero pendientes.
+
+MONTOS NEGATIVOS (descuentos, notas de crédito, abonos)
+Se reparten con el mismo criterio de su tipo_calculo, reduciendo la cuota
+correspondiente. Las fórmulas NO necesitan caso especial.
+
+No distorsionan el valor_kwh, aunque a primera vista lo parezca. Cuando hay un
+descuento, monto_total_emision YA viene rebajado por la compañía; al restar el
+ítem negativo de la suma se devuelve esa misma plata al lado de energía, y ambos
+efectos se cancelan. Comprobación con un descuento fijo de -40.000:
+
+  sin descuento                    con descuento
+    emision   = 1.000.000            emision   =   960.000  (ya rebajada)
+    Σ items   =   300.000            Σ items   =   260.000
+    energia   =   700.000            energia   =   700.000  ← idéntica
+    valor_kwh =        70            valor_kwh =        70  ← idéntico
+    cuota_fija=    42.500            cuota_fija=    32.500  ← baja 40.000/4
+
+El descuento aterriza íntegro en la cuota fija, que es donde corresponde, y el
+total sigue cuadrando con la emisión.
 """
 
 from sqlalchemy import delete, select
@@ -98,7 +123,8 @@ async def calcular_liquidaciones_boleta(
     # ------------------------------------------------------------------ #
     # 4. Valores base compartidos por todas las parcelas
     # ------------------------------------------------------------------ #
-    # Clasificar ítems por tipo
+    # Clasificar ítems por tipo. Solo 'fijo' y 'variable' entran al reparto:
+    # 'informativo' y 'pendiente' quedan fuera por no coincidir con el filtro.
     suma_items_fijo: float = sum(
         i.monto_neto_clp for i in boleta.items_detalle if i.tipo_calculo == "fijo"
     )

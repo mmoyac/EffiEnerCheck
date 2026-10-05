@@ -1,4 +1,4 @@
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
@@ -53,6 +53,19 @@ USUARIOS = [
     },
 ]
 
+# Sin id fijo: en bases con usuarios cargados después del seed, un id fijo chocaría.
+# Se identifican por email.
+USUARIOS_POR_EMAIL = [
+    {
+        # Cuenta compartida por los turnos de portería (rifas solidarias)
+        "nombre": "Portería Santa Laura",
+        "email": "porteria@santalaura.cl",
+        "password_hash": _PWD,
+        "rol_id": 5,        # porteria
+        "condominio_id": 1,
+    },
+]
+
 USUARIO_PARCELAS = [
     {"usuario_id": 4, "parcela_id": 24},   # Marcelo Moya  → parcela "23"
     {"usuario_id": 5, "parcela_id": 12},   # German Chacon → parcela "13 A"
@@ -63,6 +76,16 @@ USUARIO_PARCELAS = [
 async def seed_usuarios(db: AsyncSession) -> None:
     for data in USUARIOS:
         existe = await db.execute(select(Usuario).where(Usuario.id == data["id"]))
+        if existe.scalar_one_or_none():
+            continue
+        db.add(Usuario(**data))
+
+    await db.flush()
+
+    # Los inserts con id explícito no avanzan la secuencia
+    await db.execute(text("SELECT setval('usuarios_id_seq', (SELECT max(id) FROM usuarios))"))
+    for data in USUARIOS_POR_EMAIL:
+        existe = await db.execute(select(Usuario).where(Usuario.email == data["email"]))
         if existe.scalar_one_or_none():
             continue
         db.add(Usuario(**data))
@@ -82,4 +105,4 @@ async def seed_usuarios(db: AsyncSession) -> None:
         await db.execute(insert(usuario_parcelas).values(**rel))
 
     await db.commit()
-    print(f"  ✓ usuarios: {len(USUARIOS)} registros | {len(USUARIO_PARCELAS)} asignaciones de parcelas")
+    print(f"  ✓ usuarios: {len(USUARIOS) + len(USUARIOS_POR_EMAIL)} registros | {len(USUARIO_PARCELAS)} asignaciones de parcelas")

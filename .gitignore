@@ -30,3 +30,11 @@ dist/
 build/
 .pytest_cache/
 .mypy_cache/
+
+# Datos personales: vouchers de transferencia y planillas de residentes
+backend/privado/
+docs/planillas/
+
+# Respaldos y volcados de base (datos personales)
+*.dump
+backups/

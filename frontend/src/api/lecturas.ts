@@ -6,6 +6,8 @@ interface LecturaCreate {
   boleta_id: number
   lectura_anterior: number
   lectura_actual: number
+  /** ISO 8601. Marca la lectura como efectivamente tomada en terreno. */
+  fecha_toma?: string
 }
 
 export const lecturasApi = {

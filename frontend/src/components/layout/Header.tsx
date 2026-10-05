@@ -1,20 +1,33 @@
-import { LogOut, User } from 'lucide-react'
-import { useAuth } from '../../hooks/useAuth'
+import { Link } from 'react-router-dom'
+import { LogOut, Ticket, User } from 'lucide-react'
+import { useAuth, useModulo } from '../../hooks/useAuth'
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin:      'Super Admin',
   admin_condominio: 'Administrador',
   lector:           'Lector',
   parcelero:        'Parcelero',
+  porteria:         'Portería',
 }
 
 export function Header() {
   const { user, logout } = useAuth()
+  const conRifas = useModulo('rifas')
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-slate-700 bg-slate-900 px-5">
       <div />
       <div className="flex items-center gap-4">
+        {/* El parcelero no tiene sidebar: su acceso a las rifas vive en la cabecera */}
+        {user?.rol?.nombre === 'parcelero' && conRifas && (
+          <Link
+            to="/mis-rifas"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-100"
+          >
+            <Ticket className="h-4 w-4" />
+            Rifas
+          </Link>
+        )}
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-600/20 text-primary-400">
             <User className="h-4 w-4" />

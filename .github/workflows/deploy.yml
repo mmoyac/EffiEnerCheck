@@ -1,0 +1,299 @@
+# EnerCheck — CI/CD (ver DEPLOY.md).
+#
+#   push a develop / pull request  → solo los chequeos (backend + frontend)
+#   push a main                    → chequeos → aprobación del environment "production" → build → deploy al VPS
+#
+# El repositorio es público: permisos mínimos, actions fijadas por SHA, sin pull_request_target y los
+# secretos (Docker Hub y VPS) solo en el environment "production". Los logs son públicos: ningún paso
+# imprime secretos. Los secretos de la aplicación viven en el .env del VPS, nunca aquí.
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}   # un deploy a producción nunca se cancela
+
+jobs:
+  backend:
+    name: checks · backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: enercheck
+          POSTGRES_PASSWORD: ci-postgres
+          POSTGRES_DB: enercheck
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U enercheck" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      # Base desechable del job: valores de CI, no son secretos.
+      DATABASE_URL: postgresql+asyncpg://enercheck:ci-postgres@localhost:5432/enercheck
+      SECRET_KEY: ci-secreto-desechable-de-integracion-continua
+      ENTORNO: desarrollo
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Carpetas de archivos (main.py monta /app/uploads, igual que en el contenedor)
+        run: sudo mkdir -p /app/uploads /app/privado && sudo chown -R "$(id -u):$(id -g)" /app
+
+      - name: Dependencias
+        run: pip install -r requirements.txt -r requirements-dev.txt pip-audit
+
+      - name: Migraciones + catálogos + datos de desarrollo (1.ª vez, base vacía)
+        run: python -m app.arranque && python -m app.db.seeds.seeder
+
+      - name: Preparación repetida (migraciones y seeds deben ser idempotentes)
+        run: python -m app.arranque && python -m app.db.seeds.seeder
+
+      - name: Pruebas
+        run: python -m pytest -q
+
+      - name: La aplicación importa
+        run: python -c "import main"
+
+      - name: Vulnerabilidades en dependencias (excepciones en security/pip-audit-ignore.txt)
+        run: |
+          IGNORAR=()
+          while read -r id _; do IGNORAR+=(--ignore-vuln "$id"); done < <(grep -Ev '^[[:space:]]*(#|$)' ../security/pip-audit-ignore.txt || true)
+          pip-audit -r requirements.txt "${IGNORAR[@]}"
+
+  frontends:
+    name: checks · ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [frontend, landing]   # portal y landing: aplicaciones separadas, mismos chequeos
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+
+      - run: npm ci --no-fund
+
+      - name: Vulnerabilidades en dependencias de producción
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Build (incluye tsc)
+        run: npm run build
+
+  build-and-deploy:
+    name: build + deploy (producción)
+    needs: [backend, frontends]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production        # aprobación manual; solo este job recibe los secretos
+    env:
+      REGISTRO: ${{ secrets.DOCKER_USERNAME }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}   # token de acceso de Docker Hub, no la contraseña
+
+      # ---- 1. Build (local, sin publicar todavía) -------------------------------------------------------
+      - name: Build backend
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: backend
+          file: backend/Dockerfile.prod
+          load: true
+          tags: ${{ env.REGISTRO }}/enercheck-backend:latest,${{ env.REGISTRO }}/enercheck-backend:${{ github.sha }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+      - name: Build frontend
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: frontend
+          file: frontend/Dockerfile.prod
+          load: true
+          tags: ${{ env.REGISTRO }}/enercheck-frontend:latest,${{ env.REGISTRO }}/enercheck-frontend:${{ github.sha }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+
+      - name: Build landing
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: landing
+          file: landing/Dockerfile.prod
+          load: true
+          tags: ${{ env.REGISTRO }}/enercheck-landing:latest,${{ env.REGISTRO }}/enercheck-landing:${{ github.sha }}
+          cache-from: type=gha,scope=landing
+          cache-to: type=gha,scope=landing,mode=max
+
+      # ---- 2. Escaneo: una vulnerabilidad CRÍTICA con parche detiene el deploy (excepciones en .trivyignore) --
+      - name: Trivy backend
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRO }}/enercheck-backend:${{ github.sha }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+
+      - name: Trivy frontend
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRO }}/enercheck-frontend:${{ github.sha }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+
+      - name: Trivy landing
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRO }}/enercheck-landing:${{ github.sha }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+
+      # ---- 3. Publicar (latest + SHA para rollback) ------------------------------------------------------
+      - name: Push de las 3 imágenes
+        run: |
+          for c in backend frontend landing; do
+            docker push "$REGISTRO/enercheck-$c:${GITHUB_SHA}"
+            docker push "$REGISTRO/enercheck-$c:latest"
+          done
+
+      # ---- 4. Deploy en el VPS: archivos → respaldo previo → pull → up → espera sano ------------------------
+      # El compose y el ejemplo del .env viajan en base64 dentro del mismo ssh-action (no son secretos: están
+      # en el repo). Así no se agrega otra action de terceros con acceso a la llave del VPS.
+      - name: Archivos de despliegue
+        run: |
+          echo "COMPOSE_B64=$(base64 -w0 docker-compose.prod.yml)" >> "$GITHUB_ENV"
+          echo "ENV_EJEMPLO_B64=$(base64 -w0 .env.prod.example)" >> "$GITHUB_ENV"
+
+      - name: Deploy al VPS
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          SHA: ${{ github.sha }}
+          COMPOSE_B64: ${{ env.COMPOSE_B64 }}
+          ENV_EJEMPLO_B64: ${{ env.ENV_EJEMPLO_B64 }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          envs: DOCKER_USERNAME,DOCKER_PASSWORD,SHA,COMPOSE_B64,ENV_EJEMPLO_B64
+          command_timeout: 20m
+          script: |
+            set -eu
+            umask 077
+            # Carpeta propia del proyecto (solo esta; no se toca nada de otros proyectos ni general-net).
+            mkdir -p /root/docker/enercheck
+            chmod 700 /root/docker/enercheck
+            cd /root/docker/enercheck
+
+            # Archivos del commit: el compose nuevo queda aparte hasta validar y respaldar.
+            printf '%s' "$COMPOSE_B64" | base64 -d > docker-compose.prod.yml.nuevo
+            printf '%s' "$ENV_EJEMPLO_B64" | base64 -d > .env.prod.example
+
+            # El .env (secretos de la aplicación) se crea a mano en el VPS y nunca viaja por aquí.
+            if [ ! -s .env ]; then
+              rm -f docker-compose.prod.yml.nuevo
+              echo "Falta /root/docker/enercheck/.env: créalo desde .env.prod.example (DEPLOY.md §3.3) y vuelve a ejecutar el job"
+              exit 1
+            fi
+            if grep -q 'CAMBIAR' .env; then
+              rm -f docker-compose.prod.yml.nuevo
+              echo "El .env aún tiene valores CAMBIAR_* (DEPLOY.md §3.3): no se despliega"
+              exit 1
+            fi
+            if ! docker compose -f docker-compose.prod.yml.nuevo config -q; then
+              rm -f docker-compose.prod.yml.nuevo
+              echo "El compose del commit no es válido con este .env: no se despliega"
+              exit 1
+            fi
+
+            # Respaldo pre-deploy de la base, los archivos (imágenes de boletas y vouchers) y el compose vigente,
+            # con el mismo prefijo para restaurarlos juntos. Se omite si la base aún no existe; si falla, se aborta.
+            if docker ps --format '{{.Names}}' | grep -qx enercheck_db; then
+              mkdir -p backups && chmod 700 backups
+              PREFIJO="backups/predeploy-$(date +%Y%m%d-%H%M%S)-${SHA}"
+              BACKUP="$PREFIJO.dump"
+              ARCHIVOS="$PREFIJO.archivos.tar.gz"
+              if ! docker exec enercheck_db pg_dump -U enercheck -d enercheck -Fc > "$BACKUP" || [ ! -s "$BACKUP" ]; then
+                rm -f "$BACKUP" docker-compose.prod.yml.nuevo; echo "Falló el respaldo pre-deploy de la base: no se despliega"; exit 1
+              fi
+              echo "Respaldo: $BACKUP ($(du -h "$BACKUP" | cut -f1))"
+              if docker ps --format '{{.Names}}' | grep -qx enercheck_backend; then
+                if ! docker exec enercheck_backend tar -C /app -czf - uploads privado > "$ARCHIVOS" || [ ! -s "$ARCHIVOS" ]; then
+                  rm -f "$BACKUP" "$ARCHIVOS" docker-compose.prod.yml.nuevo; echo "Falló el respaldo pre-deploy de los archivos: no se despliega"; exit 1
+                fi
+                echo "Respaldo: $ARCHIVOS ($(du -h "$ARCHIVOS" | cut -f1))"
+              else
+                echo "AVISO: enercheck_backend no está corriendo; el respaldo pre-deploy no incluye los archivos"
+              fi
+              [ -f docker-compose.prod.yml ] && cp docker-compose.prod.yml "$PREFIJO.compose.yml"   # para rollback
+              ls -1t backups/predeploy-*.dump | tail -n +11 | xargs -r rm -f               # conserva 10
+              ls -1t backups/predeploy-*.archivos.tar.gz 2>/dev/null | tail -n +11 | xargs -r rm -f
+              ls -1t backups/predeploy-*.compose.yml 2>/dev/null | tail -n +11 | xargs -r rm -f
+            fi
+            mv docker-compose.prod.yml.nuevo docker-compose.prod.yml
+
+            echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin >/dev/null
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            # El backend migra al arrancar: el deploy termina bien solo si queda sano.
+            estado=ausente
+            for i in $(seq 1 36); do
+              estado=$(docker inspect -f '{{.State.Health.Status}}' enercheck_backend 2>/dev/null || echo ausente)
+              [ "$estado" = healthy ] && break
+              sleep 5
+            done
+            if [ "$estado" != healthy ]; then
+              echo "enercheck_backend no quedó sano (estado: $estado). Últimas líneas:"
+              docker logs --tail 100 enercheck_backend
+              docker logout >/dev/null
+              exit 1
+            fi
+            docker compose -f docker-compose.prod.yml ps
+            docker image prune -f
+            docker logout >/dev/null

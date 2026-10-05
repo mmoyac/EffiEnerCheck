@@ -11,6 +11,8 @@ export interface Parcela {
   activa: boolean
 }
 
+import type { Modulo } from '../config/modulos'
+
 export interface Usuario {
   id: number
   nombre: string
@@ -20,14 +22,35 @@ export interface Usuario {
   condominio_id: number | null
   ultimo_login: string | null
   parcelas: Parcela[]
+  telefono: string | null
 }
+
+/** Identidad del condominio en el portal (nombre, logo y color institucional) */
+export interface CondominioMarca {
+  id: number
+  nombre: string
+  logo_url: string | null
+  color_primario: string | null
+}
+
+/** GET /auth/me: el usuario más los módulos habilitados de su condominio y su marca */
+export interface Sesion extends Usuario {
+  modulos: Modulo[]
+  condominio: CondominioMarca | null
+}
+
+/**
+ * fijo/variable entran al reparto; informativo es la exclusión deliberada del
+ * administrador; pendiente marca lo que el OCR creó y aún nadie ha juzgado.
+ */
+export type TipoCalculo = 'fijo' | 'variable' | 'informativo' | 'pendiente'
 
 export interface BoletaItemDetalle {
   id: number
   boleta_id: number
   descripcion: string
   monto_neto_clp: number
-  tipo_calculo: 'fijo' | 'variable' | 'informativo'
+  tipo_calculo: TipoCalculo
 }
 
 export interface BoletaMaestra {
@@ -76,6 +99,7 @@ export interface MenuItem {
   path: string
   icon: string
   orden: number
+  modulo: Modulo | null  // null = núcleo del portal
 }
 
 export interface TokenResponse {
@@ -86,7 +110,7 @@ export interface TokenResponse {
 export type ItemDetalleCreate = {
   descripcion: string
   monto_neto_clp: number
-  tipo_calculo: 'fijo' | 'variable' | 'informativo'
+  tipo_calculo: TipoCalculo
 }
 
 export interface BoletaMaestraCreate {
@@ -99,3 +123,117 @@ export interface BoletaMaestraCreate {
   monto_saldo_anterior?: number
   items_detalle?: ItemDetalleCreate[]
 }
+
+// --- Rifas solidarias (independientes de la boleta eléctrica) ---
+
+export type EstadoRifa = 'abierta' | 'cerrada'
+export type MedioPago = 'efectivo' | 'transferencia' | 'gasto_comun'
+export type CanalCompra = 'portal' | 'porteria' | 'administracion'
+
+export interface Rifa {
+  id: number
+  condominio_id: number
+  nombre: string
+  beneficiario: string
+  descripcion: string | null
+  premios: string[]
+  datos_transferencia: string | null
+  precio_numero: number
+  cantidad_numeros: number
+  estado: EstadoRifa
+  created_at: string
+  cerrada_at: string | null
+  numeros_vendidos_total: number
+  recaudado: number
+}
+
+export interface CompraRifa {
+  id: number
+  rifa_id: number
+  /** R{rifa}-{correlativo}, p. ej. R3-042 */
+  folio: string
+  parcela_id: number
+  parcela_numero: string
+  usuario_id: number
+  usuario_nombre: string
+  canal: CanalCompra
+  comprador_nombre: string | null
+  telefono: string | null
+  numeros: number[]
+  monto: number
+  medio_pago: MedioPago
+  pagada: boolean
+  pagada_at: string | null
+  tiene_voucher: boolean
+  created_at: string
+  anulada: boolean
+  anulada_at: string | null
+  anulada_por_nombre: string | null
+  puede_anular: boolean
+  puede_adjuntar_voucher: boolean
+}
+
+/** Monto a cargar en el gasto común (Comunidad Feliz), generado al cerrar la rifa. */
+export interface ImputacionRifa {
+  id: number
+  rifa_id: number
+  parcela_id: number
+  parcela_numero: string
+  cantidad_numeros: number
+  monto: number
+  cargada: boolean
+  cargada_at: string | null
+}
+
+export interface RifaDetalle extends Rifa {
+  /** Todos los números vendidos, sin dueño */
+  numeros_vendidos: number[]
+  /** Números vigentes de las parcelas del usuario */
+  mis_numeros: number[]
+  /** Compras e imputaciones de las parcelas del usuario; todas si es admin o portería */
+  compras: CompraRifa[]
+  imputaciones: ImputacionRifa[]
+}
+
+export interface CompraCreada {
+  rifa: RifaDetalle
+  compra: CompraRifa
+}
+
+export interface CompraRifaInput {
+  parcela_id: number
+  numeros: number[]
+  medio_pago: MedioPago
+  comprador_nombre?: string | null
+  telefono?: string | null
+}
+
+export interface ParcelaVenta {
+  id: number
+  numero_parcela: string
+  propietario_nombre: string | null
+}
+
+export interface TelefonoSugerido {
+  telefono: string
+  nombre: string
+}
+
+export interface CajaRifa {
+  filas: { fecha: string; usuario_id: number; usuario_nombre: string; ventas: number; numeros: number; monto: number }[]
+  total_numeros: number
+  total_monto: number
+}
+
+export interface RifaCreate {
+  condominio_id?: number
+  nombre: string
+  beneficiario: string
+  descripcion?: string | null
+  premios: string[]
+  datos_transferencia?: string | null
+  precio_numero: number
+  cantidad_numeros: number
+}
+
+export type RifaUpdate = Partial<Omit<RifaCreate, 'condominio_id'>>

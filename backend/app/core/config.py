@@ -16,9 +16,24 @@ class Settings(BaseSettings):
     APP_NAME: str = "EnerCheck API"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
+    # "produccion" activa las validaciones de arranque (app/arranque.py) y oculta /api/docs
+    ENTORNO: str = "desarrollo"
+
+    @property
+    def es_produccion(self) -> bool:
+        return self.ENTORNO == "produccion"
 
     # Gemini Vision (OCR de boletas)
     GEMINI_API_KEY: str = ""
+
+    # Landing: RUT del condominio cuyo sitio se muestra cuando el dominio de la petición no está
+    # registrado en ningún condominio (localhost en desarrollo, hosts temporales). Vacío = 404.
+    SITIO_POR_DEFECTO: str = ""
+
+    # Super admin inicial de producción: app/arranque.py lo crea solo si no existe ninguno
+    SUPERADMIN_EMAIL: str = ""
+    SUPERADMIN_NOMBRE: str = "Super Admin"
+    SUPERADMIN_PASSWORD: str = ""
 
 
 settings = Settings()

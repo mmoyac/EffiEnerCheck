@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useAuth, useModulo } from '../../hooks/useAuth'
 import { FileText, Activity, Calculator, TrendingUp } from 'lucide-react'
 import { boletasApi } from '../../api/boletas'
 import { liquidacionesApi } from '../../api/liquidaciones'
@@ -29,14 +30,32 @@ function KpiCard({ title, value, sub, icon: Icon, color }: {
   )
 }
 
-function estadoBadge(b: { lecturas_cerradas: boolean; liquidaciones_cerradas: boolean; boleta_visible_usuarios: boolean }) {
+function estadoBadge(b: { lecturas_cerradas: boolean; liquidaciones_cerradas: boolean; boleta_visible_usuarios: boolean; estado: string }) {
   if (b.boleta_visible_usuarios) return <Badge color="green" dot>Publicada</Badge>
   if (b.liquidaciones_cerradas)  return <Badge color="blue" dot>Liq. cerradas</Badge>
   if (b.lecturas_cerradas)       return <Badge color="yellow" dot>Lect. cerradas</Badge>
+  if (b.estado === 'validada')   return <Badge color="purple" dot>Corroborada</Badge>
   return <Badge color="slate" dot>Borrador</Badge>
 }
 
+/** Panel de un condominio sin el módulo de energía: no consulta boletas ni liquidaciones. */
+function PanelSinEnergia() {
+  const { user } = useAuth()
+  return (
+    <div className="mx-auto max-w-2xl rounded-xl border border-slate-700 bg-slate-800 p-6">
+      <h1 className="text-lg font-semibold text-slate-100">{user?.condominio?.nombre ?? 'Panel'}</h1>
+      <p className="mt-2 text-sm text-slate-400">
+        Usa el menú para administrar las funciones habilitadas en tu condominio.
+      </p>
+    </div>
+  )
+}
+
 export default function Dashboard() {
+  return useModulo('energia') ? <PanelEnergia /> : <PanelSinEnergia />
+}
+
+function PanelEnergia() {
   const { data: boletas = [], isLoading } = useQuery({
     queryKey: ['boletas'],
     queryFn: boletasApi.list,

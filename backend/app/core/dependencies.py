@@ -6,14 +6,43 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.modulos import MODULOS, Modulo
 from app.core.security import decode_access_token
 from app.db.session import get_db
+from app.models.condominio_modulo import CondominioModulo
 from app.models.usuario import Usuario
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
 # Jerarquía de roles definida en AGENTS.md
-ROLES = ("super_admin", "admin_condominio", "lector", "parcelero")
+ROLES = ("super_admin", "admin_condominio", "lector", "parcelero", "porteria")
+
+
+SIN_PORTAL = "Tu condominio no tiene contratado el portal de administración"
+
+
+async def modulos_del_condominio(db: AsyncSession, condominio_id: int | None) -> list[str]:
+    """Módulos habilitados del condominio, en el orden del catálogo."""
+    if condominio_id is None:
+        return []
+    filas = await db.execute(
+        select(CondominioModulo.modulo).where(CondominioModulo.condominio_id == condominio_id)
+    )
+    tiene = set(filas.scalars())
+    return [m for m in MODULOS if m in tiene]
+
+
+async def modulos_del_usuario(db: AsyncSession, user: Usuario) -> list[str]:
+    """El super_admin tiene el catálogo completo; el resto, los de su condominio."""
+    if user.rol.nombre == "super_admin":
+        return list(MODULOS)
+    return await modulos_del_condominio(db, user.condominio_id)
+
+
+def exigir_portal(user: Usuario, modulos: list[str]) -> None:
+    """Sin el producto `portal`, los usuarios del condominio no entran (spec modulos-plataforma)."""
+    if user.rol.nombre != "super_admin" and user.condominio_id is not None and "portal" not in modulos:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=SIN_PORTAL)
 
 
 # ---------------------------------------------------------------------------
@@ -42,6 +71,12 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise credentials_error
+
+    # Se consulta en cada petición (no va en el JWT): quitar un módulo tiene efecto inmediato.
+    # Queda en el objeto para que modulo_requerido no repita la consulta en la misma petición.
+    modulos = await modulos_del_usuario(db, user)
+    exigir_portal(user, modulos)
+    user.modulos = modulos
     return user
 
 
@@ -82,8 +117,39 @@ AdminRequired = require_roles("super_admin", "admin_condominio")
 # Quienes toman lecturas de remarcadores
 LectorRequired = require_roles("super_admin", "admin_condominio", "lector")
 
-# Cualquier usuario autenticado
-AnyRoleRequired = require_roles(*ROLES)
+# Cualquier usuario autenticado, EXCEPTO porteria. Es explícito a propósito: varios endpoints
+# AnyRoleRequired solo restringen por parcela cuando el rol es parcelero, así que un rol nuevo
+# agregado aquí heredaría acceso a todo el condominio.
+AnyRoleRequired = require_roles("super_admin", "admin_condominio", "lector", "parcelero")
+
+# Venta de rifas: administración y portería
+PorteriaRequired = require_roles("super_admin", "admin_condominio", "porteria")
+
+# Consulta de rifas: los cinco roles. Solo para endpoints de rifas.
+RifaAccesoRequired = require_roles(*ROLES)
+
+
+# ---------------------------------------------------------------------------
+# Guarda de módulo: se aplica al incluir el router (app/api/v1/router.py)
+# ---------------------------------------------------------------------------
+
+def modulo_requerido(modulo: Modulo):
+    """
+    Exige que el condominio del usuario tenga habilitado `modulo`, además de la guarda de rol de
+    cada endpoint. El super_admin pasa siempre.
+
+    Uso: api_router.include_router(x.router, dependencies=[Depends(modulo_requerido("energia"))])
+    """
+    async def dependency(
+        current_user: Annotated[Usuario, Depends(get_current_user)],
+    ) -> None:
+        if modulo not in current_user.modulos:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"El módulo {modulo} no está habilitado para este condominio",
+            )
+
+    return dependency
 
 
 # ---------------------------------------------------------------------------

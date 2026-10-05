@@ -12,6 +12,7 @@ import { Input } from '../../components/ui/Input'
 import { Alert } from '../../components/ui/Alert'
 import { Spinner } from '../../components/ui/Spinner'
 import { fecha } from '../../utils/format'
+import { formatearTelefono, normalizarTelefono } from '../../utils/telefono'
 import { useAuth, useRole } from '../../hooks/useAuth'
 import type { Usuario } from '../../types'
 import type { Condominio } from '../../api/condominios'
@@ -21,6 +22,7 @@ const ROLE_COLOR: Record<string, 'purple' | 'blue' | 'yellow' | 'green'> = {
   admin_condominio: 'blue',
   lector:           'yellow',
   parcelero:        'green',
+  porteria:         'yellow',
 }
 
 const ROLES = [
@@ -28,11 +30,13 @@ const ROLES = [
   { id: 2, nombre: 'admin_condominio' },
   { id: 3, nombre: 'lector' },
   { id: 4, nombre: 'parcelero' },
+  { id: 5, nombre: 'porteria' },
 ]
 
 interface FormState {
   nombre: string
   email: string
+  telefono: string
   password: string
   rol_id: string
   condominio_id: string
@@ -40,7 +44,7 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-  nombre: '', email: '', password: '', rol_id: '2', condominio_id: '', parcela_ids: [],
+  nombre: '', email: '', telefono: '', password: '', rol_id: '2', condominio_id: '', parcela_ids: [],
 }
 
 function UsuarioForm({
@@ -76,6 +80,16 @@ function UsuarioForm({
         value={form.email}
         onChange={(e) => onChange({ email: e.target.value })}
         required
+      />
+      <Input
+        label="Teléfono (opcional)"
+        type="tel"
+        inputMode="tel"
+        value={form.telefono}
+        onChange={(e) => onChange({ telefono: e.target.value })}
+        placeholder="Ej: 9 1234 5678"
+        error={normalizarTelefono(form.telefono) === undefined ? 'Debe tener 8 o 9 dígitos, o empezar con 56' : undefined}
+        hint="Se usa para enviar comprobantes por WhatsApp"
       />
       <Input
         label={isEdit ? 'Nueva contraseña (dejar vacío para no cambiar)' : 'Contraseña (mín. 8 caracteres)'}
@@ -207,6 +221,7 @@ export default function Usuarios() {
     setEditForm({
       nombre: u.nombre,
       email: u.email,
+      telefono: u.telefono ?? '',
       password: '',
       rol_id: String(u.rol_id),
       condominio_id: u.condominio_id ? String(u.condominio_id) : '',
@@ -218,7 +233,10 @@ export default function Usuarios() {
 
   const submitCreate = () => {
     setError('')
+    const telefono = normalizarTelefono(createForm.telefono)
+    if (telefono === undefined) { setError('Revisa el teléfono'); return }
     createMut.mutate({
+      telefono,
       nombre: createForm.nombre,
       email: createForm.email,
       password: createForm.password,
@@ -231,7 +249,10 @@ export default function Usuarios() {
   const submitEdit = () => {
     if (!editUser) return
     setError('')
+    const telefono = normalizarTelefono(editForm.telefono)
+    if (telefono === undefined) { setError('Revisa el teléfono'); return }
     const payload: Record<string, unknown> = {
+      telefono,
       nombre: editForm.nombre,
       email: editForm.email,
       rol_id: Number(editForm.rol_id),
@@ -299,7 +320,7 @@ export default function Usuarios() {
                     <span className="font-medium text-slate-200">{u.nombre}</span>
                   </div>
                 </td>
-                <td className="px-5 py-3 text-slate-400">{u.email}</td>
+                <td className="px-5 py-3 text-slate-400">{u.email}{u.telefono && <span className="block text-xs text-slate-500">{formatearTelefono(u.telefono)}</span>}</td>
                 <td className="px-5 py-3">
                   <Badge color={ROLE_COLOR[u.rol?.nombre] ?? 'slate'}>{u.rol?.nombre}</Badge>
                 </td>

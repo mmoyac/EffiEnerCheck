@@ -137,6 +137,16 @@ async def calcular_liquidaciones(
             detail="El período ya está cerrado. No se puede recalcular.",
         )
 
+    # El cálculo exige que el admin ya haya juzgado qué ítems entran al reparto.
+    if boleta.estado != "validada":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Debes corroborar el desglose antes de calcular. Revisa los ítems de la "
+                "boleta y confirma cuáles entran al reparto."
+            ),
+        )
+
     from app.services.enercheck import EnerCheckError, calcular_liquidaciones_boleta  # noqa: PLC0415
 
     try:

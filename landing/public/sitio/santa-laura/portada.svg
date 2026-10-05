@@ -1,0 +1,235 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1600 900" width="1600" height="900">
+  <!-- Portada provisoria de Santa Laura: gran entrada al condominio con dos queltehues.
+       Ilustración vectorial original; se exporta a portada.webp. Paleta en torno al verde #22C55E. -->
+  <defs>
+    <linearGradient id="cielo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#cdeedb"/>
+      <stop offset="0.55" stop-color="#eaf7ec"/>
+      <stop offset="1" stop-color="#fdf3dc"/>
+    </linearGradient>
+    <radialGradient id="sol" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fffbe6"/>
+      <stop offset="0.45" stop-color="#fff1bf" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#fff1bf" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="pasto" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5cc27a"/>
+      <stop offset="1" stop-color="#22973f"/>
+    </linearGradient>
+    <linearGradient id="camino" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#efe3c6"/>
+      <stop offset="1" stop-color="#d9c49a"/>
+    </linearGradient>
+    <linearGradient id="piedra" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#d9cdb4"/>
+      <stop offset="0.6" stop-color="#c8b999"/>
+      <stop offset="1" stop-color="#ad9d7c"/>
+    </linearGradient>
+    <linearGradient id="madera" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8a5a35"/>
+      <stop offset="1" stop-color="#6b4226"/>
+    </linearGradient>
+
+    <!-- Queltehue (Vanellus chilensis) mirando a la derecha, patas en (0,0) -->
+    <g id="queltehue">
+      <ellipse cx="0" cy="4" rx="46" ry="7" fill="#14532d" opacity="0.22"/>
+      <!-- patas -->
+      <path d="M-6 -72 L-12 0 M8 -72 L12 0" stroke="#d65a6f" stroke-width="5" stroke-linecap="round" fill="none"/>
+      <path d="M-12 0 L-24 2 M-12 0 L-2 3 M12 0 L24 2 M12 0 L2 3" stroke="#d65a6f" stroke-width="3.5" stroke-linecap="round"/>
+      <!-- cola blanca con banda negra -->
+      <path d="M-46 -96 L-86 -84 L-84 -72 L-42 -82 Z" fill="#fafaf5"/>
+      <path d="M-74 -87 L-86 -84 L-84 -72 L-72 -75 Z" fill="#1c1c1c"/>
+      <!-- vientre -->
+      <ellipse cx="-2" cy="-92" rx="52" ry="28" transform="rotate(-12 -2 -92)" fill="#fafaf5"/>
+      <!-- dorso y ala -->
+      <path d="M-58 -98 Q-26 -140 30 -128 Q50 -120 44 -100 Q0 -92 -58 -98 Z" fill="#8f8a72"/>
+      <path d="M-50 -100 Q-12 -128 28 -120 Q8 -104 -50 -96 Z" fill="#6f7d55"/>
+      <path d="M-34 -104 Q-2 -120 22 -116" stroke="#9a6b8a" stroke-width="3" fill="none" opacity="0.7"/>
+      <path d="M-56 -98 L-92 -86 L-50 -92 Z" fill="#1c1c1c"/>
+      <path d="M26 -124 L33 -116 L24 -114 Z" fill="#c0392b"/>
+      <!-- cuello gris -->
+      <path d="M26 -120 Q36 -142 38 -154 L60 -154 Q60 -132 54 -110 Z" fill="#a3a397"/>
+      <!-- pecho negro -->
+      <path d="M26 -114 Q56 -122 56 -96 Q40 -86 22 -96 Z" fill="#1a1a1a"/>
+      <!-- cabeza -->
+      <circle cx="50" cy="-160" r="15" fill="#a3a397"/>
+      <!-- frente y garganta negras -->
+      <path d="M58 -174 Q66 -168 64 -158 L60 -158 Q60 -167 52 -173 Z" fill="#1a1a1a"/>
+      <path d="M62 -156 Q61 -138 55 -116 L48 -116 Q55 -138 56 -156 Z" fill="#1a1a1a"/>
+      <!-- copete -->
+      <path d="M40 -168 Q24 -184 8 -178 Q24 -176 38 -160 Z" fill="#1a1a1a"/>
+      <!-- ojo rojo -->
+      <circle cx="53" cy="-162" r="4.2" fill="#d9363e"/>
+      <circle cx="53.6" cy="-162" r="1.8" fill="#111"/>
+    </g>
+    <!-- pico cerrado y pico abierto (llamando) -->
+    <g id="pico">
+      <path d="M63 -162 L86 -158 L63 -154 Z" fill="#e8798a"/>
+      <path d="M78 -159.4 L86 -158 L78 -156.6 Z" fill="#1a1a1a"/>
+    </g>
+    <g id="pico-abierto">
+      <path d="M63 -162 L86 -166 L64 -157 Z" fill="#e8798a"/>
+      <path d="M63 -156 L85 -150 L63 -153 Z" fill="#e8798a"/>
+      <path d="M79 -165 L86 -166 L80 -162.5 Z M79 -151.3 L85 -150 L79 -152.6 Z" fill="#1a1a1a"/>
+    </g>
+
+    <!-- álamo -->
+    <path id="alamo" d="M0 0 C-14 -40 -16 -150 0 -230 C16 -150 14 -40 0 0 Z"/>
+  </defs>
+
+  <!-- Cielo y sol -->
+  <rect width="1600" height="900" fill="url(#cielo)"/>
+  <circle cx="1210" cy="250" r="190" fill="url(#sol)"/>
+  <circle cx="1210" cy="250" r="58" fill="#fff8db"/>
+  <g fill="#ffffff" opacity="0.85">
+    <ellipse cx="300" cy="170" rx="120" ry="26"/>
+    <ellipse cx="370" cy="152" rx="70" ry="24"/>
+    <ellipse cx="930" cy="120" rx="95" ry="20"/>
+    <ellipse cx="990" cy="106" rx="55" ry="18"/>
+    <ellipse cx="1450" cy="190" rx="90" ry="18"/>
+  </g>
+
+  <!-- Cordillera -->
+  <path d="M0 470 L120 380 L210 430 L330 330 L450 420 L560 350 L690 440 L800 360 L930 430 L1060 320 L1190 420 L1300 360 L1420 430 L1520 370 L1600 410 L1600 540 L0 540 Z" fill="#a9bcc4"/>
+  <g fill="#f7fbfc">
+    <path d="M330 330 L300 356 L318 352 L332 362 L346 350 L362 356 Z"/>
+    <path d="M560 350 L536 370 L552 367 L566 376 L578 366 L590 370 Z"/>
+    <path d="M800 360 L776 380 L792 377 L806 386 L818 376 L830 381 Z"/>
+    <path d="M1060 320 L1028 350 L1048 345 L1062 357 L1078 344 L1096 351 Z"/>
+    <path d="M1300 360 L1278 378 L1293 375 L1306 384 L1318 374 L1330 379 Z"/>
+    <path d="M120 380 L100 396 L114 394 L126 401 L136 393 L148 397 Z"/>
+  </g>
+  <path d="M0 500 L150 440 L300 480 L470 420 L640 485 L820 430 L1000 480 L1180 425 L1350 480 L1500 445 L1600 470 L1600 560 L0 560 Z" fill="#8fa9a6"/>
+
+  <!-- Lomas -->
+  <path d="M0 520 Q200 470 420 505 T860 500 T1300 495 T1600 500 L1600 600 L0 600 Z" fill="#a6dcb0"/>
+  <path d="M0 545 Q260 505 540 535 T1100 530 T1600 525 L1600 620 L0 620 Z" fill="#7fca91"/>
+
+  <!-- Suelo -->
+  <rect x="0" y="560" width="1600" height="340" fill="url(#pasto)"/>
+
+  <!-- Álamos que bordean el camino hacia el fondo -->
+  <g fill="#2e8b4a">
+    <use xlink:href="#alamo" transform="translate(744 548) scale(0.32)"/>
+    <use xlink:href="#alamo" transform="translate(856 548) scale(0.32)"/>
+    <use xlink:href="#alamo" transform="translate(728 560) scale(0.42)"/>
+    <use xlink:href="#alamo" transform="translate(872 560) scale(0.42)"/>
+  </g>
+  <g fill="#257a40">
+    <use xlink:href="#alamo" transform="translate(708 578) scale(0.55)"/>
+    <use xlink:href="#alamo" transform="translate(892 578) scale(0.55)"/>
+  </g>
+
+  <!-- Camino de maicillo -->
+  <path d="M782 540 L818 540 L1060 900 L540 900 Z" fill="url(#camino)"/>
+  <path d="M782 540 L540 900 M818 540 L1060 900" stroke="#c9b285" stroke-width="3" opacity="0.7"/>
+
+  <!-- Muro con cerco vivo a ambos lados de la entrada -->
+  <g>
+    <path d="M0 596 Q30 560 80 576 Q120 548 170 572 Q220 546 270 570 Q320 548 370 570 Q420 550 470 570 Q520 552 560 574 L590 574 L590 650 L0 650 Z" fill="#1f7a3c"/>
+    <rect x="0" y="618" width="590" height="36" fill="#e4d8bd"/>
+    <rect x="0" y="614" width="590" height="7" fill="#cbbd9c"/>
+    <path d="M1010 574 Q1050 552 1100 570 L1600 570 L1600 650 L1010 650 Z" fill="#1f7a3c"/>
+    <path d="M1180 570 Q1230 548 1280 566 Q1330 546 1380 566 Q1430 548 1480 566 Q1530 550 1600 562 L1600 600 L1180 600 Z" fill="#1f7a3c"/>
+    <rect x="1010" y="618" width="590" height="36" fill="#e4d8bd"/>
+    <rect x="1010" y="614" width="590" height="7" fill="#cbbd9c"/>
+  </g>
+
+  <!-- Portería -->
+  <g>
+    <rect x="1060" y="512" width="170" height="138" fill="#f6edd8"/>
+    <rect x="1060" y="630" width="170" height="20" fill="#cbbd9c"/>
+    <path d="M1044 516 L1145 466 L1246 516 Z" fill="#a85433"/>
+    <path d="M1044 516 L1246 516 L1246 524 L1044 524 Z" fill="#8a4128"/>
+    <rect x="1082" y="548" width="74" height="50" rx="3" fill="#fff4c2" stroke="#6b4226" stroke-width="5"/>
+    <path d="M1119 548 L1119 598" stroke="#6b4226" stroke-width="4"/>
+    <rect x="1176" y="556" width="36" height="74" rx="2" fill="#7a4b2b"/>
+    <circle cx="1205" cy="596" r="2.5" fill="#f2d27a"/>
+    <rect x="1100" y="530" width="38" height="12" rx="2" fill="#15803d"/>
+  </g>
+
+  <!-- Gran entrada: pilares de piedra, portones abiertos, viga y techo de tejas -->
+  <g>
+    <!-- portones abiertos hacia adentro -->
+    <g stroke="#2b2b2b" stroke-width="5" fill="none" stroke-linecap="round">
+      <path d="M660 422 L722 452 L722 612 L660 646"/>
+      <path d="M660 470 L722 486 M660 600 L722 588"/>
+      <path d="M672 428 L672 640 M684 434 L684 634 M696 440 L696 628 M709 446 L709 620"/>
+      <path d="M940 422 L878 452 L878 612 L940 646"/>
+      <path d="M940 470 L878 486 M940 600 L878 588"/>
+      <path d="M928 428 L928 640 M916 434 L916 634 M904 440 L904 628 M891 446 L891 620"/>
+    </g>
+    <!-- pilares -->
+    <rect x="590" y="372" width="72" height="282" fill="url(#piedra)"/>
+    <rect x="938" y="372" width="72" height="282" fill="url(#piedra)"/>
+    <g stroke="#a39271" stroke-width="2.5" opacity="0.8" fill="none">
+      <path d="M590 420 H662 M590 470 H662 M590 520 H662 M590 570 H662 M590 620 H662"/>
+      <path d="M626 372 V420 M610 420 V470 M640 470 V520 M620 520 V570 M646 570 V620 M614 620 V654"/>
+      <path d="M938 420 H1010 M938 470 H1010 M938 520 H1010 M938 570 H1010 M938 620 H1010"/>
+      <path d="M974 372 V420 M958 420 V470 M988 470 V520 M968 520 V570 M994 570 V620 M962 620 V654"/>
+    </g>
+    <rect x="580" y="640" width="92" height="16" fill="#b3a382"/>
+    <rect x="928" y="640" width="92" height="16" fill="#b3a382"/>
+    <!-- faroles -->
+    <g>
+      <rect x="616" y="430" width="20" height="28" rx="3" fill="#2b2b2b"/>
+      <rect x="620" y="435" width="12" height="18" rx="2" fill="#ffe9a3"/>
+      <rect x="964" y="430" width="20" height="28" rx="3" fill="#2b2b2b"/>
+      <rect x="968" y="435" width="12" height="18" rx="2" fill="#ffe9a3"/>
+    </g>
+    <!-- viga de madera y techo de tejas -->
+    <rect x="566" y="346" width="468" height="30" fill="url(#madera)"/>
+    <path d="M552 348 L800 300 L1048 348 Z" fill="#b5603a"/>
+    <path d="M552 348 L1048 348 L1048 356 L552 356 Z" fill="#8a4128"/>
+    <g stroke="#9a4c2c" stroke-width="2.5" opacity="0.8" fill="none">
+      <path d="M612 336 L800 300 L988 336"/>
+      <path d="M672 324 L800 300 L928 324" opacity="0.6"/>
+    </g>
+    <!-- letrero colgante -->
+    <path d="M722 376 L722 392 M878 376 L878 392" stroke="#2b2b2b" stroke-width="3"/>
+    <rect x="700" y="392" width="200" height="44" rx="6" fill="#14532d" stroke="#d6b65c" stroke-width="3"/>
+    <text x="800" y="421" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="21" letter-spacing="3" fill="#fdf6dc">SANTA LAURA</text>
+  </g>
+
+  <!-- Gran árbol a la izquierda y palma chilena a la derecha -->
+  <g>
+    <path d="M150 700 Q160 600 140 520 L172 520 Q190 610 196 700 Z" fill="#6b4a2f"/>
+    <circle cx="90" cy="470" r="110" fill="#1d6b36"/>
+    <circle cx="210" cy="430" r="120" fill="#22803f"/>
+    <circle cx="300" cy="500" r="90" fill="#1d6b36"/>
+    <circle cx="150" cy="380" r="90" fill="#2a9149"/>
+    <circle cx="20" cy="390" r="80" fill="#22803f"/>
+  </g>
+  <g>
+    <path d="M1452 700 Q1446 560 1462 420 L1480 420 Q1470 560 1478 700 Z" fill="#7d6448"/>
+    <g fill="#2a8a47">
+      <path d="M1471 420 Q1400 380 1350 420 Q1410 396 1471 428 Z"/>
+      <path d="M1471 420 Q1420 350 1370 352 Q1430 372 1471 426 Z"/>
+      <path d="M1471 420 Q1480 340 1452 312 Q1490 350 1476 424 Z"/>
+      <path d="M1471 420 Q1530 350 1580 360 Q1520 380 1474 428 Z"/>
+      <path d="M1471 420 Q1550 392 1600 428 Q1540 410 1474 430 Z"/>
+    </g>
+  </g>
+
+  <!-- Primer plano: pasto y flores -->
+  <path d="M0 760 Q200 730 420 752 L540 900 L0 900 Z" fill="#2a9e48" opacity="0.55"/>
+  <path d="M1060 900 L1170 752 Q1400 728 1600 760 L1600 900 Z" fill="#2a9e48" opacity="0.55"/>
+  <g fill="#fef3c7">
+    <circle cx="90" cy="820" r="4"/><circle cx="160" cy="860" r="3.5"/><circle cx="250" cy="800" r="3"/>
+    <circle cx="470" cy="870" r="3.5"/><circle cx="1320" cy="830" r="4"/><circle cx="1480" cy="870" r="3.5"/>
+    <circle cx="1540" cy="800" r="3"/><circle cx="1110" cy="880" r="3"/>
+  </g>
+  <g fill="#f0a6b8">
+    <circle cx="130" cy="840" r="3"/><circle cx="330" cy="880" r="3.5"/><circle cx="1390" cy="860" r="3"/><circle cx="1560" cy="850" r="3.5"/>
+  </g>
+
+  <!-- Dos queltehues: uno llamando, el otro mirándolo -->
+  <g transform="translate(400 815) scale(1.25)">
+    <use xlink:href="#queltehue"/>
+    <use xlink:href="#pico-abierto"/>
+  </g>
+  <g transform="translate(1235 822) scale(-1.2 1.2)">
+    <use xlink:href="#queltehue"/>
+    <use xlink:href="#pico"/>
+  </g>
+</svg>

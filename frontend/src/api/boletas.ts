@@ -36,6 +36,12 @@ export const boletasApi = {
     return data
   },
 
+  /** El admin corrobora el desglose: borrador → validada. Habilita el cálculo. */
+  validarItems: async (id: number): Promise<BoletaMaestra> => {
+    const { data } = await api.post<BoletaMaestra>(`/boletas/${id}/validar-items`)
+    return data
+  },
+
   cerrarLecturas: async (id: number): Promise<BoletaMaestra> => {
     const { data } = await api.post<BoletaMaestra>(`/boletas/${id}/cerrar-lecturas`)
     return data

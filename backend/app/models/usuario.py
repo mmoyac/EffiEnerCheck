@@ -27,6 +27,8 @@ class Usuario(Base):
     # NULL para super_admin
     condominio_id: Mapped[Optional[int]] = mapped_column(ForeignKey("condominios.id"))
     ultimo_login: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # Normalizado a 56XXXXXXXXX (ver app/utils/telefono.py)
+    telefono: Mapped[Optional[str]] = mapped_column(String)
 
     rol: Mapped["Rol"] = relationship("Rol", back_populates="usuarios")
     condominio: Mapped[Optional["Condominio"]] = relationship(
@@ -45,3 +47,6 @@ class Usuario(Base):
     auditoria_logs: Mapped[List["AuditoriaLog"]] = relationship(
         "AuditoriaLog", back_populates="usuario"
     )
+
+    # No es columna: lo completa get_current_user con los módulos habilitados de su condominio
+    modulos = ()

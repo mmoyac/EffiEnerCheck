@@ -20,6 +20,7 @@ function EstadoBadge({ b }: { b: BoletaMaestra }) {
   if (b.boleta_visible_usuarios) return <Badge color="green" dot>Publicada</Badge>
   if (b.liquidaciones_cerradas)  return <Badge color="blue" dot>Período cerrado</Badge>
   if (b.lecturas_cerradas)       return <Badge color="yellow" dot>Lect. cerradas</Badge>
+  if (b.estado === 'validada')   return <Badge color="purple" dot>Corroborada</Badge>
   return <Badge color="slate" dot>Borrador</Badge>
 }
 

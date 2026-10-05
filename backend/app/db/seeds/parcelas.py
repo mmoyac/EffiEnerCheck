@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.parcela import Parcela
@@ -28,5 +28,7 @@ async def seed_parcelas(db: AsyncSession) -> None:
             continue
         db.add(Parcela(**data))
 
+    # Los inserts con id explícito no avanzan la secuencia
+    await db.execute(text("SELECT setval(pg_get_serial_sequence('parcelas', 'id'), (SELECT max(id) FROM parcelas))"))
     await db.commit()
     print(f"  ✓ parcelas: {len(PARCELAS)} registros cargados")

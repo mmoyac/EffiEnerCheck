@@ -4,7 +4,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, field_validator
 
 EstadoBoleta = Literal["borrador", "validada", "publicada"]
-TipoCalculo = Literal["fijo", "variable", "informativo"]
+# fijo/variable entran al reparto; informativo es la exclusión deliberada del
+# administrador; pendiente marca lo que el OCR creó y aún nadie ha juzgado.
+TipoCalculo = Literal["fijo", "variable", "informativo", "pendiente"]
 
 
 # ---------------------------------------------------------------------------

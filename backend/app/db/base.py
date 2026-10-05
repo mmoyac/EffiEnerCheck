@@ -9,5 +9,6 @@ from app.models.condominio import Condominio  # noqa: F401
 from app.models.lectura import LecturaParcela  # noqa: F401
 from app.models.liquidacion import LiquidacionParcela  # noqa: F401
 from app.models.parcela import Parcela  # noqa: F401
+from app.models.rifa import CompraRifa, ImputacionRifa, Rifa, RifaNumero  # noqa: F401
 from app.models.rol import Rol  # noqa: F401
 from app.models.usuario import Usuario  # noqa: F401

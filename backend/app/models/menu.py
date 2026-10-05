@@ -26,6 +26,8 @@ class Menu(Base):
     orden: Mapped[int] = mapped_column(Integer, default=0)
     parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey("menus.id"))
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    # NULL = núcleo del portal; si no, un módulo de app/core/modulos.py
+    modulo: Mapped[Optional[str]] = mapped_column(String(20))
 
     roles: Mapped[List["Rol"]] = relationship("Rol", secondary=menu_roles)
     hijos: Mapped[List["Menu"]] = relationship("Menu", back_populates="padre")

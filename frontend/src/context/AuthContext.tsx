@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { authApi } from '../api/auth'
-import type { Usuario } from '../types'
+import type { Sesion } from '../types'
 
 interface AuthCtx {
-  user: Usuario | null
+  user: Sesion | null
   token: string | null
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
@@ -13,9 +14,11 @@ interface AuthCtx {
 const AuthContext = createContext<AuthCtx | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<Usuario | null>(null)
+  const [user, setUser] = useState<Sesion | null>(null)
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'))
   const [isLoading, setIsLoading] = useState(true)
+  // Menús, módulos y datos dependen del usuario: no deben sobrevivir a un cambio de sesión
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     if (!token) { setIsLoading(false); return }
@@ -28,6 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     const { access_token } = await authApi.login(email, password)
     localStorage.setItem('token', access_token)
+    queryClient.clear()
     setToken(access_token)
     const me = await authApi.me()
     setUser(me)
@@ -37,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('token')
     setToken(null)
     setUser(null)
+    queryClient.clear()
   }
 
   return (

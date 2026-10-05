@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from jose import JWTError, jwt
+import jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -37,5 +37,5 @@ def decode_access_token(token: str) -> dict:
     """Decodifica el token. Retorna {} si es inválido o expirado."""
     try:
         return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    except JWTError:
+    except jwt.PyJWTError:
         return {}

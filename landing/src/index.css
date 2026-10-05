@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Valores antes de cargar el contenido: el verde por defecto. src/tema.ts los reemplaza. */
+  :root {
+    --marca-50: 240 253 244; --marca-100: 220 252 231; --marca-200: 187 247 208; --marca-300: 134 239 172;
+    --marca-400: 74 222 128; --marca-500: 34 197 94; --marca-600: 22 163 74; --marca-700: 21 128 61;
+    --marca-800: 22 101 52; --marca-900: 20 83 45; --marca-950: 5 46 22;
+    --marca-base: 34 197 94; --sobre-marca: 15 23 42;
+  }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
+  body { @apply bg-stone-50 font-sans text-slate-800 antialiased; }
+}
+
+@layer components {
+  .boton-marca {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold shadow-sm transition;
+    background-color: rgb(var(--marca-base));
+    color: rgb(var(--sobre-marca));
+  }
+  .boton-marca:hover { filter: brightness(0.95); }
+  .boton-marca:focus-visible { @apply outline-none ring-2 ring-offset-2 ring-marca-600; }
+  .seccion { @apply mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20; }
+  .titulo-seccion { @apply font-titulo text-3xl font-bold text-slate-900 sm:text-4xl; }
+}

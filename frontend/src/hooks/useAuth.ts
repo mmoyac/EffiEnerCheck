@@ -1,4 +1,5 @@
 import { useAuthContext } from '../context/AuthContext'
+import type { Modulo } from '../config/modulos'
 
 export function useAuth() {
   return useAuthContext()
@@ -22,4 +23,14 @@ export function useIsLector() {
 export function useIsParcelero() {
   const role = useRole()
   return role === 'parcelero'
+}
+
+/** Módulos habilitados del condominio del usuario (el super_admin los tiene todos) */
+export function useModulos(): Modulo[] {
+  const { user } = useAuthContext()
+  return user?.modulos ?? []
+}
+
+export function useModulo(modulo: Modulo): boolean {
+  return useModulos().includes(modulo)
 }

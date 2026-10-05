@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Lock, Calculator, Globe, Check, X, Pencil, Upload, ImageIcon, ScanLine } from 'lucide-react'
+import { ArrowLeft, Lock, Calculator, Globe, Check, X, Pencil, Upload, ImageIcon, ScanLine, ClipboardCheck } from 'lucide-react'
 import { boletasApi } from '../../api/boletas'
 import { lecturasApi } from '../../api/lecturas'
 import { liquidacionesApi } from '../../api/liquidaciones'
@@ -22,6 +22,7 @@ const TIPO_COLOR: Record<string, string> = {
   fijo:       'text-blue-400',
   variable:   'text-yellow-400',
   informativo:'text-slate-500',
+  pendiente:  'text-violet-400',
 }
 
 export default function BoletaDetalle() {
@@ -153,9 +154,19 @@ export default function BoletaDetalle() {
     mutationFn: (data: any) => boletasApi.updateDetalles(boletaId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['boleta', boletaId] })
+      qc.invalidateQueries({ queryKey: ['boletas'] })
       setEditingDetalles(false)
     },
     onError: (e: unknown) => setActionError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al actualizar detalles'),
+  })
+
+  const validarItemsMut = useMutation({
+    mutationFn: () => boletasApi.validarItems(boletaId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['boleta', boletaId] })
+      qc.invalidateQueries({ queryKey: ['boletas'] })
+    },
+    onError: (e: unknown) => setActionError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al corroborar el desglose'),
   })
 
   if (isLoading || !boleta) {
@@ -164,6 +175,8 @@ export default function BoletaDetalle() {
 
   const totalLiq = liquidaciones.reduce((s, l) => s + (l.total_pagar_mes ?? 0), 0)
   const pagadas = liquidaciones.filter((l) => l.pagado).length
+  // Ítems que el OCR creó y nadie ha clasificado: bloquean la corroboración.
+  const itemsPendientes = boleta.items_detalle.filter((i) => i.tipo_calculo === 'pendiente').length
 
   return (
     <div className="space-y-5">
@@ -177,6 +190,7 @@ export default function BoletaDetalle() {
             Boleta {periodoCorto(boleta.periodo_mes)}
           </h1>
           <div className="mt-1 flex flex-wrap gap-2">
+            {boleta.estado === 'validada' && <Badge color="purple">Desglose corroborado</Badge>}
             {boleta.lecturas_cerradas && <Badge color="yellow">Lecturas cerradas</Badge>}
             {boleta.liquidaciones_cerradas && <Badge color="blue">Período cerrado</Badge>}
             {boleta.boleta_visible_usuarios && <Badge color="green">Publicada</Badge>}
@@ -196,7 +210,15 @@ export default function BoletaDetalle() {
               <Lock className="h-4 w-4 text-orange-400" /> Reabrir lecturas
             </Button>
           )}
-          {!boleta.lecturas_cerradas && !boleta.liquidaciones_cerradas && (
+          {boleta.estado === 'borrador' && !boleta.liquidaciones_cerradas && (
+            <Button size="sm" loading={validarItemsMut.isPending}
+              disabled={itemsPendientes > 0}
+              title={itemsPendientes > 0 ? 'Clasifica primero los ítems pendientes' : undefined}
+              onClick={() => { setActionError(''); validarItemsMut.mutate() }}>
+              <ClipboardCheck className="h-4 w-4" /> Corroborar desglose
+            </Button>
+          )}
+          {boleta.estado === 'validada' && !boleta.liquidaciones_cerradas && (
             <Button size="sm" loading={calcularMut.isPending}
               onClick={() => { setActionError(''); calcularMut.mutate() }}>
               <Calculator className="h-4 w-4" /> Calcular liquidaciones
@@ -224,6 +246,31 @@ export default function BoletaDetalle() {
       </div>
 
       {actionError && <Alert variant="error">{actionError}</Alert>}
+
+      {itemsPendientes > 0 && (
+        <Alert variant="warning">
+          <span className="font-semibold">
+            {itemsPendientes} ítem{itemsPendientes > 1 ? 's' : ''} sin clasificar.
+          </span>{' '}
+          El OCR encontró {itemsPendientes > 1 ? 'líneas nuevas' : 'una línea nueva'} que no
+          {itemsPendientes > 1 ? ' existían' : ' existía'} en el período anterior. Decide si
+          {itemsPendientes > 1 ? ' entran' : ' entra'} al reparto antes de corroborar el desglose.{' '}
+          <button
+            type="button"
+            className="font-medium text-primary-400 underline underline-offset-2 hover:text-primary-300"
+            onClick={() => setEditingDetalles(true)}
+          >
+            Clasificar ahora
+          </button>
+        </Alert>
+      )}
+
+      {boleta.estado === 'borrador' && itemsPendientes === 0 && !boleta.liquidaciones_cerradas && (
+        <Alert variant="info">
+          Revisa el desglose y corrobóralo para habilitar el cálculo. Cada período requiere que
+          confirmes qué ítems entran al reparto, aunque vengan igual que el mes anterior.
+        </Alert>
+      )}
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

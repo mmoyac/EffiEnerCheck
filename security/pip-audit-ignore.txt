@@ -1,0 +1,2 @@
+# Vulnerabilidades de Python aceptadas temporalmente (pip-audit --ignore-vuln).
+# Una por línea: <ID> <motivo corto>. Cada una DEBE estar documentada en security/excepciones.md.

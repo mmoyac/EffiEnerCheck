@@ -23,7 +23,10 @@ class BoletaMaestra(Base):
 
     # Control de transparencia y flujo
     boleta_visible_usuarios: Mapped[bool] = mapped_column(Boolean, default=False)
-    estado: Mapped[str] = mapped_column(String, nullable=False, default="borrador")  # borrador, validada, publicada
+    # borrador  → recién creada, o devuelta tras cambiar las cifras. No se puede calcular.
+    # validada  → el admin corroboró qué ítems entran al reparto. Habilita el cálculo.
+    # publicada → visible para los parceleros. Punto sin retorno.
+    estado: Mapped[str] = mapped_column(String, nullable=False, default="borrador")
     # Candados de cierre de período
     lecturas_cerradas: Mapped[bool] = mapped_column(Boolean, default=False)
     liquidaciones_cerradas: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -59,7 +62,12 @@ class BoletaItemDetalle(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     boleta_id: Mapped[int] = mapped_column(ForeignKey("boletas_maestras.id"), nullable=False)
     descripcion: Mapped[str] = mapped_column(String, nullable=False)  # "Transporte", "Administración", etc.
+    # Con IVA incluido. Negativo para descuentos, notas de crédito y abonos.
     monto_neto_clp: Mapped[float] = mapped_column(Float, nullable=False)
-    tipo_calculo: Mapped[str] = mapped_column(String, nullable=False)  # fijo, variable, informativo
+    # fijo        → se reparte en partes iguales entre las parcelas activas
+    # variable    → se prorratea según los kWh de cada parcela
+    # informativo → visible en el desglose pero FUERA del reparto (exclusión deliberada)
+    # pendiente   → creado por el OCR, sin clasificar. Bloquea la corroboración.
+    tipo_calculo: Mapped[str] = mapped_column(String, nullable=False)
 
     boleta: Mapped["BoletaMaestra"] = relationship("BoletaMaestra", back_populates="items_detalle")

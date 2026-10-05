@@ -3,6 +3,22 @@
 @tailwind utilities;
 
 @layer base {
+  /* Escala primary por defecto: el verde histórico del portal (tailwind green). TemaCondominio la
+     reemplaza con el color institucional del condominio del usuario. Formato "R G B". */
+  :root {
+    --primary-50: 240 253 244;
+    --primary-100: 220 252 231;
+    --primary-200: 187 247 208;
+    --primary-300: 134 239 172;
+    --primary-400: 74 222 128;
+    --primary-500: 34 197 94;
+    --primary-600: 22 163 74;
+    --primary-700: 21 128 61;
+    --primary-800: 22 101 52;
+    --primary-900: 20 83 45;
+    --primary-950: 5 46 22;
+  }
+
   * {
     -webkit-tap-highlight-color: transparent;
   }
@@ -31,4 +47,18 @@
 
 @layer utilities {
   .tabular-nums { font-variant-numeric: tabular-nums; }
+}
+
+/* Comprobante de rifa: solo se imprime .area-impresion, en ancho de impresora térmica (sirve también en A4) */
+@media print {
+  body { background: #fff !important; }
+  body * { visibility: hidden; }
+  .area-impresion, .area-impresion * { visibility: visible; }
+  .area-impresion {
+    position: absolute; left: 0; top: 0;
+    width: 72mm; padding: 4mm;
+    background: #fff !important; border: none !important; color: #000 !important;
+  }
+  .area-impresion .print-oscuro, .area-impresion p, .area-impresion span { color: #000 !important; }
+  @page { margin: 4mm; }
 }

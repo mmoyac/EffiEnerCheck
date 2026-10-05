@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { TokenResponse, Usuario } from '../types'
+import type { Sesion, TokenResponse } from '../types'
 
 export const authApi = {
   login: async (email: string, password: string): Promise<TokenResponse> => {
@@ -12,8 +12,8 @@ export const authApi = {
     return data
   },
 
-  me: async (): Promise<Usuario> => {
-    const { data } = await api.get<Usuario>('/auth/me')
+  me: async (): Promise<Sesion> => {
+    const { data } = await api.get<Sesion>('/auth/me')
     return data
   },
 }

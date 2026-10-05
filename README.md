@@ -1,6 +1,13 @@
 # EnerCheck ⚡
 
-Plataforma SaaS para la gestión y prorrateo automático de cuentas eléctricas en condominios. Digitaliza el proceso completo: desde la carga de la boleta eléctrica hasta la publicación de liquidaciones individuales para cada parcelero.
+Plataforma SaaS para comunidades y condominios. Tiene **dos productos** que se contratan por separado:
+
+- **Landing pública** del condominio (`landing/`): presentación, avisos, espacios, directiva, documentos y contacto, con el botón **Acceso propietarios**.
+- **Portal de administración** (`frontend/`), organizado en módulos:
+  - **Energía (EnerCheck):** prorrateo de la cuenta eléctrica colectiva, desde la carga de la boleta hasta la liquidación de cada parcela.
+  - **Rifas:** rifas solidarias de la comunidad, con venta en portería.
+
+El `super_admin` define por condominio qué productos y módulos tiene, sus dominios, su logo y su color institucional.
 
 ---
 
@@ -9,7 +16,7 @@ Plataforma SaaS para la gestión y prorrateo automático de cuentas eléctricas 
 - **OCR con Gemini Vision** — sube la imagen de la boleta y los datos se extraen automáticamente
 - **Motor de cálculo propio** — distribuye el costo eléctrico entre parcelas según consumo real + cuotas fijas
 - **Flujo de período con candados** — lecturas → cálculo → cierre → publicación; cada etapa auditable
-- **Multitenant** — soporta múltiples condominios desde una misma instancia
+- **Multitenant y por módulos** — múltiples condominios en una instancia, cada uno con sus productos, dominios, logo y color
 - **PWA** — instalable en móvil; la interfaz del lector está optimizada para uso en campo
 - **Auditoría completa** — cada acción queda registrada con usuario, timestamp e IP
 
@@ -119,7 +126,8 @@ docker-compose up --build -d
 
 | Servicio | URL |
 |----------|-----|
-| Frontend | http://localhost:3000 |
+| Portal de administración | http://localhost:3000 |
+| Landing pública | http://localhost:3001 |
 | Backend API | http://localhost:8000 |
 | Docs Swagger | http://localhost:8000/docs |
 
@@ -154,7 +162,8 @@ EnerCheck/
 │   │   ├── core/               # JWT, configuración, dependencias RBAC, auditoría
 │   │   ├── models/             # SQLAlchemy ORM
 │   │   ├── schemas/            # Pydantic v2
-│   │   ├── services/           # Motor EnerCheck + OCR Gemini
+│   │   ├── services/           # Motor EnerCheck, OCR Gemini y sitio público
+│   │   ├── sitio/contenido/    # Contenido de la landing de cada condominio (JSON)
 │   │   └── db/                 # Sesión async, migraciones, seeds
 │   ├── main.py
 │   └── Dockerfile
@@ -163,8 +172,9 @@ EnerCheck/
 │   │   ├── pages/              # admin/ · lector/ · parcelero/
 │   │   ├── components/         # UI atómica reutilizable
 │   │   ├── api/                # Clientes por recurso (React Query)
-│   │   └── hooks/              # useAuth, useRole
+│   │   └── hooks/              # useAuth, useRole, useModulo
 │   └── Dockerfile
+├── landing/                    # Landing pública: aplicación y contenedor aparte del portal
 ├── docker-compose.yml
 ├── schema.dbml                 # Fuente de verdad del esquema DB
 └── AGENTS.md                   # Guía para agentes de IA

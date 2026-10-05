@@ -54,6 +54,7 @@ async def crear_usuario(
         password_hash=hash_password(data.password),
         rol_id=data.rol_id,
         condominio_id=data.condominio_id,
+        telefono=data.telefono,
     )
     db.add(usuario)
     await db.flush()

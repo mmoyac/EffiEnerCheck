@@ -24,7 +24,7 @@ Responde ÚNICAMENTE con el objeto JSON, sin texto adicional, sin markdown, sin 
   "monto_total_emision": <monto total con IVA o null>,
   "monto_saldo_anterior": <saldo anterior o null>,
   "items_detalle": [
-    {"descripcion": "<texto>", "monto_neto_clp": <entero>, "tipo_calculo": "fijo|variable|informativo"}
+    {"descripcion": "<texto>", "monto_neto_clp": <entero con signo>, "tipo_calculo": "fijo|variable|informativo"}
   ]
 }
 
@@ -35,6 +35,26 @@ Notas:
 - monto_total_emision es el campo "Total Emisión" CON IVA
 - monto_saldo_anterior es el campo "Saldo anterior"
 - En Chile el separador de miles es el punto: 4.547.354 = 4547354
+
+QUÉ VA EN items_detalle:
+- SOLO los cargos y abonos individuales del período que la compañía está cobrando.
+- NO incluyas los totales ni subtotales: "Total exento", "Total neto", "19% IVA",
+  "Total Emisión", "Otros", "Total a pagar". Esos ya se capturan en los campos de
+  cabecera de este mismo JSON.
+- NO incluyas el saldo anterior ni sus componentes: "Saldo Anterior", "Saldo Anterior
+  Servicio Eléctrico", "Otro Saldo Anterior", "Saldo Anterior Vencido". Corresponden a
+  deuda de períodos previos, no a cargos de este período, y van en monto_saldo_anterior.
+
+SIGNO DE LOS ÍTEMS (importante):
+- Los cargos normales van con monto POSITIVO.
+- Todo concepto que RESTA del total va con monto NEGATIVO. Incluye descuentos,
+  rebajas, notas de crédito, abonos, devoluciones, bonificaciones, reintegros,
+  compensaciones y reliquidaciones a favor del cliente.
+- Devuelve el signo negativo aunque en la boleta el número aparezca sin signo,
+  entre paréntesis, o con la palabra "menos", "descuento" o "abono" al lado.
+  Ejemplo: una línea "DESCUENTO LEY 20.928  50.000" se devuelve como -50000.
+- No inviertas el signo de un cargo normal solo porque su descripción sea larga
+  o poco clara: en la duda, un concepto que la compañía cobra es positivo.
 """
 
 

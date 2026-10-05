@@ -1,7 +1,14 @@
-# AGENTS.md: Proyecto EnerCheck (SaaS de Gestión Eléctrica)
+# AGENTS.md: Plataforma para comunidades (EnerCheck es su módulo de energía)
 
 ## 1. Objetivo del Proyecto
-Desarrollar **EnerCheck**, una plataforma SaaS multitenant diseñada para automatizar el prorrateo de cuentas eléctricas en condominios. El sistema procesa boletas maestras, gestiona lecturas de remarcadores por parcela y genera liquidaciones individuales transparentes.
+Una plataforma SaaS multitenant para condominios, con **dos productos** que se venden por separado:
+
+- **Landing pública** (`landing/`): el sitio web de cada condominio.
+- **Portal de administración** (`frontend/`), organizado en módulos:
+  - **Energía (EnerCheck):** procesa las boletas maestras, gestiona las lecturas de remarcadores por parcela y genera liquidaciones individuales transparentes.
+  - **Rifas:** rifas solidarias de la comunidad.
+
+Un condominio puede tener solo la landing, solo la administración (enlazada desde su propia web) o ambas. El `super_admin` lo parametriza por condominio, junto con sus dominios, su logo y su color institucional. El nombre comercial de la plataforma está pendiente (`frontend/src/config/marca.ts`).
 
 ## 2. Stack Tecnológico
 
@@ -28,7 +35,7 @@ Desarrollar **EnerCheck**, una plataforma SaaS multitenant diseñada para automa
 ## 3. Identidad Visual
 - **Logo:** Condominio Santa Laura (colibri + arco verde)
 - **Tema:** Dark moderno
-- **Color de acento primario:** Verde Santa Laura `#2E7D32` (variantes Tailwind: `green-700` / `green-500`)
+- **Color de acento primario:** el **color institucional de cada condominio** (`condominios.color_primario`). El portal usa la escala `primary-*` de Tailwind sobre variables CSS. Por defecto es el verde histórico `#22C55E` (escala green de Tailwind), que es también el de Santa Laura.
 - **Superficies:** `gray-900` (fondo base), `gray-800` (cards/sidebar), `gray-700` (bordes/inputs)
 - **Texto:** `gray-100` (primario), `gray-400` (secundario/muted)
 

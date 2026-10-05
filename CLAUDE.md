@@ -2,6 +2,8 @@
 
 Este archivo permite que cualquier agente de IA entienda rápidamente cómo está construido EnerCheck y cómo modificarlo sin romper nada.
 
+> **Plataforma por módulos.** El repositorio es una plataforma para comunidades con **dos productos** que se contratan por separado: la **landing** pública del condominio (`landing/`) y el **portal de administración** (`frontend/`). Dentro del portal hay módulos: **Energía** (lo que históricamente se llamó EnerCheck: boletas, lecturas y liquidaciones) y **Rifas**. Ver la sección [Módulos y productos](#módulos-y-productos).
+
 ---
 
 ## ¿Qué hace el sistema?
@@ -40,25 +42,30 @@ EnerCheck/
 │   │   │   └── endpoints/
 │   │   │       ├── auth.py              # Login → JWT + /auth/me
 │   │   │       ├── boletas.py           # CRUD boleta maestra + OCR + candados de período
-│   │   │       ├── condominios.py       # CRUD condominios (super_admin)
+│   │   │       ├── condominios.py       # CRUD condominios + parametrización comercial (módulos, dominios, portal_url, color, logo)
 │   │   │       ├── lecturas.py          # CRUD lecturas de remarcadores
 │   │   │       ├── liquidaciones.py     # Calcular (Motor EnerCheck) + consulta + pago
 │   │   │       ├── menus.py             # GET /menus/me → navegación según rol
 │   │   │       ├── parcelas.py          # CRUD parcelas del condominio
+│   │   │       ├── rifas.py             # Rifas: venta, pagos, voucher, caja, cierre, imputaciones, CSV
+│   │   │       ├── sitio.py             # GET /sitio: contenido PÚBLICO de la landing (resuelve el condominio por dominio)
 │   │   │       └── usuarios.py          # CRUD usuarios
 │   │   ├── core/
 │   │   │   ├── config.py                # Pydantic Settings (lee .env)
-│   │   │   ├── dependencies.py          # get_db, TenantId, SuperAdminRequired, AdminRequired, LectorRequired, AnyRoleRequired
+│   │   │   ├── modulos.py               # Catálogo de módulos: sitio, portal, energia, rifas
+│   │   │   ├── dependencies.py          # get_db, TenantId, guardas de rol, modulo_requerido y exigencia de `portal`
 │   │   │   ├── audit.py                 # registrar_auditoria(db, usuario_id, ...)
 │   │   │   └── security.py              # hash/verify passwords, create_access_token
 │   │   ├── models/                      # SQLAlchemy ORM (un archivo por entidad)
 │   │   │   ├── auditoria.py             # AuditoriaLog
 │   │   │   ├── boleta.py                # BoletaMaestra, BoletaItemDetalle
-│   │   │   ├── condominio.py            # Condominio
+│   │   │   ├── condominio.py            # Condominio (+ portal_url, logo_url, color_primario)
+│   │   │   ├── condominio_modulo.py     # CondominioModulo (módulos contratados), CondominioDominio (dominios de la landing)
 │   │   │   ├── lectura.py               # LecturaParcela
 │   │   │   ├── liquidacion.py           # LiquidacionParcela
 │   │   │   ├── menu.py                  # Menu + tabla menu_roles
 │   │   │   ├── parcela.py               # Parcela
+│   │   │   ├── rifa.py                  # Rifa, CompraRifa, RifaNumero, ImputacionRifa
 │   │   │   ├── rol.py                   # Rol
 │   │   │   ├── usuario.py               # Usuario
 │   │   │   └── usuario_parcela.py       # Tabla M2M usuario_parcelas
@@ -66,16 +73,23 @@ EnerCheck/
 │   │   ├── services/
 │   │   │   ├── enercheck.py             # Motor EnerCheck — fórmulas de distribución
 │   │   │   └── ocr.py                   # extraer_datos_boleta() → llama Gemini Vision
+│   │   ├── arranque.py                  # Arranque de producción: valida .env, migra, catálogos, super admin
 │   │   ├── db/
 │   │   │   ├── session.py               # AsyncSession factory
-│   │   │   └── seeds/seeder.py          # Datos de prueba (roles, condominio, usuarios, boleta)
+│   │   │   ├── cargar_residentes.py     # Producción: parcelas y parceleros desde MATRIZ RESIDENTES.xlsx
+│   │   │   ├── cambiar_clave.py         # Producción: cambiar una clave desde la consola del servidor
+│   │   │   └── seeds/seeder.py          # Datos de prueba de DESARROLLO (roles, condominio, usuarios, boleta)
 │   │   └── utils/
-│   │       └── format.py                # periodo_label(date) → "Mar. 2025"
+│   │       ├── format.py                # periodo_label(date) → "Mar. 2025"
+│   │       └── telefono.py              # normalizar_telefono() → 56XXXXXXXXX (mismo criterio que utils/telefono.ts)
 │   ├── alembic/                         # Migraciones de base de datos
-│   └── Dockerfile
+│   ├── tests/                           # pytest contra Postgres real (motor, API, carga de producción)
+│   ├── Dockerfile                       # Desarrollo
+│   └── Dockerfile.prod + entrypoint.sh  # Producción: app.arranque y luego uvicorn
 ├── frontend/
 │   ├── src/
-│   │   ├── App.tsx                      # Rutas + ROLE_HOME (home por rol)
+│   │   ├── App.tsx                      # Rutas (protegidas por rol y por módulo con ModuloRoute)
+│   │   ├── config/                      # modulos.ts (espejo del catálogo), marca.ts (nombre de la plataforma), inicio.ts (home por rol)
 │   │   ├── pages/
 │   │   │   ├── Login.tsx                # Formulario de acceso
 │   │   │   ├── admin/
@@ -85,13 +99,18 @@ EnerCheck/
 │   │   │   │   ├── ModalEditDetalles.tsx# Edición manual de totales e ítems
 │   │   │   │   ├── Condominios.tsx      # CRUD condominios (solo super_admin)
 │   │   │   │   ├── Parcelas.tsx         # CRUD parcelas
+│   │   │   │   ├── Rifas.tsx            # Lista y creación de rifas (RifaFormModal.tsx)
+│   │   │   │   ├── RifaDetalle.tsx      # Compras / Registrar compra / Cobros, cerrar, reabrir, CSV
 │   │   │   │   └── Usuarios.tsx         # CRUD usuarios
 │   │   │   ├── lector/
 │   │   │   │   ├── LectorDashboard.tsx  # Vista móvil: parcelas pendientes + progreso
 │   │   │   │   └── CapturarLectura.tsx  # Pantalla de captura por parcela
 │   │   │   └── parcelero/
-│   │   │       └── MiLiquidacion.tsx    # Vista del parcelero: lista de períodos → detalle
-│   │   ├── components/                  # UI atómica (Badge, Modal, etc.) + layout/
+│   │   │       ├── MiLiquidacion.tsx    # Vista del parcelero: lista de períodos → detalle (+ aviso de rifa abierta)
+│   │   │       └── Rifas.tsx            # /mis-rifas: grilla de compra y compras de su parcela
+│   │   │   └── porteria/
+│   │   │       └── VentaRifa.tsx        # /porteria: venta rápida, comprobante, búsqueda y caja
+│   │   ├── components/                  # UI atómica (Badge, Modal, etc.) + layout/ + rifas/ (NumeroGrid, CompraPanel, ComprasLista)
 │   │   ├── api/                         # Clientes HTTP por recurso
 │   │   │   ├── client.ts                # axios instance (lee VITE_API_URL, añade JWT, 401 → /login)
 │   │   │   ├── auth.ts                  # authApi.login / authApi.me
@@ -101,20 +120,39 @@ EnerCheck/
 │   │   │   ├── liquidaciones.ts         # liquidacionesApi.*
 │   │   │   ├── menus.ts                 # menusApi.*
 │   │   │   ├── parcelas.ts              # parcelasApi.*
+│   │   │   ├── rifas.ts                 # rifasApi.* (incluye descarga del CSV con token)
 │   │   │   └── usuarios.ts              # usuariosApi.*
 │   │   ├── context/
 │   │   │   └── AuthContext.tsx          # Estado de sesión; restaura vía /auth/me
 │   │   ├── hooks/
-│   │   │   └── useAuth.ts               # Exporta useAuth() y useRole()
-│   │   └── types/index.ts               # Interfaces TypeScript (BoletaMaestra, Lectura, etc.)
+│   │   │   └── useAuth.ts               # useAuth(), useRole(), useModulos(), useModulo(m)
+│   │   ├── utils/color.ts               # Escala de tonos desde el color institucional (TemaCondominio la aplica)
+│   │   └── types/index.ts               # Interfaces TypeScript (BoletaMaestra, Lectura, Sesion, etc.)
 │   └── Dockerfile
-├── docker-compose.yml
+├── landing/                             # LANDING pública: app aparte (Vite+React+Tailwind), contenedor propio
+│   ├── src/                             # App.tsx, secciones/, types.ts (espejo de SitioPublico), color.ts, tema.ts
+│   ├── public/sitio/<condominio>/       # Imágenes del sitio (portada.webp + su fuente portada.svg)
+│   └── Dockerfile / Dockerfile.prod     # Dev :3001 / producción (nginx no root, solo lectura)
+├── docker-compose.yml                   # Desarrollo
+├── docker-compose.prod.yml              # Producción en el VPS (ver DEPLOY.md)
+├── .env.prod.example                    # Plantilla del .env del VPS (los secretos nunca van al repo)
+├── .github/workflows/deploy.yml         # CI/CD: checks en develop/PR; deploy a main con aprobación
+├── infra/nginx/                         # Vhosts del nginx_proxy del VPS: enercheck.conf (portal en effi4tech) y
+│                                        # condominiosantalaura-{landing,portal}.conf (dominio propio)
+├── security/                            # Excepciones de pip-audit y Trivy (documentadas)
+├── DEPLOY.md                            # Pasos manuales de producción, respaldos, rollback
 ├── openspec/
 │   ├── specs/                           # Specs de las capacidades actuales (línea base)
 │   └── changes/                         # Propuestas de cambio en curso + archive/
+├── docs/
+│   ├── README.md                        # Índice de la documentación
+│   ├── flujo-periodo.md                 # Ciclo mensual: pasos, endpoints, candados, reversas
+│   ├── flujo-periodo.html               # El mismo flujo en formato visual
+│   ├── rifas.md                         # Rifas solidarias: flujo, reglas y endpoints
+│   ├── sitio-publico.md                 # Landing: contrato, contenido, secciones y plan de edición desde el portal
+│   └── presentacion-comunidad.md        # Documento para reunión de la comunidad
 ├── schema.dbml                          # Fuente de verdad del esquema DB (DB Diagram)
 ├── README.md                            # Documentación técnica GitHub
-├── PRESENTACION_COMUNIDAD.md            # Documento para reunión de la comunidad
 ├── AGENTS.md                            # Contexto de producto y decisiones de diseño
 └── CLAUDE.md                            # Este archivo
 ```
@@ -154,7 +192,7 @@ EnerCheck/
 ```bash
 openspec list --specs               # Capacidades registradas
 openspec show <capacidad>           # Ver una spec
-openspec validate --specs --strict  # Validar todas (debe dar 14 passed)
+openspec validate --specs --strict  # Validar todas
 ```
 
 Slash commands disponibles en Claude Code: `/opsx:propose`, `/opsx:apply`, `/opsx:explore`, `/opsx:archive`.
@@ -169,10 +207,42 @@ Los guards se aplican como dependencias FastAPI en cada endpoint:
 |-------------|-----------------|
 | `AdminRequired` | `super_admin`, `admin_condominio` |
 | `LectorRequired` | `super_admin`, `admin_condominio`, `lector` |
-| `AnyRoleRequired` | cualquier rol autenticado |
+| `AnyRoleRequired` | `super_admin`, `admin_condominio`, `lector`, `parcelero` — **no** incluye `porteria` |
+| `PorteriaRequired` | `super_admin`, `admin_condominio`, `porteria` |
+| `RifaAccesoRequired` | los cinco roles; solo endpoints de consulta de rifas |
 | `TenantId` | extrae `condominio_id` del JWT; `super_admin` recibe `None` (acceso global) |
 
-En el frontend, las rutas están protegidas en `App.tsx` con `useRole()`.
+En el frontend, las rutas están protegidas en `App.tsx` con `useRole()` y, las de un módulo, con `<ModuloRoute modulo="...">`. La pantalla de inicio por rol se define **una sola vez** en `config/inicio.ts` (`pantallaDeInicio(rol, modulos)`), con alternativas cuando la principal es de un módulo no contratado.
+
+> ⚠️ `porteria` (cuenta compartida de la portería, solo vende rifas) queda **fuera** de `AnyRoleRequired` a propósito: varios endpoints `AnyRoleRequired` solo filtran por parcela cuando el rol es `parcelero`, así que un rol nuevo agregado ahí vería todo el condominio. Al crear un rol nuevo, define sus guardas explícitamente y su entrada en `config/inicio.ts`.
+
+---
+
+## Módulos y productos
+
+Los **roles** dicen qué hace cada persona; los **módulos** dicen qué contrató cada condominio. Los define el `super_admin` en Condominios (spec `modulos-plataforma`).
+
+| Módulo | Tipo | Qué habilita |
+|--------|------|--------------|
+| `sitio` | Producto | Landing pública (`landing/`) vía `GET /api/v1/sitio` |
+| `portal` | Producto | Login de los usuarios del condominio y el núcleo (usuarios, parcelas, panel, auditoría) |
+| `energia` | Módulo del portal (exige `portal`) | Boletas, lecturas, liquidaciones, Motor EnerCheck |
+| `rifas` | Módulo del portal (exige `portal`) | Rifas solidarias y venta en portería |
+
+- **Catálogo** en `backend/app/core/modulos.py` (fuente de verdad) y su espejo `frontend/src/config/modulos.ts`. Agregar uno exige además ampliar el `CHECK` de `condominio_modulos`.
+- **Guarda en la API:** todo router de un módulo se incluye en `router.py` con `dependencies=[Depends(modulo_requerido("<modulo>"))]` → 403 `"El módulo <x> no está habilitado para este condominio"`. Esconder el menú no basta.
+- **Sin `portal`**, `get_current_user` y el login responden 403 `"Tu condominio no tiene contratado el portal de administración"` (efecto inmediato también sobre sesiones abiertas: los módulos no van en el JWT).
+- `get_current_user` deja los módulos en `current_user.modulos` (el `super_admin` tiene todos). `/auth/me` los informa junto con la marca del condominio (`condominio: {nombre, logo_url, color_primario}`).
+- **Menús:** `menus.modulo` (NULL = núcleo). `/menus/me` oculta los de módulos no contratados; el Sidebar agrupa en Energía / Comunidad / Administración.
+- **Parametrización comercial** (solo `super_admin`, auditada como `UPDATE_CONDOMINIO` / `UPDATE_CONDOMINIO_LOGO`): `modulos`, `portal_url`, `dominios_sitio` (únicos entre condominios), `color_primario` (`#RRGGBB`) y el logo (`POST/DELETE /condominios/{id}/logo`: PNG/JPEG/WEBP ≤ 1 MB, verificado por bytes; nunca SVG; en `/uploads/condominios/`).
+- **Color institucional:** la escala `primary-*` de Tailwind del portal son variables CSS (`index.css`) que `TemaCondominio` reemplaza con `escalaDesde(color)`. Usa siempre clases `primary-*` para acentos (no hex fijos) y el portal tomará el color de cada condominio.
+
+### Landing (`landing/`) — producto aparte
+
+- **No importa nada de `frontend/` ni viceversa.** Comparten solo el contrato de la API. `landing/src/types.ts` replica `backend/app/schemas/sitio.py` (fuente de verdad) y `landing/src/color.ts` copia el util del portal a propósito.
+- Su única llamada es `GET /api/v1/sitio` (mismo origen). En producción su vhost expone solo esa ruta y `/uploads/condominios/`, con una CSP estricta: nada de scripts, estilos ni fuentes de terceros.
+- **Contenido editorial:** `backend/app/sitio/contenido/<slug>.json` (validado al arrancar; inválido = no arranca). **Parametrización** (dominios, portal_url, logo, color): en la base. Ver [docs/sitio-publico.md](docs/sitio-publico.md).
+- Dev: `docker-compose up --build -d landing` → http://localhost:3001 (muestra `SITIO_POR_DEFECTO` del `backend/.env`).
 
 ---
 
@@ -234,6 +304,21 @@ total_pagar   = monto_energia + prorrateo_var + cuota_fija
 El motor es **idempotente**: hace `DELETE FROM liquidaciones WHERE boleta_id = X` antes de insertar. Se puede llamar múltiples veces sin duplicar datos.
 
 El endpoint `POST /liquidaciones/calcular/{boleta_id}` puede ejecutarse con `lecturas_cerradas = False` (permite recalcular tras correcciones de lecturas).
+
+---
+
+## Rifas solidarias (`backend/app/api/v1/endpoints/rifas.py`)
+
+Módulo **aparte** de la boleta: nada de lo recaudado entra a `liquidaciones_parcelas` ni al Motor EnerCheck. No mezclar. Detalle en [docs/rifas.md](docs/rifas.md).
+
+- **Formas de pago** por compra: `efectivo` (solo portería/admin; pagada al registrar), `transferencia` (pendiente hasta `confirmar-pago`) y `gasto_comun` (al cerrar genera `ImputacionRifa` por parcela, que se carga a mano en **Comunidad Feliz**). El `canal` (`portal`/`porteria`/`administracion`) lo decide el servidor según el rol.
+- **Unicidad**: `UNIQUE (rifa_id, numero)` en `rifa_numeros` + `SELECT ... FOR UPDATE` sobre la rifa (que también protege el contador `ultimo_folio`). Al anular se **borran** las filas de `rifa_numeros`; la `CompraRifa` queda `anulada=True` con sus `numeros`. La portería no anula.
+- **Folio** `R{rifa_id}-{folio:03d}` correlativo por rifa; no se reutiliza.
+- **Vouchers** en `/app/privado/vouchers` (volumen `privado_data`), **nunca** en `/app/uploads`, que se sirve como estático público. Se entregan solo por `GET .../compras/{cid}/voucher` (staff o usuarios de la parcela). `POST /compras` es multipart (`datos` JSON + `voucher`); en transferencias de portería el voucher es obligatorio.
+- `GET /rifas/{id}` recorta la respuesta: `numeros_vendidos` sin dueño para todos; `compras` e `imputaciones` solo de las parcelas del usuario (todas si es admin o portería).
+- Estados: `abierta` → `cerrar` (genera imputaciones) → `cerrada` → `reabrir` (solo sin imputaciones `cargada`; las borra).
+- Comprobante por WhatsApp: enlace `wa.me` armado en el frontend (`utils/comprobante.ts`); el sistema no envía mensajes.
+- React Query keys: `['rifas']`, `['rifas', 'abierta']`, `['rifa', id]`, `['rifa-caja', id]`, `['rifa-parcelas', id]`, `['rifa-telefonos', id, parcelaId]`, `['rifa-compras', id, filtros]`.
 
 ---
 
@@ -330,6 +415,20 @@ Siempre invalidar la key correcta en `onSuccess` de mutations.
 
 ---
 
+## CI/CD y producción
+
+Detalle y pasos manuales en [DEPLOY.md](DEPLOY.md). Lo que hay que saber al cambiar código:
+
+- **Ramas:** se trabaja en `develop` y `main` es solo producción. Cada push a `main` despliega, previa aprobación del environment `production`. No hagas push a `main` sin que lo pidan.
+- **El CI debe quedar en verde:** `pytest`, `pip-audit`, `npm audit --omit=dev --audit-level=high` y `npm run build`. Una vulnerabilidad nueva se corrige actualizando la dependencia. Solo si no hay parche se documenta en `security/excepciones.md`.
+- **Seeds:** `app/db/seeds/` es solo para desarrollo y tiene la clave pública `admin123`.
+  - En producción, `app.arranque` carga únicamente roles y menús, y **se niega a arrancar si alguna cuenta tiene `admin123`**.
+  - Los seeds con id explícito deben avanzar la secuencia con `setval`; si no, el próximo insert falla con «duplicate key».
+- **Datos personales:** la planilla de residentes, los vouchers y los respaldos nunca van al repo ni a los logs, que en CI son públicos.
+- **Tests:** `docker exec enercheck-backend-1 sh -c "pip install -q -r requirements-dev.txt && python -m pytest -q"`. Corren contra la base de desarrollo y cada test hace rollback.
+
+---
+
 ## Variables de entorno
 
 **Backend** (`backend/.env`):
@@ -339,6 +438,7 @@ SECRET_KEY=...
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 GEMINI_API_KEY=...
+SITIO_POR_DEFECTO=1-9   # RUT cuyo sitio muestra la landing en localhost
 ```
 
 **Frontend** (`.env` en `frontend/`):
@@ -383,14 +483,20 @@ docker exec -it enercheck-backend-1 python
 | Tab de lecturas en negro (React crash) | `const` usado antes de su declaración en el mismo render | Mover declaración después de todas sus dependencias |
 | `calcular` no hace nada visible | Mutation sin `onError` handler | Agregar `onError: (err) => setError(...)` a la mutation |
 | Sort de parcelas roto después de editar | Re-fetch trae orden de inserción de BD | Aplicar `localeCompare` con `numeric: true` al array del query |
+| 409 "Debes corroborar el desglose antes de calcular" | La boleta está en `borrador`: nadie ha juzgado qué ítems entran al reparto | `POST /boletas/{id}/validar-items`, o el botón "Corroborar desglose" en el detalle |
+| 409 "Queda 1 ítem sin clasificar" | El OCR creó líneas nuevas con `tipo_calculo="pendiente"` | Clasificarlas como `fijo`, `variable` o `informativo` en "Editar Totales e Ítems" |
+| La boleta volvió sola a `borrador` | Es deliberado: reprocesar el OCR o editar detalles revierte la corroboración | Volver a corroborar el desglose con las cifras nuevas |
 
 ---
 
 ## Usuarios de prueba (seed)
 
-| Email | Contraseña | Rol |
-|-------|-----------|-----|
-| `super@enercheck.cl` | `admin123` | Super Admin |
-| `henry@santalauracl` | `admin123` | Admin Condominio |
-| `claudio@santalauracl` | `lector123` | Lector |
-| `parcela2@santalauracl` | `parcelero123` | Parcelero |
+Todos comparten la contraseña `admin123` (ver `_PWD` en `backend/app/db/seeds/usuarios.py`).
+
+| Email | Rol |
+|-------|-----|
+| `mmoyainfo@gmail.com` | Super Admin |
+| `hhernandez@santalaura.cl` | Admin Condominio |
+| `cportero@santalaura.cl` | Lector |
+| `mmoyainfo+parcela@gmail.com` | Parcelero |
+| `porteria@santalaura.cl` | Portería (venta de rifas) |

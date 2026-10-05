@@ -94,42 +94,66 @@ export default function ModalEditDetalles({ boleta, open, onClose, onSave, isPen
               <Plus className="h-4 w-4" /> Agregar Ítem
             </Button>
           </div>
+          <p className="mb-2 text-xs text-slate-500">
+            Fijo y variable entran al reparto; informativo queda fuera.
+            Usa monto <span className="text-sky-400">negativo</span> para descuentos, notas de crédito y abonos.
+          </p>
           
           <div className="space-y-2 max-h-64 overflow-y-auto">
-            {form.items_detalle.map((item, idx) => (
-              <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-2 rounded bg-slate-800 p-2">
-                <input
-                  type="text"
-                  placeholder="Descripción"
-                  className="w-full rounded border border-slate-600 bg-slate-700 px-2 py-1.5 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
-                  value={item.descripcion}
-                  onChange={(e) => updateItem(idx, 'descripcion', e.target.value)}
-                />
-                <select
-                  className="w-full sm:w-auto rounded border border-slate-600 bg-slate-700 px-2 py-1.5 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
-                  value={item.tipo_calculo}
-                  onChange={(e) => updateItem(idx, 'tipo_calculo', e.target.value)}
+            {form.items_detalle.map((item, idx) => {
+              const esPendiente = item.tipo_calculo === 'pendiente'
+              const esAbono = Number(item.monto_neto_clp) < 0
+              return (
+                <div
+                  key={idx}
+                  className={`flex flex-col sm:flex-row sm:items-center gap-2 rounded p-2 ${
+                    esPendiente ? 'bg-violet-500/10 ring-1 ring-violet-500/40' : 'bg-slate-800'
+                  }`}
                 >
-                  <option value="fijo">Fijo</option>
-                  <option value="variable">Variable</option>
-                  <option value="informativo">Informativo</option>
-                </select>
-                <input
-                  type="number"
-                  placeholder="Monto ($)"
-                  className="w-full sm:w-32 rounded border border-slate-600 bg-slate-700 px-2 py-1.5 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
-                  value={item.monto_neto_clp}
-                  onChange={(e) => updateItem(idx, 'monto_neto_clp', e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="rounded p-1.5 text-red-400 hover:bg-red-500/20"
-                  onClick={() => removeItem(idx)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
+                  <input
+                    type="text"
+                    placeholder="Descripción"
+                    className="w-full rounded border border-slate-600 bg-slate-700 px-2 py-1.5 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
+                    value={item.descripcion}
+                    onChange={(e) => updateItem(idx, 'descripcion', e.target.value)}
+                  />
+                  <select
+                    className={`w-full sm:w-44 rounded border bg-slate-700 px-2 py-1.5 text-sm focus:outline-none ${
+                      esPendiente
+                        ? 'border-violet-500 text-violet-300 focus:border-violet-400'
+                        : 'border-slate-600 text-slate-100 focus:border-primary-500'
+                    }`}
+                    value={item.tipo_calculo}
+                    onChange={(e) => updateItem(idx, 'tipo_calculo', e.target.value)}
+                  >
+                    <option value="fijo">Fijo — parejo</option>
+                    <option value="variable">Variable — por consumo</option>
+                    <option value="informativo">Informativo — no se reparte</option>
+                    <option value="pendiente">Pendiente — sin clasificar</option>
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="Monto ($)"
+                    title="Usa monto negativo para descuentos, notas de crédito y abonos"
+                    className={`w-full sm:w-32 rounded border bg-slate-700 px-2 py-1.5 text-sm tabular-nums focus:outline-none ${
+                      esAbono
+                        ? 'border-sky-500/60 text-sky-300 focus:border-sky-400'
+                        : 'border-slate-600 text-slate-100 focus:border-primary-500'
+                    }`}
+                    value={item.monto_neto_clp}
+                    onChange={(e) => updateItem(idx, 'monto_neto_clp', e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    aria-label="Eliminar ítem"
+                    className="rounded p-1.5 text-red-400 hover:bg-red-500/20"
+                    onClick={() => removeItem(idx)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              )
+            })}
             {form.items_detalle.length === 0 && (
               <p className="text-sm text-slate-500 text-center py-4">No hay ítems registrados.</p>
             )}

@@ -67,7 +67,14 @@ def _boleta_query():
 
 
 async def _get_boleta_o_404(boleta_id: int, db: AsyncSession) -> BoletaMaestra:
-    result = await db.execute(_boleta_query().where(BoletaMaestra.id == boleta_id))
+    # populate_existing es obligatorio: la sesión usa expire_on_commit=False, así que
+    # sin él el identity map devuelve la instancia cacheada con items_detalle ya
+    # cargado y los ítems creados en esta misma petición no aparecen en la respuesta.
+    result = await db.execute(
+        _boleta_query()
+        .where(BoletaMaestra.id == boleta_id)
+        .execution_options(populate_existing=True)
+    )
     boleta = result.scalar_one_or_none()
     if not boleta:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Boleta no encontrada")
@@ -384,18 +391,23 @@ async def procesar_ocr_boleta(
     norm_existentes = {item.id: normalizar(item.descripcion) for item in items_existentes}
     
     items_data = data.get("items_detalle", [])
+    items_actualizados = 0
+    items_pendientes_creados = 0
+
     for item_data in items_data:
-        desc_ocr = item_data.get("descripcion", "")
-        monto_sin_iva = item_data.get("monto_neto_clp", 0)
+        desc_ocr = (item_data.get("descripcion") or "").strip()
+        # Gemini puede devolver null en un monto que no logró leer.
+        monto_sin_iva = item_data.get("monto_neto_clp") or 0
+        # El signo se preserva: negativo en descuentos, notas de crédito y abonos.
         monto_con_iva = round(monto_sin_iva * 1.19)
-        
+
         norm_ocr = normalizar(desc_ocr)
         if not norm_ocr:
             continue
-            
+
         mejor_match_id = None
         mejor_score = 0.0
-        
+
         for item_id, norm_ext in norm_existentes.items():
             if norm_ocr == norm_ext:
                 mejor_match_id = item_id
@@ -405,13 +417,39 @@ async def procesar_ocr_boleta(
             if score > mejor_score:
                 mejor_score = score
                 mejor_match_id = item_id
-                
+
         if mejor_match_id and mejor_score > 0.6:
             mapa_existentes[mejor_match_id].monto_neto_clp = monto_con_iva
+            items_actualizados += 1
+        else:
+            # Sin coincidencia: la línea NO se descarta. Se crea como 'pendiente'
+            # para que el administrador decida si entra al reparto o no.
+            # Al reprocesar el OCR este ítem coincidirá consigo mismo (score 1.0),
+            # de modo que no se generan duplicados.
+            db.add(
+                BoletaItemDetalle(
+                    boleta_id=boleta.id,
+                    descripcion=desc_ocr,
+                    monto_neto_clp=monto_con_iva,
+                    tipo_calculo="pendiente",
+                )
+            )
+            items_pendientes_creados += 1
+
+    # Las cifras cambiaron: un juicio previo del administrador ya no las respalda.
+    estado_revertido = boleta.estado == "validada"
+    if estado_revertido:
+        boleta.estado = "borrador"
 
     await registrar_auditoria(
         db, usuario_id=current_user.id, condominio_id=boleta.condominio_id,
-        accion="PROCESS_OCR", detalles={"boleta_id": boleta_id},
+        accion="PROCESS_OCR",
+        detalles={
+            "boleta_id": boleta_id,
+            "items_actualizados": items_actualizados,
+            "items_pendientes_creados": items_pendientes_creados,
+            "estado_revertido_a_borrador": estado_revertido,
+        },
     )
     await db.commit()
     return await _get_boleta_o_404(boleta.id, db)
@@ -447,9 +485,88 @@ async def actualizar_detalles_boleta(
     for item in data.items_detalle:
         db.add(BoletaItemDetalle(**item.model_dump(), boleta_id=boleta.id))
 
+    # El desglose cambió: la corroboración previa ya no respalda estas cifras.
+    estado_revertido = boleta.estado == "validada"
+    if estado_revertido:
+        boleta.estado = "borrador"
+
     await registrar_auditoria(
         db, usuario_id=current_user.id, condominio_id=boleta.condominio_id,
-        accion="UPDATE_DETALLES_BOLETA", detalles={"boleta_id": boleta_id},
+        accion="UPDATE_DETALLES_BOLETA",
+        detalles={
+            "boleta_id": boleta_id,
+            "estado_revertido_a_borrador": estado_revertido,
+        },
+    )
+    await db.commit()
+    return await _get_boleta_o_404(boleta.id, db)
+
+
+@router.post("/{boleta_id}/validar-items", response_model=BoletaMaestraResponse)
+async def validar_items_boleta(
+    boleta_id: int,
+    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    tenant_id: TenantId,
+    db: DB,
+):
+    """
+    El admin corrobora el desglose: declara qué ítems entran al reparto de este
+    período y cuáles no. Lleva la boleta de 'borrador' a 'validada', que es lo
+    que habilita el cálculo de liquidaciones.
+
+    Se audita una instantánea completa del desglose para poder demostrar más
+    adelante qué se decidió, sobre qué cifras y quién lo decidió.
+    """
+    boleta = await _get_boleta_o_404(boleta_id, db)
+    _validar_tenant(boleta, tenant_id)
+
+    if boleta.liquidaciones_cerradas:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El período está cerrado y no permite modificaciones",
+        )
+
+    if boleta.estado == "validada":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El desglose de esta boleta ya fue corroborado",
+        )
+
+    pendientes = [i for i in boleta.items_detalle if i.tipo_calculo == "pendiente"]
+    if pendientes:
+        n = len(pendientes)
+        cabeza = f"Quedan {n} ítems" if n > 1 else "Queda 1 ítem"
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"{cabeza} sin clasificar. Asigna a cada uno si se reparte parejo (fijo), "
+                f"por consumo (variable) o si queda fuera del reparto (informativo)."
+            ),
+        )
+
+    boleta.estado = "validada"
+
+    await registrar_auditoria(
+        db, usuario_id=current_user.id, condominio_id=boleta.condominio_id,
+        accion="VALIDAR_ITEMS",
+        detalles={
+            "boleta_id": boleta_id,
+            "periodo_mes": str(boleta.periodo_mes),
+            "totales": {
+                "total_kwh_compania": boleta.total_kwh_compania,
+                "monto_neto_electricidad_consumida": boleta.monto_neto_electricidad_consumida,
+                "monto_total_emision": boleta.monto_total_emision,
+                "monto_saldo_anterior": boleta.monto_saldo_anterior,
+            },
+            "items": [
+                {
+                    "descripcion": i.descripcion,
+                    "monto_neto_clp": i.monto_neto_clp,
+                    "tipo_calculo": i.tipo_calculo,
+                }
+                for i in boleta.items_detalle
+            ],
+        },
     )
     await db.commit()
     return await _get_boleta_o_404(boleta.id, db)

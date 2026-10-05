@@ -9,6 +9,26 @@ Table condominios {
   plan_suscripcion varchar [note: 'basico, pro, premium']
   activo boolean [default: true]
   created_at timestamp
+  // Parametrización comercial (la define el super_admin)
+  portal_url varchar [note: 'URL pública del portal; destino de "Acceso propietarios"']
+  logo_url varchar [note: '/uploads/condominios/<id>/logo-<uuid>.<ext>; PNG, JPEG o WEBP']
+  color_primario varchar(7) [note: '#RRGGBB en mayúsculas; NULL = color por defecto']
+}
+
+// Productos y módulos contratados (catálogo en backend/app/core/modulos.py)
+Table condominio_modulos {
+  condominio_id integer [ref: > condominios.id]
+  modulo varchar(20) [note: 'sitio, portal, energia, rifas; energia y rifas exigen portal']
+
+  indexes {
+    (condominio_id, modulo) [pk]
+  }
+}
+
+// Dominios en que se publica la landing del condominio
+Table condominio_dominios {
+  dominio varchar(253) [primary key, note: 'minúsculas, sin www. ni puerto']
+  condominio_id integer [ref: > condominios.id]
 }
 
 // 2. IDENTIDAD Y ACCESO (RBAC)
@@ -20,6 +40,7 @@ Table usuarios {
   rol_id integer [ref: > roles.id]
   condominio_id integer [ref: > condominios.id, note: 'NULL para Super Admin']
   ultimo_login timestamp
+  telefono varchar [note: '56XXXXXXXXX']
 }
 
 Table roles {
@@ -114,6 +135,7 @@ Table menus {
   orden integer
   parent_id integer [ref: > menus.id, note: 'Para submenús']
   activo boolean [default: true]
+  modulo varchar(20) [note: 'NULL = núcleo; si no, módulo que debe tener el condominio']
 }
 
 Table menu_roles {
@@ -136,3 +158,74 @@ Table auditoria_logs {
   created_at timestamp [default: `now()`]
 }
 
+
+// --- Rifas solidarias: módulo aparte, no participa de las liquidaciones eléctricas ---
+
+Table rifas {
+  id integer [primary key]
+  condominio_id integer [ref: > condominios.id]
+  nombre varchar
+  beneficiario varchar
+  descripcion text
+  premios "text[]" [note: 'En orden: el primero es el 1.º premio']
+  datos_transferencia text
+  precio_numero integer [note: 'CLP por número']
+  cantidad_numeros integer [note: 'Números del 1 al N']
+  estado varchar [default: 'abierta', note: 'abierta | cerrada']
+  ultimo_folio integer [default: 0, note: 'Contador del folio de compras']
+  creado_por_id integer [ref: > usuarios.id]
+  created_at timestamp
+  cerrada_at timestamp
+}
+
+Table compras_rifa {
+  id integer [primary key]
+  rifa_id integer [ref: > rifas.id]
+  folio integer [note: 'Correlativo por rifa: R{rifa_id}-{folio:03d}']
+  parcela_id integer [ref: > parcelas.id]
+  usuario_id integer [ref: > usuarios.id, note: 'Cuenta que registró la compra']
+  canal varchar [note: 'portal | porteria | administracion']
+  comprador_nombre varchar [note: 'Texto libre: puede no ser residente']
+  telefono varchar [note: '56XXXXXXXXX; destino del comprobante']
+  numeros "integer[]" [note: 'Números originales; se conservan si se anula']
+  monto integer [note: 'Congelado al comprar']
+  medio_pago varchar [note: 'efectivo | transferencia | gasto_comun']
+  pagada boolean [default: false]
+  pagada_at timestamp
+  pago_confirmado_por_id integer [ref: > usuarios.id]
+  voucher_archivo varchar [note: 'En /app/privado/vouchers (no público)']
+  voucher_mime varchar
+  created_at timestamp
+  anulada boolean [default: false]
+  anulada_at timestamp
+  anulada_por_id integer [ref: > usuarios.id]
+
+  indexes {
+    (rifa_id, folio) [unique]
+  }
+}
+
+Table rifa_numeros {
+  id integer [primary key]
+  compra_id integer [ref: > compras_rifa.id]
+  rifa_id integer [ref: > rifas.id]
+  numero integer
+
+  indexes {
+    (rifa_id, numero) [unique, note: 'Un número vigente por rifa; se borra al anular']
+  }
+}
+
+Table imputaciones_rifa {
+  id integer [primary key]
+  rifa_id integer [ref: > rifas.id]
+  parcela_id integer [ref: > parcelas.id]
+  cantidad_numeros integer
+  monto integer [note: 'A cargar en el gasto común (Comunidad Feliz)']
+  cargada boolean [default: false]
+  cargada_at timestamp
+
+  indexes {
+    (rifa_id, parcela_id) [unique]
+  }
+}

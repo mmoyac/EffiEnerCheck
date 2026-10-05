@@ -10,7 +10,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5434:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U enercheck"]
       interval: 5s
@@ -29,8 +29,11 @@ services:
     volumes:
       - ./backend:/app
       - uploads_data:/app/uploads
+      # Vouchers de transferencia: NO se sirven como estático (ver rifas.py)
+      - privado_data:/app/privado
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
+  # Portal de administración
   frontend:
     build: ./frontend
     ports:
@@ -38,6 +41,16 @@ services:
     depends_on:
       - backend
 
+  # Landing pública: aplicación aparte del portal. En localhost muestra el sitio de SITIO_POR_DEFECTO
+  # (backend/.env); en producción, el del condominio dueño del dominio.
+  landing:
+    build: ./landing
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
   uploads_data:
+  privado_data:

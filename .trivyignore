@@ -1,0 +1,2 @@
+# Vulnerabilidades de imágenes aceptadas temporalmente (Trivy). Un CVE por línea.
+# Cada una DEBE estar documentada en security/excepciones.md con su motivo y fecha de revisión.

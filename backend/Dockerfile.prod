@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1
+# Backend (FastAPI) de EnerCheck para producción. Lo construye el pipeline (.github/workflows/deploy.yml).
+# Contexto de build: backend/.   docker build -f backend/Dockerfile.prod -t enercheck-backend backend
+# Sin secretos ni datos: la configuración llega por el .env del VPS y los archivos viven en volúmenes.
+
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Usuario sin privilegios. /app/uploads (boletas, estático público) y /app/privado (vouchers) son
+# volúmenes: se crean aquí con su dueño para que el volumen nuevo herede los permisos.
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --home-dir /app --no-create-home app \
+    && mkdir -p /app/uploads/boletas /app/privado/vouchers \
+    && chown -R app:app /app/uploads /app/privado
+
+WORKDIR /app
+COPY requirements.txt ./
+RUN pip install -r requirements.txt
+
+COPY --chown=app:app alembic.ini main.py ./
+COPY --chown=app:app alembic ./alembic
+COPY --chown=app:app app ./app
+COPY --chown=app:app --chmod=0755 entrypoint.sh ./
+
+USER app
+VOLUME ["/app/uploads", "/app/privado"]
+EXPOSE 8000
+# /health consulta la base: el contenedor queda sano solo si llega a PostgreSQL.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"
+ENTRYPOINT ["./entrypoint.sh"]

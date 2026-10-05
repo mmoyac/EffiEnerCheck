@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  * { margin: 0; }
+  body { min-height: 100vh; }
+  img, svg { display: block; max-width: 100%; }
+  input, button, textarea, select { font: inherit; }
+  :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+<title>EnerCheck — Flujo del período mensual</title>
+</head>
+<body>
+
+
+<style>
+  :root {
+    --ground:   #0F172A;
+    --surface:  #1E293B;
+    --raise:    #263449;
+    --line:     #334155;
+    --line-soft:#243044;
+    --ink:      #F1F5F9;
+    --ink-dim:  #CBD5E1;
+    --muted:    #94A3B8;
+    --faint:    #64748B;
+    --accent:   #22C55E;
+    --accent-dim:#16A34A;
+
+    --st-borrador: #94A3B8;
+    --st-validada: #A78BFA;
+    --st-lecturas: #FBBF24;
+    --st-cerrado:  #60A5FA;
+    --st-publicada:#4ADE80;
+
+    --lane-admin:  #22C55E;
+    --lane-lector: #FBBF24;
+    --lane-parc:   #38BDF8;
+
+    --new-bg:   rgba(167, 139, 250, .13);
+    --new-line: rgba(167, 139, 250, .45);
+    --new-ink:  #C4B5FD;
+
+    --stop-bg:  rgba(248, 113, 113, .10);
+    --stop-ink: #FCA5A5;
+
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --ground:   #F6F8FA;
+      --surface:  #FFFFFF;
+      --raise:    #F1F5F9;
+      --line:     #DDE3EA;
+      --line-soft:#E8EDF2;
+      --ink:      #0F172A;
+      --ink-dim:  #334155;
+      --muted:    #5A6B80;
+      --faint:    #8496AB;
+      --accent:   #15803D;
+      --accent-dim:#166534;
+
+      --st-borrador: #7A8CA1;
+      --st-validada: #7C3AED;
+      --st-lecturas: #B45309;
+      --st-cerrado:  #1D4ED8;
+      --st-publicada:#15803D;
+
+      --lane-admin:  #15803D;
+      --lane-lector: #B45309;
+      --lane-parc:   #0369A1;
+
+      --new-bg:   rgba(124, 58, 237, .07);
+      --new-line: rgba(124, 58, 237, .30);
+      --new-ink:  #6D28D9;
+
+      --stop-bg:  rgba(185, 28, 28, .07);
+      --stop-ink: #B91C1C;
+    }
+  }
+
+  :root[data-theme="light"] {
+    --ground:#F6F8FA; --surface:#FFFFFF; --raise:#F1F5F9;
+    --line:#DDE3EA; --line-soft:#E8EDF2;
+    --ink:#0F172A; --ink-dim:#334155; --muted:#5A6B80; --faint:#8496AB;
+    --accent:#15803D; --accent-dim:#166534;
+    --st-borrador:#7A8CA1; --st-validada:#7C3AED; --st-lecturas:#B45309;
+    --st-cerrado:#1D4ED8; --st-publicada:#15803D;
+    --lane-admin:#15803D; --lane-lector:#B45309; --lane-parc:#0369A1;
+    --new-bg:rgba(124,58,237,.07); --new-line:rgba(124,58,237,.30); --new-ink:#6D28D9;
+    --stop-bg:rgba(185,28,28,.07); --stop-ink:#B91C1C;
+  }
+
+  :root[data-theme="dark"] {
+    --ground:#0F172A; --surface:#1E293B; --raise:#263449;
+    --line:#334155; --line-soft:#243044;
+    --ink:#F1F5F9; --ink-dim:#CBD5E1; --muted:#94A3B8; --faint:#64748B;
+    --accent:#22C55E; --accent-dim:#16A34A;
+    --st-borrador:#94A3B8; --st-validada:#A78BFA; --st-lecturas:#FBBF24;
+    --st-cerrado:#60A5FA; --st-publicada:#4ADE80;
+    --lane-admin:#22C55E; --lane-lector:#FBBF24; --lane-parc:#38BDF8;
+    --new-bg:rgba(167,139,250,.13); --new-line:rgba(167,139,250,.45); --new-ink:#C4B5FD;
+    --stop-bg:rgba(248,113,113,.10); --stop-ink:#FCA5A5;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3.25rem;
+  }
+
+  /* ---------- header ---------- */
+
+  .masthead { display: flex; flex-direction: column; gap: .85rem; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: .7rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+  }
+  .eyebrow::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+
+  h1 {
+    font-size: clamp(1.85rem, 4.2vw, 2.6rem);
+    font-weight: 800;
+    letter-spacing: -.028em;
+    line-height: 1.1;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  .standfirst {
+    color: var(--muted);
+    max-width: 46rem;
+    font-size: 1.02rem;
+  }
+  .standfirst strong { color: var(--ink-dim); font-weight: 600; }
+
+  /* ---------- section scaffolding ---------- */
+
+  section { display: flex; flex-direction: column; gap: 1.4rem; }
+
+  h2 {
+    font-size: 1.18rem;
+    font-weight: 700;
+    letter-spacing: -.015em;
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: .7rem;
+  }
+  h2 .n {
+    font-family: var(--mono);
+    font-size: .72rem;
+    color: var(--faint);
+    letter-spacing: .1em;
+  }
+
+  .note { color: var(--muted); font-size: .93rem; max-width: 46rem; }
+
+  /* ---------- legend ---------- */
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    padding: .95rem 1.1rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+
+  .chip {
+    font-family: var(--mono);
+    font-size: .7rem;
+    letter-spacing: .05em;
+    padding: .22rem .6rem;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    display: inline-flex;
+    align-items: center;
+    gap: .42rem;
+    white-space: nowrap;
+  }
+  .chip::before {
+    content: "";
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .c-borrador  { color: var(--st-borrador); }
+  .c-validada  { color: var(--st-validada); }
+  .c-lecturas  { color: var(--st-lecturas); }
+  .c-cerrado   { color: var(--st-cerrado); }
+  .c-publicada { color: var(--st-publicada); }
+
+  /* ---------- the flow ---------- */
+
+  .flow { display: flex; flex-direction: column; gap: .5rem; }
+
+  .lane-head {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--lc, var(--muted));
+    margin-top: 1.1rem;
+  }
+  .lane-head:first-child { margin-top: 0; }
+  .lane-head::before {
+    content: "";
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    background: var(--lc, var(--muted));
+  }
+  .lane-head span { color: var(--faint); letter-spacing: .04em; text-transform: none; font-size: .72rem; }
+
+  .lane-admin  { --lc: var(--lane-admin); }
+  .lane-lector { --lc: var(--lane-lector); }
+  .lane-parc   { --lc: var(--lane-parc); }
+
+  .step {
+    display: grid;
+    grid-template-columns: 2.4rem 1fr;
+    gap: 0 1rem;
+    padding: 1rem 1.15rem 1.05rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--lc, var(--line));
+    border-radius: 8px;
+  }
+
+  .step.is-new {
+    background: var(--new-bg);
+    border-color: var(--new-line);
+    border-left-color: var(--new-ink);
+  }
+
+  .step .idx {
+    font-family: var(--mono);
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--lc, var(--muted));
+    font-variant-numeric: tabular-nums;
+    line-height: 1.5;
+  }
+  .step.is-new .idx { color: var(--new-ink); }
+
+  .step .body { display: flex; flex-direction: column; gap: .5rem; min-width: 0; }
+
+  .step .title {
+    font-weight: 650;
+    font-size: 1.02rem;
+    letter-spacing: -.008em;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .55rem;
+  }
+
+  .tag-new {
+    font-family: var(--mono);
+    font-size: .62rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--new-ink);
+    border: 1px solid var(--new-line);
+    border-radius: 4px;
+    padding: .1rem .4rem;
+  }
+
+  .ep {
+    font-family: var(--mono);
+    font-size: .78rem;
+    color: var(--ink-dim);
+    background: var(--raise);
+    border: 1px solid var(--line-soft);
+    border-radius: 5px;
+    padding: .3rem .55rem;
+    align-self: flex-start;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .step p { margin: 0; color: var(--muted); font-size: .92rem; }
+  .step p code, .guard code, .note code, li code {
+    font-family: var(--mono);
+    font-size: .84em;
+    color: var(--ink-dim);
+  }
+
+  .guards { display: flex; flex-direction: column; gap: .3rem; margin-top: .15rem; }
+
+  .guard {
+    display: flex;
+    align-items: baseline;
+    gap: .55rem;
+    font-size: .875rem;
+    color: var(--muted);
+  }
+  .guard::before {
+    content: "";
+    flex: none;
+    width: 5px; height: 5px;
+    margin-top: .5rem;
+    border-radius: 1px;
+    background: var(--stop-ink);
+  }
+  .guard .code {
+    font-family: var(--mono);
+    font-size: .72rem;
+    color: var(--stop-ink);
+    background: var(--stop-bg);
+    border-radius: 4px;
+    padding: .05rem .35rem;
+    flex: none;
+  }
+
+  .merge {
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+    margin: 1.4rem 0 .3rem;
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+  .merge::before, .merge::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--line), transparent);
+  }
+
+  /* ---------- reversals ---------- */
+
+  .rev-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: .8rem;
+  }
+
+  .rev {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: .95rem 1.05rem;
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+  }
+  .rev.is-new { background: var(--new-bg); border-color: var(--new-line); }
+
+  .rev .rt {
+    font-family: var(--mono);
+    font-size: .76rem;
+    color: var(--ink);
+    letter-spacing: -.01em;
+  }
+  .rev .rd { font-size: .86rem; color: var(--muted); }
+
+  /* ---------- table ---------- */
+
+  .tw {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+  table { border-collapse: collapse; width: 100%; font-size: .89rem; }
+  th, td { text-align: left; padding: .7rem .95rem; border-bottom: 1px solid var(--line-soft); }
+  th {
+    font-family: var(--mono);
+    font-size: .66rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td { color: var(--muted); vertical-align: top; }
+  td:first-child { color: var(--ink-dim); font-weight: 550; white-space: nowrap; }
+  td.mono { font-family: var(--mono); font-size: .8rem; color: var(--ink-dim); }
+
+  /* ---------- callout ---------- */
+
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 1.15rem 1.3rem;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+  }
+  .callout h3 {
+    margin: 0;
+    font-size: .95rem;
+    font-weight: 700;
+    letter-spacing: -.01em;
+  }
+  .callout p { margin: 0; color: var(--muted); font-size: .92rem; }
+  .callout ul { margin: 0; padding-left: 1.1rem; color: var(--muted); font-size: .92rem; display: flex; flex-direction: column; gap: .3rem; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 1.2rem;
+    font-size: .82rem;
+    color: var(--faint);
+    font-family: var(--mono);
+    letter-spacing: .02em;
+  }
+
+  @media (max-width: 34rem) {
+    .step { grid-template-columns: 1fr; gap: .55rem; }
+    .step .idx { font-size: .85rem; line-height: 1; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">EnerCheck · Cambio items-credito-y-validacion</div>
+    <h1>Flujo del período mensual</h1>
+    <p class="standfirst">
+      Desde que llega la boleta de la compañía hasta que el parcelero ve su liquidación.
+      Dos frentes avanzan en paralelo — el administrador arma el desglose, el lector recorre los remarcadores —
+      y convergen en el cálculo. <strong>El paso 5 es nuevo:</strong> el administrador ya no puede calcular
+      sin haber declarado antes qué entra y qué no entra al reparto.
+    </p>
+  </header>
+
+  <section>
+    <h2><span class="n">ESTADOS</span> Cómo se etiqueta la boleta</h2>
+    <div class="legend">
+      <span class="chip c-borrador">borrador</span>
+      <span class="chip c-validada">validada · nuevo</span>
+      <span class="chip c-lecturas">lecturas cerradas</span>
+      <span class="chip c-cerrado">período cerrado</span>
+      <span class="chip c-publicada">publicada</span>
+    </div>
+    <p class="note">
+      Son los mismos colores que ya usan los badges de la consola. <code>validada</code> estaba declarado
+      en el modelo desde el principio y nunca se asignaba; este cambio lo pone en uso.
+    </p>
+  </section>
+
+  <section>
+    <h2><span class="n">FLUJO</span> Un período de principio a fin</h2>
+
+    <div class="flow">
+
+      <div class="lane-head lane-admin">Administrador — el desglose <span>· la boleta y sus ítems</span></div>
+
+      <article class="step lane-admin">
+        <div class="idx">01</div>
+        <div class="body">
+          <div class="title">Crear la boleta del período</div>
+          <div class="ep">POST /boletas/</div>
+          <p>
+            Nace en <code>borrador</code>. El sistema genera una lectura en blanco por cada parcela
+            arrastrando la lectura anterior, y copia los ítems del mes pasado en $0 conservando su clasificación.
+            Esa clasificación heredada es una <em>propuesta</em>, no una decisión tomada.
+          </p>
+          <div class="guards">
+            <div class="guard"><span class="code">409</span> Ya existe otro período del condominio sin cerrar.</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="step lane-admin">
+        <div class="idx">02</div>
+        <div class="body">
+          <div class="title">Subir la imagen de la boleta</div>
+          <div class="ep">POST /boletas/{id}/imagen</div>
+          <p>JPG, PNG, WEBP, HEIC o PDF. Se puede reemplazar en cualquier momento, incluso con el período cerrado.</p>
+          <div class="guards">
+            <div class="guard"><span class="code">422</span> Formato de archivo no soportado.</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="step lane-admin is-new">
+        <div class="idx">03</div>
+        <div class="body">
+          <div class="title">Procesar con IA <span class="tag-new">cambia</span></div>
+          <div class="ep">POST /boletas/{id}/procesar-ocr</div>
+          <p>
+            Gemini lee totales e ítems. Cada línea se empareja por similitud contra los ítems existentes;
+            si supera 0,6 actualiza el monto con IVA. <strong>Lo nuevo:</strong> las líneas sin coincidencia
+            ya no se descartan en silencio — se crean como ítems <code>pendiente</code>. Y los descuentos
+            y notas de crédito llegan con signo negativo en vez de valor absoluto.
+          </p>
+          <div class="guards">
+            <div class="guard"><span class="code">400</span> La boleta todavía no tiene imagen subida.</div>
+            <div class="guard"><span class="code">409</span> El período ya está cerrado.</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="step lane-admin is-new">
+        <div class="idx">04</div>
+        <div class="body">
+          <div class="title">Revisar y clasificar el desglose <span class="tag-new">cambia</span></div>
+          <div class="ep">PUT /boletas/{id}/detalles</div>
+          <p>
+            El administrador corrige totales y decide, ítem por ítem, qué tratamiento recibe:
+            <code>fijo</code> se reparte parejo, <code>variable</code> se prorratea por consumo,
+            <code>informativo</code> queda visible pero <strong>fuera del reparto</strong>.
+            Aquí es donde se resuelven los <code>pendiente</code> que dejó el OCR.
+          </p>
+          <div class="guards">
+            <div class="guard"><span class="code">409</span> El período ya está cerrado.</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="step lane-admin is-new">
+        <div class="idx">05</div>
+        <div class="body">
+          <div class="title">Corroborar el desglose <span class="tag-new">nuevo</span></div>
+          <div class="ep">POST /boletas/{id}/validar-items</div>
+          <p>
+            El acto formal por el que el administrador declara qué entra al reparto de este período.
+            La boleta pasa de <code>borrador</code> a <code>validada</code> y queda registrada en auditoría
+            una instantánea completa del desglose: cada ítem, su monto, su clasificación, quién decidió y cuándo.
+            Es obligatorio todos los meses, aunque nada haya cambiado respecto del anterior.
+          </p>
+          <div class="guards">
+            <div class="guard"><span class="code">409</span> Quedan ítems sin clasificar — indica cuántos.</div>
+            <div class="guard"><span class="code">409</span> El desglose ya fue corroborado.</div>
+          </div>
+        </div>
+      </article>
+
+      <div class="lane-head lane-lector">Lector — los remarcadores <span>· en paralelo, desde el paso 01</span></div>
+
+      <article class="step lane-lector">
+        <div class="idx">06</div>
+        <div class="body">
+          <div class="title">Capturar las lecturas en terreno</div>
+          <div class="ep">POST /lecturas/ · PATCH /lecturas/{id}</div>
+          <p>
+            Vista móvil con las parcelas activas pendientes y una barra de avance.
+            El consumo se calcula como la diferencia con la lectura anterior.
+            Una parcela cuenta como leída cuando su lectura tiene <code>fecha_toma</code>.
+          </p>
+          <div class="guards">
+            <div class="guard"><span class="code">422</span> La lectura actual no puede ser menor que la anterior.</div>
+            <div class="guard"><span class="code">409</span> Las lecturas del período ya están cerradas.</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="step lane-lector">
+        <div class="idx">07</div>
+        <div class="body">
+          <div class="title">Cerrar las lecturas</div>
+          <div class="ep">POST /boletas/{id}/cerrar-lecturas</div>
+          <p>El lector certifica que terminó el recorrido. A partir de aquí las lecturas quedan bloqueadas.</p>
+          <div class="guards">
+            <div class="guard"><span class="code">409</span> Falta al menos una parcela por leer.</div>
+          </div>
+        </div>
+      </article>
+
+      <div class="merge">Los dos frentes convergen</div>
+
+      <article class="step lane-admin is-new">
+        <div class="idx">08</div>
+        <div class="body">
+          <div class="title">Calcular las liquidaciones <span class="tag-new">cambia</span></div>
+          <div class="ep">POST /liquidaciones/calcular/{id}</div>
+          <p>
+            El motor reparte el total de la boleta entre las parcelas activas. Es idempotente: borra y recrea,
+            se puede correr las veces que haga falta. Puede ejecutarse con las lecturas todavía abiertas,
+            lo que permite previsualizar antes de cerrar.
+          </p>
+          <div class="guards">
+            <div class="guard"><span class="code">409</span> <strong>Nuevo:</strong> la boleta está en <code>borrador</code> — falta corroborar el desglose.</div>
+            <div class="guard"><span class="code">409</span> El período ya está cerrado.</div>
+            <div class="guard"><span class="code">422</span> Faltan los totales de la boleta, o no hay parcelas activas.</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="step lane-admin">
+        <div class="idx">09</div>
+        <div class="body">
+          <div class="title">Cerrar el período</div>
+          <div class="ep">POST /boletas/{id}/cerrar-liquidaciones</div>
+          <p>Consolida el resultado. Desde aquí no se modifica nada, salvo la publicación y la imagen de la boleta.</p>
+          <div class="guards">
+            <div class="guard"><span class="code">409</span> Las lecturas todavía no están cerradas.</div>
+            <div class="guard"><span class="code">409</span> No hay liquidaciones calculadas.</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="step lane-admin">
+        <div class="idx">10</div>
+        <div class="body">
+          <div class="title">Publicar a la comunidad</div>
+          <div class="ep">PATCH /boletas/{id} · boleta_visible_usuarios = true</div>
+          <p>El estado pasa a <code>publicada</code>. Es el punto sin retorno: una vez publicado, el período ya no se reabre.</p>
+        </div>
+      </article>
+
+      <div class="lane-head lane-parc">Parcelero — la consulta</div>
+
+      <article class="step lane-parc">
+        <div class="idx">11</div>
+        <div class="body">
+          <div class="title">Ver su liquidación</div>
+          <div class="ep">GET /boletas/ · GET /liquidaciones/</div>
+          <p>
+            Desglose de los tres componentes, estado de pago, totales de la boleta de la compañía
+            y acceso a la imagen original. Es donde se materializa la transparencia frente a la comunidad.
+          </p>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">REVERSAS</span> Lo que devuelve el período hacia atrás</h2>
+    <div class="rev-grid">
+
+      <div class="rev is-new">
+        <div class="rt">validada → borrador</div>
+        <div class="rd">
+          Automático al reprocesar el OCR o al editar los detalles. El juicio del administrador nunca
+          sobrevive a un cambio de las cifras que lo sustentan.
+        </div>
+      </div>
+
+      <div class="rev">
+        <div class="rt">POST /boletas/{id}/reabrir-lecturas</div>
+        <div class="rd">Solo mientras las liquidaciones no estén cerradas.</div>
+      </div>
+
+      <div class="rev">
+        <div class="rt">POST /boletas/{id}/reabrir-liquidaciones</div>
+        <div class="rd">Solo mientras la boleta no haya sido publicada.</div>
+      </div>
+
+      <div class="rev">
+        <div class="rt">DELETE /boletas/{id}</div>
+        <div class="rd">Solo mientras las lecturas no estén cerradas. Borra lecturas, liquidaciones e ítems.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">ÍTEMS</span> Qué significa cada clasificación</h2>
+    <div class="tw">
+      <table>
+        <thead>
+          <tr>
+            <th>tipo_calculo</th>
+            <th>¿Entra al reparto?</th>
+            <th>Cómo se distribuye</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mono">fijo</td>
+            <td>Sí</td>
+            <td>Partes iguales entre las parcelas activas, junto con el diferencial de energía no registrada.</td>
+          </tr>
+          <tr>
+            <td class="mono">variable</td>
+            <td>Sí</td>
+            <td>Proporcional a los kWh consumidos por cada parcela.</td>
+          </tr>
+          <tr>
+            <td class="mono">informativo</td>
+            <td>No</td>
+            <td>Visible en el desglose, sin efecto en ninguna liquidación. Es cómo el administrador excluye un cargo a propósito.</td>
+          </tr>
+          <tr>
+            <td class="mono">pendiente</td>
+            <td>No — todavía</td>
+            <td>Creado por el OCR, sin juzgar. Bloquea la corroboración hasta recibir una clasificación definitiva.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">
+      Un ítem de monto negativo — descuento, nota de crédito, abono — se reparte con el mismo criterio de su
+      <code>tipo_calculo</code>, reduciendo la cuota correspondiente. Las fórmulas del motor no cambian.
+    </p>
+  </section>
+
+  <section>
+    <h2><span class="n">INVARIANTE</span> Lo que nunca puede romperse</h2>
+    <div class="callout">
+      <h3>La suma de todas las liquidaciones es exactamente el total de emisión</h3>
+      <p>
+        El valor del kWh se despeja a la inversa desde <code>monto_total_emision</code>, descontando los cargos
+        que se reparten aparte. Por eso el total siempre cuadra — y por eso el error es peligroso:
+      </p>
+      <ul>
+        <li>Un ítem que falta o está mal clasificado <strong>no rompe el cuadre</strong>.</li>
+        <li>Su monto se absorbe en el componente de energía y se cobra proporcional al consumo.</li>
+        <li>Nadie recibe una alerta. El resultado se ve perfectamente correcto.</li>
+      </ul>
+      <p>
+        Ése es exactamente el fallo silencioso que el paso 5 viene a cerrar: pone a una persona frente al
+        desglose antes de cada cálculo, y deja registro de lo que decidió.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    openspec/changes/items-credito-y-validacion · 6 capacidades modificadas · 38 tareas
+  </footer>
+
+</div>
+
+</body>
+</html>

@@ -8,6 +8,7 @@ interface UsuarioCreate {
   rol_id: number
   condominio_id?: number
   parcela_ids?: number[]
+  telefono?: string | null
 }
 
 export const usuariosApi = {
