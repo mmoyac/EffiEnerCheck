@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# EnerCheck — órdenes del servidor de producción para el pipeline y el cron (ver DEPLOY.md).
+#
+# Se instala en /opt/enercheck/bin/enercheck-ci (infra/servidor/instalar.sh). La llave SSH del CI lo
+# tiene como comando forzado en authorized_keys:
+#     command="/opt/enercheck/bin/enercheck-ci",restrict ssh-ed25519 AAAA... enercheck-ci
+# así que esa llave NO abre una shell: solo puede pedir estas órdenes (llegan en $SSH_ORIGINAL_COMMAND).
+#
+#   respaldar <sha>       respaldo previo a un deploy (conserva 10)
+#   respaldar diario      respaldo diario del cron (conserva 14)
+#   esperar-sano <sha>    espera a que enercheck_backend corra la imagen del commit y quede sano
+#
+# Los logs del pipeline son públicos: nada de lo que se imprime aquí puede llevar datos personales.
+set -euo pipefail
+
+DIR_RESPALDOS=/opt/enercheck/respaldos
+CONSERVAR_PREDEPLOY=10
+CONSERVAR_DIARIO=14
+ESPERA_MAXIMA=180   # segundos
+
+uso() {
+    echo "Uso: enercheck-ci respaldar <sha|diario> | esperar-sano <sha>" >&2
+    exit 2
+}
+
+validar_sha() {
+    [[ "$1" =~ ^[0-9a-f]{40}$ ]] || { echo "SHA inválido" >&2; exit 2; }
+}
+
+corriendo() {
+    [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null || true)" = true ]
+}
+
+# Borra los conjuntos más antiguos de un tipo, dejando los $2 más recientes (un conjunto = un prefijo).
+podar() {
+    local tipo=$1 conservar=$2
+    find "$DIR_RESPALDOS" -maxdepth 1 -name "$tipo-*.dump" -printf '%f\n' | sort -r \
+        | tail -n +"$((conservar + 1))" | sed 's/\.dump$//' \
+        | while read -r prefijo; do rm -f "$DIR_RESPALDOS/$prefijo".*; done
+}
+
+respaldar() {
+    local etiqueta=$1 tipo prefijo conservar
+    if [ "$etiqueta" = diario ]; then
+        tipo=diario; conservar=$CONSERVAR_DIARIO
+        prefijo="$DIR_RESPALDOS/diario-$(date +%Y%m%d-%H%M%S)"
+    else
+        validar_sha "$etiqueta"
+        tipo=predeploy; conservar=$CONSERVAR_PREDEPLOY
+        prefijo="$DIR_RESPALDOS/predeploy-$(date +%Y%m%d-%H%M%S)-${etiqueta:0:12}"
+    fi
+
+    if ! corriendo enercheck_db; then
+        echo "enercheck_db no está corriendo (¿primer despliegue?): se continúa sin respaldo"
+        return 0
+    fi
+
+    umask 077
+    mkdir -p "$DIR_RESPALDOS"
+    chmod 700 "$DIR_RESPALDOS"
+    exec 9>"$DIR_RESPALDOS/.lock"
+    flock -w 600 9 || { echo "Otro respaldo sigue en curso" >&2; exit 1; }
+
+    if ! docker exec enercheck_db pg_dump -U enercheck -d enercheck -Fc > "$prefijo.dump" || [ ! -s "$prefijo.dump" ]; then
+        rm -f "$prefijo".*
+        echo "Falló el respaldo de la base" >&2
+        exit 1
+    fi
+    echo "Base: $(basename "$prefijo").dump ($(du -h "$prefijo.dump" | cut -f1))"
+
+    if corriendo enercheck_backend; then
+        if ! docker exec enercheck_backend tar -C /app -czf - uploads privado > "$prefijo.archivos.tar.gz" \
+            || [ ! -s "$prefijo.archivos.tar.gz" ]; then
+            rm -f "$prefijo".*
+            echo "Falló el respaldo de los archivos" >&2
+            exit 1
+        fi
+        echo "Archivos: $(basename "$prefijo").archivos.tar.gz ($(du -h "$prefijo.archivos.tar.gz" | cut -f1))"
+
+        # Compose vigente (el que generó Dokploy) e imagen en ejecución: lo necesario para volver atrás.
+        local compose
+        compose=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' enercheck_backend)
+        [ -f "$compose" ] && cp "$compose" "$prefijo.compose.yml"
+        docker inspect -f '{{.Config.Image}}' enercheck_backend > "$prefijo.imagen.txt"
+    else
+        echo "AVISO: enercheck_backend no está corriendo; el respaldo no incluye los archivos"
+    fi
+
+    podar "$tipo" "$conservar"
+}
+
+esperar_sano() {
+    local sha=$1 imagen estado transcurrido=0
+    validar_sha "$sha"
+    while [ "$transcurrido" -lt "$ESPERA_MAXIMA" ]; do
+        imagen=$(docker inspect -f '{{.Config.Image}}' enercheck_backend 2>/dev/null || echo ausente)
+        estado=$(docker inspect -f '{{.State.Health.Status}}' enercheck_backend 2>/dev/null || echo ausente)
+        if [ "${imagen##*:}" = "$sha" ] && [ "$estado" = healthy ]; then
+            echo "enercheck_backend sano con la imagen del commit ${sha:0:12}"
+            docker ps --filter name=enercheck_ --format '{{.Names}}\t{{.Status}}'
+            return 0
+        fi
+        sleep 5
+        transcurrido=$((transcurrido + 5))
+    done
+    echo "enercheck_backend no quedó sano con la imagen ${sha:0:12} (imagen: ${imagen##*:}, estado: $estado)" >&2
+    # Solo el arranque (migraciones, validación del .env): sin las líneas de acceso, que traen IPs.
+    docker logs --tail 200 enercheck_backend 2>&1 | grep -v '" [0-9]\{3\}' | tail -n 60 >&2 || true
+    exit 1
+}
+
+# Por SSH la orden llega en SSH_ORIGINAL_COMMAND; desde el cron o la consola, como argumentos.
+if [ -n "${SSH_ORIGINAL_COMMAND:-}" ]; then
+    read -r -a args <<< "$SSH_ORIGINAL_COMMAND"
+else
+    args=("$@")
+fi
+[ "${#args[@]}" -eq 2 ] || uso
+
+case "${args[0]}" in
+    respaldar)    respaldar "${args[1]}" ;;
+    esperar-sano) esperar_sano "${args[1]}" ;;
+    *)            uso ;;
+esac

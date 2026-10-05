@@ -98,7 +98,7 @@ El contrato (`SitioPublico`) y la landing no cambian. Solo se reemplaza el orige
    - Es un solo documento por condominio y no una tabla por sección: el schema ya es el contrato, y el formulario se arma por sección.
    - Si hace falta borrador y publicación, se resuelve en ese cambio, con dos filas o un campo de estado.
 2. **Endpoints del portal:** `GET` y `PUT /api/v1/sitio/admin`, con `AdminRequired` y `modulo_requerido("sitio")`, y auditoría `SITIO_ACTUALIZADO`.
-3. **Pantalla "Sitio web"** en el grupo Comunidad del menú, con un formulario por sección y vista previa. Las imágenes se suben a `/uploads/sitio/<condominio_id>/` y el vhost de la landing agrega esa ruta.
+3. **Pantalla "Sitio web"** en el grupo Comunidad del menú, con un formulario por sección y vista previa. Las imágenes se suben a `/uploads/sitio/<condominio_id>/` y `landing/nginx.prod.conf` agrega esa ruta.
 4. **Migración:** un script lee los JSON actuales y los inserta.
 5. **Condominios solo con landing:** hoy sus usuarios no entran al portal. Para editar su sitio, el `admin_condominio` necesitará un acceso limitado a esa pantalla, que se define en ese cambio.
 

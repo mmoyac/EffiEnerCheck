@@ -1,11 +1,18 @@
 # EnerCheck — CI/CD (ver DEPLOY.md).
 #
 #   push a develop / pull request  → solo los chequeos (backend + frontend)
-#   push a main                    → chequeos → aprobación del environment "production" → build → deploy al VPS
+#   push a main                    → chequeos → aprobación del environment "production" → build → Trivy →
+#                                    push a Docker Hub → respaldo → deploy en Dokploy → espera sano
 #
+# El VPS nunca construye imágenes: Dokploy solo descarga las que publica este pipeline.
 # El repositorio es público: permisos mínimos, actions fijadas por SHA, sin pull_request_target y los
-# secretos (Docker Hub y VPS) solo en el environment "production". Los logs son públicos: ningún paso
-# imprime secretos. Los secretos de la aplicación viven en el .env del VPS, nunca aquí.
+# secretos solo en el environment "production":
+#   DOCKER_USERNAME, DOCKER_PASSWORD          Docker Hub (token de acceso, no la contraseña)
+#   VPS_HOST, VPS_PORT, VPS_SSH_KEY           llave con comando forzado (infra/servidor/enercheck-ci)
+#   VPS_KNOWN_HOSTS                           huella del servidor (ssh-keyscan), sin confiar a ciegas
+#   DOKPLOY_URL, DOKPLOY_API_KEY, DOKPLOY_COMPOSE_ID
+# Los logs son públicos: ningún paso imprime secretos. Los secretos de la aplicación viven en el
+# Environment del proyecto en Dokploy, nunca aquí.
 name: CI/CD
 
 on:
@@ -24,7 +31,7 @@ concurrency:
 jobs:
   backend:
     name: checks · backend
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # fijo: la misma versión del VPS; ubuntu-latest cambia sin aviso
     timeout-minutes: 20
     services:
       postgres:
@@ -83,7 +90,7 @@ jobs:
 
   frontends:
     name: checks · ${{ matrix.app }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # fijo: la misma versión del VPS; ubuntu-latest cambia sin aviso
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -115,7 +122,7 @@ jobs:
     name: build + deploy (producción)
     needs: [backend, frontends]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # fijo: la misma versión del VPS; ubuntu-latest cambia sin aviso
     timeout-minutes: 30
     environment: production        # aprobación manual; solo este job recibe los secretos
     env:
@@ -199,101 +206,57 @@ jobs:
             docker push "$REGISTRO/enercheck-$c:latest"
           done
 
-      # ---- 4. Deploy en el VPS: archivos → respaldo previo → pull → up → espera sano ------------------------
-      # El compose y el ejemplo del .env viajan en base64 dentro del mismo ssh-action (no son secretos: están
-      # en el repo). Así no se agrega otra action de terceros con acceso a la llave del VPS.
-      - name: Archivos de despliegue
+      # ---- 4. Deploy con Dokploy: respaldo previo → compose fijado al commit → deploy → espera sano ---------
+      # El VPS nunca construye: Dokploy solo descarga las imágenes publicadas arriba. Como su deploy hace
+      # `up -d` sin pull, el compose se envía con las imágenes fijadas a este commit (${TAG:-<sha>}).
+      # El SSH usa una llave con comando forzado (infra/servidor/enercheck-ci): solo puede respaldar y
+      # consultar la salud; no abre una shell.
+      - name: Compose fijado al commit
         run: |
-          echo "COMPOSE_B64=$(base64 -w0 docker-compose.prod.yml)" >> "$GITHUB_ENV"
-          echo "ENV_EJEMPLO_B64=$(base64 -w0 .env.prod.example)" >> "$GITHUB_ENV"
+          sed "s/:\${TAG:-latest}/:\${TAG:-${GITHUB_SHA}}/g" docker-compose.prod.yml > compose.deploy.yml
+          n=$(grep -c ":\${TAG:-${GITHUB_SHA}}" compose.deploy.yml)
+          if [ "$n" -ne 3 ]; then echo "Se esperaban 3 imágenes fijadas al commit y hay $n"; exit 1; fi
 
-      - name: Deploy al VPS
-        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+      - name: Acceso SSH (llave con comando forzado)
         env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-          SHA: ${{ github.sha }}
-          COMPOSE_B64: ${{ env.COMPOSE_B64 }}
-          ENV_EJEMPLO_B64: ${{ env.ENV_EJEMPLO_B64 }}
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT }}
-          envs: DOCKER_USERNAME,DOCKER_PASSWORD,SHA,COMPOSE_B64,ENV_EJEMPLO_B64
-          command_timeout: 20m
-          script: |
-            set -eu
-            umask 077
-            # Carpeta propia del proyecto (solo esta; no se toca nada de otros proyectos ni general-net).
-            mkdir -p /root/docker/enercheck
-            chmod 700 /root/docker/enercheck
-            cd /root/docker/enercheck
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/enercheck_ci
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/enercheck_ci ~/.ssh/known_hosts
 
-            # Archivos del commit: el compose nuevo queda aparte hasta validar y respaldar.
-            printf '%s' "$COMPOSE_B64" | base64 -d > docker-compose.prod.yml.nuevo
-            printf '%s' "$ENV_EJEMPLO_B64" | base64 -d > .env.prod.example
+      - name: Respaldo previo (base + archivos + compose vigente)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: ssh -i ~/.ssh/enercheck_ci -p "$VPS_PORT" -o BatchMode=yes "root@$VPS_HOST" "respaldar $GITHUB_SHA"
 
-            # El .env (secretos de la aplicación) se crea a mano en el VPS y nunca viaja por aquí.
-            if [ ! -s .env ]; then
-              rm -f docker-compose.prod.yml.nuevo
-              echo "Falta /root/docker/enercheck/.env: créalo desde .env.prod.example (DEPLOY.md §3.3) y vuelve a ejecutar el job"
-              exit 1
-            fi
-            if grep -q 'CAMBIAR' .env; then
-              rm -f docker-compose.prod.yml.nuevo
-              echo "El .env aún tiene valores CAMBIAR_* (DEPLOY.md §3.3): no se despliega"
-              exit 1
-            fi
-            if ! docker compose -f docker-compose.prod.yml.nuevo config -q; then
-              rm -f docker-compose.prod.yml.nuevo
-              echo "El compose del commit no es válido con este .env: no se despliega"
-              exit 1
-            fi
+      # Las respuestas de la API de Dokploy traen el Environment del proyecto (secretos): nunca se imprimen.
+      - name: Deploy en Dokploy
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          DOKPLOY_COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+        run: |
+          llamar() {
+            codigo=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 60 -X POST \
+              -H "x-api-key: $DOKPLOY_API_KEY" -H 'Content-Type: application/json' \
+              --data-binary @- "$DOKPLOY_URL/api/$1")
+            if [ "$codigo" != 200 ]; then echo "Dokploy $1 respondió HTTP $codigo"; exit 1; fi
+            echo "Dokploy $1: OK"
+          }
+          jq -n --arg id "$DOKPLOY_COMPOSE_ID" --rawfile archivo compose.deploy.yml \
+            '{composeId: $id, composeFile: $archivo, sourceType: "raw"}' | llamar compose.update
+          jq -n --arg id "$DOKPLOY_COMPOSE_ID" '{composeId: $id}' | llamar compose.deploy
 
-            # Respaldo pre-deploy de la base, los archivos (imágenes de boletas y vouchers) y el compose vigente,
-            # con el mismo prefijo para restaurarlos juntos. Se omite si la base aún no existe; si falla, se aborta.
-            if docker ps --format '{{.Names}}' | grep -qx enercheck_db; then
-              mkdir -p backups && chmod 700 backups
-              PREFIJO="backups/predeploy-$(date +%Y%m%d-%H%M%S)-${SHA}"
-              BACKUP="$PREFIJO.dump"
-              ARCHIVOS="$PREFIJO.archivos.tar.gz"
-              if ! docker exec enercheck_db pg_dump -U enercheck -d enercheck -Fc > "$BACKUP" || [ ! -s "$BACKUP" ]; then
-                rm -f "$BACKUP" docker-compose.prod.yml.nuevo; echo "Falló el respaldo pre-deploy de la base: no se despliega"; exit 1
-              fi
-              echo "Respaldo: $BACKUP ($(du -h "$BACKUP" | cut -f1))"
-              if docker ps --format '{{.Names}}' | grep -qx enercheck_backend; then
-                if ! docker exec enercheck_backend tar -C /app -czf - uploads privado > "$ARCHIVOS" || [ ! -s "$ARCHIVOS" ]; then
-                  rm -f "$BACKUP" "$ARCHIVOS" docker-compose.prod.yml.nuevo; echo "Falló el respaldo pre-deploy de los archivos: no se despliega"; exit 1
-                fi
-                echo "Respaldo: $ARCHIVOS ($(du -h "$ARCHIVOS" | cut -f1))"
-              else
-                echo "AVISO: enercheck_backend no está corriendo; el respaldo pre-deploy no incluye los archivos"
-              fi
-              [ -f docker-compose.prod.yml ] && cp docker-compose.prod.yml "$PREFIJO.compose.yml"   # para rollback
-              ls -1t backups/predeploy-*.dump | tail -n +11 | xargs -r rm -f               # conserva 10
-              ls -1t backups/predeploy-*.archivos.tar.gz 2>/dev/null | tail -n +11 | xargs -r rm -f
-              ls -1t backups/predeploy-*.compose.yml 2>/dev/null | tail -n +11 | xargs -r rm -f
-            fi
-            mv docker-compose.prod.yml.nuevo docker-compose.prod.yml
+      - name: Espera a que el backend quede sano con este commit
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: ssh -i ~/.ssh/enercheck_ci -p "$VPS_PORT" -o BatchMode=yes "root@$VPS_HOST" "esperar-sano $GITHUB_SHA"
 
-            echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin >/dev/null
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
-
-            # El backend migra al arrancar: el deploy termina bien solo si queda sano.
-            estado=ausente
-            for i in $(seq 1 36); do
-              estado=$(docker inspect -f '{{.State.Health.Status}}' enercheck_backend 2>/dev/null || echo ausente)
-              [ "$estado" = healthy ] && break
-              sleep 5
-            done
-            if [ "$estado" != healthy ]; then
-              echo "enercheck_backend no quedó sano (estado: $estado). Últimas líneas:"
-              docker logs --tail 100 enercheck_backend
-              docker logout >/dev/null
-              exit 1
-            fi
-            docker compose -f docker-compose.prod.yml ps
-            docker image prune -f
-            docker logout >/dev/null
+      - name: Limpieza de la llave
+        if: always()
+        run: rm -f ~/.ssh/enercheck_ci

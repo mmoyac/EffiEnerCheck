@@ -1,17 +1,18 @@
-# EnerCheck — PRODUCCIÓN en el VPS compartido de effi4tech.
+# EnerCheck — PRODUCCIÓN en el VPS con Dokploy (comunidadsantalaura.cl). Ver DEPLOY.md.
 #
-# Vive en /root/docker/enercheck/. El pipeline copia este archivo en cada deploy y luego hace
-#   docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
-# El .env que lo acompaña (secretos) se crea a mano en el VPS y nunca viaja por el pipeline (DEPLOY.md §3.3).
-# Rollback:  TAG=<sha> docker compose -f docker-compose.prod.yml up -d
+# Dokploy lo ejecuta como compose "raw": el pipeline sube este archivo con compose.update, reemplazando
+# ${TAG:-latest} por ${TAG:-<sha del commit>}, y luego llama a compose.deploy. Dokploy hace
+# `docker compose up -d` SIN pull: por eso las imágenes van fijadas al commit y nunca a latest.
+# El .env (secretos) es el Environment del proyecto en Dokploy; nunca viaja por el pipeline.
+# Rollback:  en Dokploy, Environment → TAG=<sha anterior> → Deploy. Se vuelve al flujo normal borrando TAG.
+# Dominios y TLS: pestaña Domains de Dokploy (Traefik + Let's Encrypt), no aquí.
 #
 # ⚠️ En tu PC, pruébalo SIEMPRE con otro nombre de proyecto (-p enercheck_prodlocal): "enercheck" es
 # también el proyecto del docker-compose.yml de desarrollo, y sin -p reemplaza sus contenedores.
 #
-# Aislamiento: todo con prefijo enercheck. Solo el backend, el frontend (portal) y la landing van a general-net (externa,
-# NUNCA se crea aquí), que es por donde los alcanza el nginx_proxy y por donde el backend sale a Gemini.
-# La base queda en la red interna, sin salida a internet y sin puertos publicados. Sin TLS aquí: lo
-# termina el nginx_proxy (infra/nginx/enercheck.conf).
+# Aislamiento: todo con prefijo enercheck y ningún puerto publicado. Backend, portal y landing van a
+# dokploy-network (externa, la crea Dokploy), por donde los alcanza Traefik y por donde el backend sale
+# a Gemini. La base queda en la red interna, sin salida a internet.
 name: enercheck
 
 x-logging: &logging
@@ -62,7 +63,7 @@ services:
       - privado:/app/privado     # vouchers de transferencia (NUNCA estáticos; ver rifas.py)
     depends_on:
       db: { condition: service_healthy }
-    networks: [interna, general-net]
+    networks: [interna, dokploy-network]
     mem_limit: 768m
     cpus: 1.0
 
@@ -72,19 +73,19 @@ services:
     container_name: enercheck_frontend
     read_only: true
     tmpfs: [/tmp, /var/cache/nginx]
-    networks: [general-net]
+    networks: [dokploy-network]
     mem_limit: 64m
     cpus: 0.25
 
   # Landing pública del condominio: aplicación aparte del portal, con su dominio propio
-  # (infra/nginx/condominiosantalaura-landing.conf). Si se detiene, el portal y la API siguen igual.
+  # (dominio en Dokploy; reglas en landing/nginx.prod.conf). Si se detiene, el portal y la API siguen igual.
   landing:
     <<: *app
     image: ${DOCKER_USERNAME}/enercheck-landing:${TAG:-latest}
     container_name: enercheck_landing
     read_only: true
     tmpfs: [/tmp, /var/cache/nginx]
-    networks: [general-net]
+    networks: [dokploy-network]
     mem_limit: 64m
     cpus: 0.25
 
@@ -92,9 +93,9 @@ networks:
   interna:
     name: enercheck_interna
     internal: true          # sin salida a internet: solo db y backend
-  general-net:
+  dokploy-network:
     external: true
-    name: general-net
+    name: dokploy-network
 
 volumes:
   pgdata:

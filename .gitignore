@@ -38,3 +38,6 @@ docs/planillas/
 # Respaldos y volcados de base (datos personales)
 *.dump
 backups/
+
+# Carga inicial de producción (app/db/copiar_desde_desarrollo.py): datos personales
+*.carga.json

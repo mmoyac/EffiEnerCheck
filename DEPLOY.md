@@ -1,364 +1,278 @@
-# Despliegue de EnerCheck en el VPS de effi4tech
+# Despliegue de EnerCheck en producción (Dokploy)
 
-Guía de operación del pipeline de CI/CD (`.github/workflows/deploy.yml`) y de los pasos manuales, que se hacen una sola vez.
+Producción corre en un VPS dedicado administrado con **Dokploy**:
 
-- **Producción:** `https://enercheck-santalaura.effi4tech.cl`, en el VPS compartido `168.231.96.205`, detrás del `nginx_proxy`.
-- **Ramas:** se trabaja en `develop`, donde cada push corre solo los chequeos. Un push a `main` despliega a producción después de tu aprobación. `main` queda solo para producción.
-- **Archivos en el VPS:**
-  - El pipeline crea `/root/docker/enercheck/` y copia ahí `docker-compose.prod.yml` y `.env.prod.example` en cada deploy.
-  - Quedan a mano solo el `.env`, que tiene los secretos (§3.3), y el vhost del nginx compartido (§3.4).
+- **Servidor:** Contabo, Ubuntu 24.04, IP `86.48.21.250`, alias SSH `comunidad`.
+- **Dominio:** `comunidadsantalaura.cl` (registrado en NIC Chile, DNS en Cloudflare).
 
-Cada comando indica dónde se ejecuta:
+Las marcas **[PC]**, **[VPS]**, **[Dokploy]**, **[GitHub]** y **[Cloudflare]** indican dónde se ejecuta cada paso.
 
-- **[PC]:** tu equipo, en PowerShell, desde la raíz del repo.
-- **[VPS]:** el servidor (`ssh root@168.231.96.205`).
-- **[GitHub]**, **[Cloudflare]** y **[Docker Hub]:** su interfaz web.
+```
+visitante ─HTTPS─▶ Traefik (Dokploy: TLS Let's Encrypt, dominio → contenedor)
+                     ├─ comunidadsantalaura.cl, www.  ─▶ enercheck_landing  (nginx: solo GET /api/v1/sitio y /uploads/condominios/)
+                     └─ portal.comunidadsantalaura.cl ─▶ enercheck_frontend (nginx: /api/, /uploads/, límite de login)
+                                                              └──────────────▶ enercheck_backend ─▶ enercheck_db (red interna)
+```
+
+- **Traefik solo enruta por dominio.** Las reglas por ruta, los encabezados de seguridad (HSTS, CSP de la landing), el límite de intentos de login y la IP real del visitante los aplica el nginx de cada imagen:
+  - `frontend/nginx.prod.conf` y `landing/nginx.prod.conf`;
+  - `*/snippets/seguridad.conf`.
+
+  Todo eso está versionado en el repo y viaja con las imágenes.
+- **Nada publica puertos.** El servidor solo expone 22, 80 y 443 (`ufw`); SSH acepta solo llaves y hay fail2ban.
+- **El VPS nunca construye imágenes.** Las construye y escanea GitHub Actions, se publican en Docker Hub y Dokploy solo las descarga.
 
 ---
 
 ## Qué hace el pipeline
 
-| Evento | Jobs |
-|---|---|
-| Push a `develop` o PR a `develop` o `main` | `checks · backend`, `checks · frontend` y `checks · landing` |
-| Push a `main` | Los mismos chequeos → **espera tu aprobación** → `build + deploy (producción)` |
+`.github/workflows/deploy.yml`:
 
-- **`checks · backend`:**
-  - Usa un Postgres 16 de servicio.
-  - Corre `python -m app.arranque` y el seeder de desarrollo **dos veces**, para probar que las migraciones y los seeds son idempotentes.
-  - Después corre `pytest`, verifica que `main` importe y ejecuta `pip-audit`.
-- **`checks · frontend` y `checks · landing`:** en cada aplicación, `npm ci`, `npm audit --omit=dev --audit-level=high` y `npm run build`, que incluye `tsc`.
-- **`build + deploy`:**
-  1. Construye `enercheck-backend`, `enercheck-frontend` (portal) y `enercheck-landing` con su `Dockerfile.prod`, usando caché gha.
-  2. Las escanea con Trivy: una vulnerabilidad CRITICAL **con parche** detiene el deploy.
-  3. Publica las imágenes en Docker Hub con las etiquetas `latest` y SHA del commit.
-  4. Por SSH en el VPS:
-     - Crea `/root/docker/enercheck/` si no existe y deja ahí el compose y el `.env.prod.example` del commit. Viajan en base64 dentro del mismo `ssh-action`, sin otra action de terceros.
-     - **Se detiene sin tocar nada** si no hay `.env`, si quedan valores `CAMBIAR_*` o si el compose no es válido con ese `.env`.
-     - Respalda la base, los archivos y el compose vigente. Si el respaldo falla, no despliega.
-     - Instala el compose nuevo y ejecuta `compose pull` y `up -d`.
-     - Espera hasta 3 minutos a que `enercheck_backend` quede *healthy*. Si no queda, muestra sus últimas 100 líneas de log y falla.
+- **Push a `develop` o pull request:** solo los chequeos.
+  - `pytest` contra Postgres, migraciones y seeds idempotentes, `pip-audit`;
+  - `npm audit` y build del portal y de la landing.
+- **Push a `main`:** chequeos y luego **aprobación manual** del environment `production`. Después:
+  1. Build de las 3 imágenes y **Trivy**: una vulnerabilidad CRÍTICA con parche detiene el deploy (excepciones en `.trivyignore`).
+  2. Push a Docker Hub con la etiqueta del commit y `latest`.
+  3. **Respaldo previo** por SSH: `enercheck-ci respaldar <sha>`. Si falla, no se despliega.
+  4. Envía el compose a Dokploy con las imágenes **fijadas al commit** (`${TAG:-<sha>}`, mediante `compose.update`) y llama a `compose.deploy`.
+  5. Espera hasta 3 minutos con `enercheck-ci esperar-sano <sha>` a que `enercheck_backend` corra **esa** imagen y quede sano. Si no lo logra, el job falla y muestra el arranque del backend.
 
-La base usa la imagen oficial `postgres:16-alpine`: no se construye ni se publica.
+¿Por qué se fijan las imágenes al commit? Dokploy despliega con `docker compose up -d` **sin `pull`**: con `latest` seguiría corriendo la imagen anterior.
+
+La llave SSH del pipeline tiene **comando forzado**: solo puede ejecutar `infra/servidor/enercheck-ci` (respaldar y esperar-sano), así que no abre una shell.
 
 ---
 
-## 1. Credenciales (una vez)
+## 1. Cloudflare (una vez)
 
-| Credencial | Cómo se crea | Dónde queda |
-|---|---|---|
-| **Token de Docker Hub** | [Docker Hub] Account settings → Personal access tokens → *Generate*: `enercheck-github-actions`, permiso **Read & Write** | Secret `DOCKER_PASSWORD` de GitHub |
-| **Llave SSH exclusiva de EnerCheck** | [PC] `ssh-keygen -t ed25519 -C "enercheck-deploy" -f $env:USERPROFILE\.ssh\enercheck_deploy` y luego `type $env:USERPROFILE\.ssh\enercheck_deploy.pub \| ssh root@168.231.96.205 "cat >> ~/.ssh/authorized_keys"` | Privada: secret `VPS_SSH_KEY` y tu PC. Pública: `authorized_keys` del VPS |
+[Cloudflare] Registros A → `86.48.21.250`, con **Solo DNS** (nube gris): `comunidadsantalaura.cl`, `www`, `portal`, `dokploy` y `n8n`.
 
-La llave es solo de EnerCheck. Para revocarla basta con borrar su línea de `authorized_keys`, y eso no afecta a EffiCheck ni a los demás proyectos.
+> Si algún día se activa el proxy de Cloudflare (nube naranja):
+> - SSL/TLS debe estar en **Full (strict)**;
+> - nginx debe confiar en los rangos de Cloudflare y leer `CF-Connecting-IP`; si no, el límite de login vería la IP de Cloudflare.
 
-## 2. GitHub (una vez)
-
-**Rama `develop`:** [PC] `git push -u origin develop`.
-
-**Environment `production`** ([GitHub] Settings → Environments → New environment → `production`):
-
-- **Required reviewers:** `mmoyac`, con *Prevent self-review* desmarcado. Cada deploy espera tu aprobación.
-- **Deployment branches and tags:** *Selected branches* → `main`.
-- **Environment secrets**, no *Repository secrets*: así los workflows de `develop` y de los PR no los reciben.
-
-| Secret | Valor |
-|---|---|
-| `DOCKER_USERNAME` | `mmoyac` |
-| `DOCKER_PASSWORD` | El token de Docker Hub (no la contraseña) |
-| `VPS_HOST` | `168.231.96.205` |
-| `VPS_USERNAME` | `root` |
-| `VPS_SSH_KEY` | Contenido completo de `enercheck_deploy`, con las líneas `BEGIN`/`END` ([PC] `Get-Content $env:USERPROFILE\.ssh\enercheck_deploy -Raw \| Set-Clipboard`) |
-| `VPS_PORT` | `22` |
-
-Los secretos de la aplicación (`SECRET_KEY`, `GEMINI_API_KEY`, la clave de la base y del super admin) **no van en GitHub**: viven solo en el `.env` del VPS (§3.3).
-
-**Protección del repositorio público:**
-
-| Dónde | Configuración |
-|---|---|
-| Settings → Rules → Rulesets → New branch ruleset `main` | Target: `main`. Activo, sin *bypass*. **Restrict deletions** y **Block force pushes**. Sin PR obligatorio (hay un solo desarrollador). Después del primer run en `develop`: **Require status checks to pass** con `checks · backend` y `checks · frontend` |
-| Settings → Collaborators | Vacío: nadie más tiene permiso de escritura |
-| Settings → Actions → General | *Workflow permissions*: **Read repository contents**. *Fork pull request workflows*: **Require approval for all outside collaborators** |
-| Settings → Code security | **Dependabot alerts**, **Secret scanning** con **Push protection** y **Private vulnerability reporting** |
-| Tu cuenta de GitHub, Docker Hub y Cloudflare | **2FA** activo |
-
-## 3. VPS (una vez)
-
-**No se toca nada de los otros proyectos**: ni sus carpetas, ni sus vhosts, ni la red `general-net`, que ya existe y nunca se crea ni se recrea. EnerCheck vive solo en `/root/docker/enercheck/` y en su vhost `enercheck.conf`.
-
-**3.1 Revisar el entorno** [VPS]:
-
-```sh
-docker network inspect general-net --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'   # → FORWARDED_ALLOW_IPS (hoy 172.18.0.0/16)
-ls /root/docker/nginx-proxy/conf.d/ | grep -i enercheck      # no debe existir otro enercheck*.conf
-ls /root/docker/ | grep -i enercheck                          # la carpeta no debe existir todavía
-docker ps -a --format '{{.Names}}' | grep -i enercheck        # no debe haber contenedores enercheck_*
-```
-
-**3.2 Carpeta del proyecto.** La crea el primer deploy (§5): `/root/docker/enercheck/`, con permisos 700, `docker-compose.prod.yml` y `.env.prod.example`. Como todavía no hay `.env`, ese primer run se detiene ahí sin levantar nada.
-
-**3.3 El `.env` de producción** [VPS]. Se crea en el servidor a partir del ejemplo, después del primer run, y nunca sale de ahí:
-
-```sh
-cd /root/docker/enercheck
-cp .env.prod.example .env && chmod 600 .env
-python3 -c "import secrets; print(secrets.token_urlsafe(48))"    # repetir para cada secreto
-nano .env                                                         # reemplazar TODOS los CAMBIAR_*
-grep -n CAMBIAR .env || echo "sin valores de ejemplo"
-```
-
-- **`POSTGRES_PASSWORD` y `SECRET_KEY`:** un secreto generado para cada uno. La clave de la base solo se usa al crear el volumen; cambiarla después en el `.env` no cambia la base.
-- **`SUPERADMIN_EMAIL` y `SUPERADMIN_PASSWORD`:** tu acceso de super admin, con al menos 12 caracteres. Se crea solo si no existe ninguno.
-  - Usa un correo **distinto** al de tu fila de la planilla de residentes, por ejemplo `mmoyainfo+admin@gmail.com`. Si es el mismo, la carga de §6 no puede asignarte la parcela 23.
-- **`GEMINI_API_KEY`:** la clave de Google AI Studio para el OCR de boletas.
-- **`FORWARDED_ALLOW_IPS`:** la subred de §3.1.
-- **El backend no arranca** si queda algún `CAMBIAR_*`, si `SECRET_KEY` mide menos de 32 caracteres o si alguna cuenta tiene la clave pública del seed (`admin123`).
-
-**3.4 Vhost en el nginx compartido** [PC] y luego [VPS]:
-
-```powershell
-scp infra/nginx/enercheck.conf root@168.231.96.205:/root/docker/nginx-proxy/conf.d/enercheck.conf
-```
-
-```sh
-docker exec nginx_proxy nginx -t && docker exec nginx_proxy nginx -s reload
-```
-
-- Si `nginx -t` falla, **no recargues**: los demás sitios siguen funcionando con la configuración anterior. Corrige el archivo, o quita `enercheck.conf`, y vuelve a probar.
-- Hasta que los contenedores existan, `enercheck-santalaura` responde 502, y eso no afecta a nadie más.
-- El vhost termina TLS con el wildcard `*.effi4tech.cl` (`effi4tech.cl-0001`). Los contenedores de EnerCheck no manejan certificados.
-
-## 4. DNS (una vez)
-
-[Cloudflare] Registro **A**, nombre `enercheck-santalaura`, valor `168.231.96.205`, en modo **DNS only (nube gris)**.
-
-> ⚠️ Con el proxy de Cloudflare activo (nube naranja), nginx vería la IP de Cloudflare y no la del usuario: el límite de intentos de login (10 por minuto por IP) bloquearía a todos a la vez.
-
-## 5. Primer deploy
-
-1. Completa las secciones 1, 2, 3.1, 3.4 y 4.
-2. [PC] `git push origin develop` y espera los chequeos en verde en [GitHub] Actions.
-3. [PC] `git push origin develop:main`. En [GitHub] Actions, el run de `main` queda en **Review deployments**: apruébalo.
-4. Las imágenes se publican en Docker Hub. El primer push crea solo los repositorios `mmoyac/enercheck-backend`, `mmoyac/enercheck-frontend` y `mmoyac/enercheck-landing`, públicos salvo que tu cuenta tenga otro valor por defecto.
-5. El job crea la carpeta en el VPS y **falla a propósito** con «Falta /root/docker/enercheck/.env». Crea el `.env` (§3.3).
-6. En [GitHub] Actions abre ese run y usa **Re-run failed jobs**: vuelve a pedir tu aprobación y ahora sí despliega.
-7. El backend crea el esquema, los roles, los menús y el super admin en su primer arranque. Para revisarlo: [VPS] `docker logs enercheck_backend | head -20`.
-8. Abre `https://enercheck-santalaura.effi4tech.cl/` y entra con `SUPERADMIN_EMAIL`.
-9. Haz la carga inicial de residentes (§6).
-
-Flujo de trabajo habitual:
-
-```powershell
-git checkout develop
-# … cambios y commits …
-git push origin develop          # corren los checks; build-and-deploy queda "skipped"
-git push origin develop:main     # con develop en verde: despliega (tras tu aprobación)
-```
-
-## 6. Carga inicial de residentes (una vez)
-
-Las parcelas y los parceleros se cargan desde `docs/planillas/MATRIZ RESIDENTES.xlsx`.
-
-> **La planilla tiene datos personales.** Está en `.gitignore` y nunca va al repo ni a la imagen. En el VPS vive solo mientras dura la carga.
+## 2. Servidor (una vez)
 
 [PC]:
 
 ```powershell
-scp "docs/planillas/MATRIZ RESIDENTES.xlsx" root@168.231.96.205:/root/docker/enercheck/residentes.xlsx
+scp infra/servidor/* comunidad:/tmp/enercheck-instalar/
+ssh comunidad "bash /tmp/enercheck-instalar/instalar.sh && rm -rf /tmp/enercheck-instalar"
+```
+
+`instalar.sh` es idempotente y hace cuatro cosas:
+- instala `/opt/enercheck/bin/enercheck-ci`;
+- crea `/opt/enercheck/respaldos` (700);
+- deja el servidor en hora `America/Santiago`;
+- programa el respaldo diario a las 03:30.
+
+**Llave del pipeline** [PC], de uso exclusivo del CI:
+
+```powershell
+ssh-keygen -t ed25519 -N '""' -C enercheck-ci@github-actions -f enercheck_ci
+```
+
+[VPS] Agrega a `/root/.ssh/authorized_keys` **una línea** con la parte pública:
+
+```
+command="/opt/enercheck/bin/enercheck-ci",restrict ssh-ed25519 AAAA... enercheck-ci@github-actions
+```
+
+Comprueba [PC]:
+- `ssh -i enercheck_ci root@86.48.21.250` debe responder con el uso de `enercheck-ci`, no con una shell;
+- `ssh -i enercheck_ci root@86.48.21.250 "respaldar diario"` debe funcionar, aunque la base todavía no exista.
+
+## 3. Dokploy (una vez)
+
+[Dokploy] `https://dokploy.comunidadsantalaura.cl`:
+
+1. **Registro:** en Settings → Registry, agrega Docker Hub con el usuario `mmoyac` y un token de **solo lectura**. Es obligatorio si los repositorios de Docker Hub son privados; si son públicos, no hace falta.
+2. **Proyecto:** crea el proyecto `enercheck` y, dentro, un servicio **Compose** con origen **Raw**. El contenido inicial da igual: el pipeline lo reemplaza en cada deploy.
+3. **Environment:** pega `.env.prod.example` y completa los `CAMBIAR_*`. Genera los secretos **en el servidor**, para que no pasen por el chat ni por tu PC:
+   ```sh
+   python3 -c "import secrets; print(secrets.token_urlsafe(32))"   # POSTGRES_PASSWORD
+   python3 -c "import secrets; print(secrets.token_urlsafe(48))"   # SECRET_KEY
+   ```
+   - `POSTGRES_PASSWORD` se usa **solo al crear** el volumen: cambiarla después no cambia la base.
+   - `TAG` queda vacío.
+4. **Domains:** todos con HTTPS y certificado Let's Encrypt.
+
+   | Host | Servicio | Puerto |
+   |---|---|---|
+   | `comunidadsantalaura.cl` | `landing` | 8080 |
+   | `www.comunidadsantalaura.cl` | `landing` | 8080 (nginx redirige a la versión sin www) |
+   | `portal.comunidadsantalaura.cl` | `frontend` | 8080 |
+
+5. **API key:** créala en Profile → API/CLI Keys. El **composeId** aparece en la URL del servicio compose.
+
+> No conectes el servicio a GitHub. Dokploy no debe construir nada.
+
+## 4. GitHub (una vez)
+
+[GitHub] Settings → Environments → **`production`**. Ya está creado, con aprobación obligatoria y solo desde `main`. Sus secretos:
+
+| Secreto | Valor |
+|---|---|
+| `DOCKER_USERNAME` | `mmoyac` |
+| `DOCKER_PASSWORD` | Token de Docker Hub con permiso *Read & Write* |
+| `VPS_HOST` / `VPS_PORT` | `86.48.21.250` / `22` |
+| `VPS_SSH_KEY` | La llave privada `enercheck_ci` del §2 (después bórrala de tu PC) |
+| `VPS_KNOWN_HOSTS` | Salida de `ssh-keyscan -t ed25519 86.48.21.250` |
+| `DOKPLOY_URL` | `https://dokploy.comunidadsantalaura.cl` |
+| `DOKPLOY_API_KEY` | La API key del §3 |
+| `DOKPLOY_COMPOSE_ID` | El composeId del §3 |
+
+Para cargar uno sin que el valor quede en el historial [PC]: `gh secret set NOMBRE --env production -R mmoyac/EffiEnerCheck`.
+
+## 5. Primer deploy
+
+```powershell
+git checkout main && git merge --ff-only develop && git push      # [PC]
+```
+
+1. [GitHub] Aprueba el deploy en Actions.
+2. El respaldo previo se salta, porque la base aún no existe.
+3. El backend migra la base vacía, carga los roles y menús y crea el super admin desde `SUPERADMIN_*`.
+
+Comprueba:
+- que `https://portal.comunidadsantalaura.cl` permita iniciar sesión con el super admin;
+- que `https://comunidadsantalaura.cl` responda. Mostrará «sitio no encontrado» hasta el §6.
+
+## 6. Carga inicial (una vez): Santa Laura desde desarrollo
+
+Solo pasan a producción la configuración del condominio, sus parcelas y sus parceleros con sus asignaciones. **No** pasan boletas, lecturas, liquidaciones, rifas, auditoría, otros condominios ni las cuentas del seed. Todos los parceleros reciben una clave inicial nueva (`app/db/copiar_desde_desarrollo.py`).
+
+> **El JSON tiene datos personales.** `*.carga.json` está en `.gitignore`. Se borra apenas termina la carga.
+
+[PC], con el entorno de desarrollo arriba:
+
+```powershell
+docker exec enercheck-backend-1 python -m app.db.copiar_desde_desarrollo exportar --condominio "Santa Laura" --salida /tmp/santa-laura.carga.json
+docker cp enercheck-backend-1:/tmp/santa-laura.carga.json .
+docker exec enercheck-backend-1 rm -f /tmp/santa-laura.carga.json
+scp santa-laura.carga.json comunidad:/root/santa-laura.carga.json
+Remove-Item santa-laura.carga.json
 ```
 
 [VPS]:
 
 ```sh
-cd /root/docker/enercheck && chmod 600 residentes.xlsx
-docker cp residentes.xlsx enercheck_backend:/tmp/residentes.xlsx
-
-# 1. Simular: muestra cuántas parcelas, usuarios y asignaciones se crearían, sin guardar nada
-docker exec enercheck_backend python -m app.db.cargar_residentes /tmp/residentes.xlsx \
-  --condominio "Santa Laura" --rut <RUT de la comunidad> --simular
-
-# 2. Cargar: pide por teclado la clave inicial de los residentes (-it para que no quede en los logs)
-docker exec -it enercheck_backend python -m app.db.cargar_residentes /tmp/residentes.xlsx \
-  --condominio "Santa Laura" --rut <RUT de la comunidad>
-
-# 3. Borrar la planilla del contenedor y del VPS
-docker exec -u 0 enercheck_backend rm -f /tmp/residentes.xlsx
-shred -u residentes.xlsx
+chmod 600 /root/santa-laura.carga.json
+docker cp /root/santa-laura.carga.json enercheck_backend:/tmp/carga.json
+ARGS="--portal-url https://portal.comunidadsantalaura.cl --dominio comunidadsantalaura.cl --dominio www.comunidadsantalaura.cl"
+docker exec enercheck_backend python -m app.db.copiar_desde_desarrollo importar /tmp/carga.json $ARGS --simular
+docker exec -it enercheck_backend python -m app.db.copiar_desde_desarrollo importar /tmp/carga.json $ARGS   # pide la clave inicial
+docker exec -u 0 enercheck_backend rm -f /tmp/carga.json
+shred -u /root/santa-laura.carga.json
 ```
 
-La planilla actual crea **53 parcelas y 69 parceleros**:
+- La carga es idempotente.
+- Con los datos de desarrollo actuales crea **53 parcelas y 69 parceleros**.
 
-- **Parceleros:** uno por cada correo, sin importar si la fila dice Dueño, Arrendatario o Familiar. Cada uno queda asignado a su unidad, con el teléfono normalizado a `56XXXXXXXXX`.
-- **Propietario de la parcela:** el primer «Dueño» de la unidad.
-- **Avisos:** el comando lista las filas omitidas, los teléfonos inválidos y los correos que ya pertenecen a otra cuenta.
+**Después de la carga**, desde el portal con el super admin:
+1. Crea las cuentas del personal: `admin_condominio`, los lectores y `porteria`.
+2. Sube el logo en Condominios.
+3. Comunica a los residentes la clave inicial por un canal privado.
 
-La carga es idempotente: si la planilla se actualiza, se puede volver a correr. Solo agrega lo que falta y no cambia claves ni datos existentes, salvo completar un teléfono vacío.
+> ⚠️ Todos los residentes parten con la misma clave inicial y todavía no pueden cambiarla ellos mismos: solo un administrador puede hacerlo, desde **Usuarios**.
 
-**Después de la carga**, desde la app con el super admin:
+> ⚠️ **Primer período:** las lecturas se generan con `lectura_anterior = 0`. Antes de calcular, la lectura anterior de cada parcela debe ser la última lectura real. Hoy solo la API permite editarla: `PATCH /api/v1/lecturas/{id}` con `lectura_anterior`.
 
-1. Crea las cuentas del personal, que no vienen en la planilla: `admin_condominio`, los lectores y la cuenta compartida de `porteria`.
-2. Comunica a los residentes la clave inicial por un canal privado.
-
-> ⚠️ **Todos los residentes parten con la misma clave inicial** y la aplicación todavía no permite que cada uno cambie la suya. Solo puede cambiarla un administrador, desde **Usuarios**. Mientras no exista ese cambio, cualquiera que conozca la clave inicial y el correo de un vecino puede entrar como él.
-
-> ⚠️ **Primer período en producción:** las lecturas se generan con `lectura_anterior = 0`, porque no hay un período previo. Antes de calcular, la lectura anterior de cada parcela tiene que ser la última lectura real. Hoy la interfaz la muestra pero no permite editarla; solo la API la acepta (`PATCH /api/v1/lecturas/{id}` con `lectura_anterior`).
+> El RUT de Santa Laura en desarrollo es el provisorio `1-9`. El contenido de la landing (`backend/app/sitio/contenido/santa-laura.json`) se asocia por RUT. Si cambias el RUT real en Condominios, agrégalo también a `ruts_comunidad` de ese archivo y despliega.
 
 ## 7. Respaldos
 
-**Antes de cada deploy** (automático):
+Todos van en `/opt/enercheck/respaldos/` (700, solo root). Los genera `enercheck-ci`.
 
-- El pipeline guarda, con el mismo prefijo y permisos 600:
-  - la base: `backups/predeploy-<fecha>-<sha>.dump`;
-  - los archivos, es decir las imágenes de boletas y los vouchers: `backups/predeploy-<fecha>-<sha>.archivos.tar.gz`;
-  - el compose vigente, para el rollback: `backups/predeploy-<fecha>-<sha>.compose.yml`.
-- Conserva los 10 más recientes de cada tipo.
-- Si cualquiera de los dos respaldos falla, **no se despliega**.
+| Tipo | Cuándo | Conserva |
+|---|---|---|
+| `predeploy-<fecha>-<sha>.*` | En cada deploy, antes de cambiar las imágenes | 10 |
+| `diario-<fecha>.*` | Cron a las 03:30, hora de Chile (`/etc/cron.d/enercheck-respaldo`, log en `/var/log/enercheck-respaldo.log`) | 14 |
 
-> Los respaldos incluyen los **vouchers de transferencia**, que son datos personales. `backups/` tiene permisos 700 y no sale del VPS.
+Cada conjunto incluye:
+- `.dump`: la base, con `pg_dump -Fc`;
+- `.archivos.tar.gz`: `uploads` (imágenes de boletas y logos) y `privado` (**vouchers, datos personales**);
+- `.compose.yml`: el compose que estaba corriendo;
+- `.imagen.txt`: la imagen que estaba corriendo.
 
-> Las imágenes de boletas y los vouchers **no están en la base**: PostgreSQL guarda solo su ruta. Por eso la base y los archivos se restauran siempre juntos.
+> Las imágenes de boletas y los vouchers **no están en la base**: PostgreSQL guarda solo su ruta. La base y los archivos se restauran siempre juntos.
 
-No hay respaldo diario ni copia fuera del VPS: queda pendiente.
+> Los respaldos están en el mismo disco del servidor. Para guardar una copia fuera [PC]: `scp comunidad:/opt/enercheck/respaldos/diario-<fecha>.* .`. Guárdala cifrada, porque tiene datos personales.
 
 **Restaurar** [VPS], con el backend detenido para que nadie escriba mientras tanto:
 
 ```sh
-cd /root/docker/enercheck && docker stop enercheck_backend
-docker exec -i enercheck_db pg_restore -U enercheck -d enercheck --clean --if-exists < backups/predeploy-X.dump
+R=/opt/enercheck/respaldos/predeploy-X      # prefijo del conjunto
+docker stop enercheck_backend
+docker exec -i enercheck_db pg_restore -U enercheck -d enercheck --clean --if-exists < $R.dump
 docker start enercheck_backend
-docker exec -i enercheck_backend tar -C /app -xzf - < backups/predeploy-X.archivos.tar.gz
+docker exec -i enercheck_backend tar -C /app -xzf - < $R.archivos.tar.gz
 ```
 
-## 8. Claves y acceso de emergencia
+## 8. Rollback
 
-**Cambiar la clave de una cuenta desde el servidor** (por ejemplo, si olvidaste la del super admin) [VPS]:
+Cada imagen está publicada con el SHA de su commit: **un rollback no reconstruye nada**.
+
+1. [Dokploy] En el Environment del proyecto, define `TAG=<sha completo anterior>` y presiona **Deploy**.
+2. Para volver al flujo normal, borra `TAG`. El próximo deploy del pipeline usará su commit.
+
+> ⚠️ **Las migraciones no se revierten solas.** Si la versión nueva migró la base, primero restaura el respaldo `predeploy-…-<sha_nuevo>` (§7) y después levanta la imagen anterior. Se pierde lo escrito en producción entre ese deploy y la restauración.
+
+Si el deploy nuevo también cambió el compose, `predeploy-…-<sha_nuevo>.compose.yml` tiene el anterior. Pégalo en el compose Raw de Dokploy antes de presionar Deploy.
+
+## 9. Claves y acceso de emergencia
+
+**Cambiar la clave de una cuenta desde el servidor** (por ejemplo, la del super admin) [VPS]:
 
 ```sh
 docker exec -it enercheck_backend python -m app.db.cambiar_clave --email <correo>
 ```
 
 **Si el backend no arranca** con «N cuenta(s) tienen la clave pública del seed»:
-
-- Significa que alguna cuenta quedó con `admin123`.
-- El mensaje no lista los correos porque llega a los logs públicos de GitHub Actions.
-- Con el backend detenido, lístalas y cámbialas con un contenedor de un solo uso [VPS]:
-
-```sh
-cd /root/docker/enercheck
-docker compose -f docker-compose.prod.yml run --rm --entrypoint python backend -m app.db.cambiar_clave --expuestas
-docker compose -f docker-compose.prod.yml run --rm --entrypoint python backend -m app.db.cambiar_clave --email <correo>
-docker compose -f docker-compose.prod.yml up -d
-```
-
-## 9. Rollback
-
-Cada imagen está publicada con el SHA de su commit: **un rollback no reconstruye nada**.
+- alguna cuenta quedó con `admin123`;
+- el mensaje no lista los correos, porque los logs del pipeline son públicos;
+- con el backend detenido, usa un contenedor de un solo uso [VPS]:
 
 ```sh
-cd /root/docker/enercheck
-TAG=<sha_anterior> docker compose -f docker-compose.prod.yml up -d
+cd "$(dirname "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' enercheck_backend)")"
+P=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' enercheck_backend)
+docker compose -p "$P" run --rm --entrypoint python backend -m app.db.cambiar_clave --expuestas
+docker compose -p "$P" run --rm --entrypoint python backend -m app.db.cambiar_clave --email <correo>
 ```
 
-- Si el deploy nuevo cambió el compose, usa el de la versión anterior. Cada deploy lo guarda como `backups/predeploy-<fecha>-<sha>.compose.yml`:
-  - `cp backups/predeploy-<fecha>-<sha_nuevo>.compose.yml docker-compose.prod.yml`, antes del `up`.
-- El próximo deploy lo vuelve a reemplazar por el del commit.
+Después, presiona **Deploy** en Dokploy.
 
-> ⚠️ **Las migraciones no se revierten solas.** Si la versión nueva migró la base, restaura el respaldo previo a ese deploy (§7, `predeploy-<fecha>-<sha_nuevo>`) antes de levantar la imagen anterior. Lo escrito en producción entre el deploy y la restauración se pierde.
-
-Para volver a `latest`, borra `TAG` o déjalo en `latest` en el `.env`, y ejecuta `docker compose -f docker-compose.prod.yml up -d`.
+**Acceso al servidor:**
+- solo por llave, desde el PC autorizado (`ssh comunidad`);
+- si se pierde, queda la consola VNC del panel de Contabo.
 
 ## 10. Probar la topología en local
 
-> ⚠️ **Usa siempre otro nombre de proyecto (`-p`).** El compose de producción se llama `enercheck`, igual que el proyecto de desarrollo de esta carpeta. Sin `-p`, Compose **reemplaza los contenedores de desarrollo**. Los datos sobreviven, porque los volúmenes tienen otros nombres, pero hay que volver a levantar dev con `docker compose up -d --build`.
+> ⚠️ **Usa siempre otro nombre de proyecto (`-p`).** El compose de producción se llama `enercheck`, igual que el proyecto de desarrollo. Sin `-p`, Compose **reemplaza los contenedores de desarrollo**.
 
-[PC], en una carpeta fuera del repo con una copia de `docker-compose.prod.yml` y un `.env` de prueba (a partir de `.env.prod.example`, con `DOCKER_USERNAME=local` y `TAG=ci`):
+[PC] Trabaja en una carpeta fuera del repo, con:
+- una copia de `docker-compose.prod.yml`;
+- un `.env` de prueba creado desde `.env.prod.example`, con `DOCKER_USERNAME=local` y `TAG=ci`.
 
 ```powershell
-docker network create general-net      # solo en tu PC; en el VPS ya existe y no se toca
+docker network create --subnet 10.0.1.0/24 dokploy-network          # la misma subred que en el VPS
 docker build -f backend/Dockerfile.prod -t local/enercheck-backend:ci backend      # desde la raíz del repo
 docker build -f frontend/Dockerfile.prod -t local/enercheck-frontend:ci frontend
 docker build -f landing/Dockerfile.prod -t local/enercheck-landing:ci landing
 # en la carpeta de prueba:
 docker compose -p enercheck_prodlocal -f docker-compose.prod.yml up -d
+# hacer de Traefik: un curl dentro de la red, con el Host del dominio
+docker run --rm --network dokploy-network curlimages/curl -si -H "Host: comunidadsantalaura.cl" http://enercheck_landing:8080/api/v1/boletas/   # 404
 docker compose -p enercheck_prodlocal -f docker-compose.prod.yml down -v
-docker network rm general-net
+docker network rm dokploy-network
 ```
 
-Los contenedores usan `container_name` fijos (`enercheck_db`, `enercheck_backend`, `enercheck_frontend` y `enercheck_landing`), distintos de los de desarrollo (`enercheck-db-1`, …).
+## 11. Otro condominio
 
-## 11. Dominio propio de un condominio (landing + portal)
+Agregar un condominio **no requiere cambios en el repo**:
 
-Ejemplo con Santa Laura. Se hace **una vez por condominio** y no requiere desplegar código: los dominios y
-la URL del portal son parámetros del condominio, y la landing (`enercheck_landing`) ya corre desde el
-primer deploy.
-
-| Nombre | Sirve | Vhost |
-|---|---|---|
-| `www.condominiosantalaura.cl` | Landing pública + `GET /api/v1/sitio` y logos | `infra/nginx/condominiosantalaura-landing.conf` |
-| `condominiosantalaura.cl` | Redirige a `www` | el mismo |
-| `portal.condominiosantalaura.cl` | Portal de administración y API completa | `infra/nginx/condominiosantalaura-portal.conf` |
-
-> Desde `www` solo se alcanza `GET /api/v1/sitio` y `/uploads/condominios/`: el login y el resto de la
-> API responden 404 en ese dominio.
-
-1. **DNS** [NIC Chile]: registros **A** de `condominiosantalaura.cl`, `www` y `portal` hacia `168.231.96.205`.
-   Espera a que resuelvan: [PC] `nslookup www.condominiosantalaura.cl`.
-2. **Desafío HTTP para el certificado** [VPS]. Los vhosts definitivos referencian un certificado que aún
-   no existe y `nginx -t` fallaría; primero se publica solo el puerto 80:
-
-   ```sh
-   cat > /root/docker/nginx-proxy/conf.d/condominiosantalaura-acme.conf <<'NGINX'
-   server {
-       listen 80;
-       server_name condominiosantalaura.cl www.condominiosantalaura.cl portal.condominiosantalaura.cl;
-       location /.well-known/acme-challenge/ { root /var/www/certbot; }
-   }
-   NGINX
-   docker exec nginx_proxy nginx -t && docker exec nginx_proxy nginx -s reload
-   ```
-
-3. **Certificado** [VPS]: uno solo para los tres nombres, con el certbot webroot que ya renueva los
-   certificados del proxy. Revisa primero cómo está montado `/var/www/certbot` en `nginx_certbot` y ajusta el
-   comando si difiere:
-
-   ```sh
-   docker exec nginx_certbot certbot certonly --webroot -w /var/www/certbot      --cert-name condominiosantalaura.cl      -d condominiosantalaura.cl -d www.condominiosantalaura.cl -d portal.condominiosantalaura.cl
-   ```
-
-4. **Vhosts definitivos** [PC] y luego [VPS]:
-
-   ```powershell
-   scp infra/nginx/condominiosantalaura-landing.conf infra/nginx/condominiosantalaura-portal.conf root@168.231.96.205:/root/docker/nginx-proxy/conf.d/
-   ```
-
-   ```sh
-   rm /root/docker/nginx-proxy/conf.d/condominiosantalaura-acme.conf
-   docker exec nginx_proxy nginx -t && docker exec nginx_proxy nginx -s reload
-   ```
-
-   `condominiosantalaura-portal.conf` reutiliza la zona `enercheck_auth` de `enercheck.conf`: los dos
-   archivos deben estar instalados.
-5. **Parámetros del condominio** [portal, como super admin] → Condominios → editar Santa Laura:
-   - **Dominios de la landing:** `condominiosantalaura.cl` (con o sin `www`, se reconocen igual).
-   - **URL del portal:** `https://portal.condominiosantalaura.cl`.
-   - Productos **Landing** y **Administración** marcados; logo y color institucional.
-6. **Contenido de la landing:** `backend/app/sitio/contenido/santa-laura.json`. Debe incluir el RUT real de la
-   comunidad en `ruts_comunidad` y no debe quedar ningún `[POR CONFIRMAR]` (`pytest -rx` los lista). Cambiar
-   ese archivo sí requiere desplegar (ver `docs/sitio-publico.md`).
-7. **Verificación** [PC]:
-
-   ```powershell
-   curl.exe -I https://condominiosantalaura.cl/                      # 301 → https://www.condominiosantalaura.cl/
-   curl.exe -I https://www.condominiosantalaura.cl/                  # 200, con Content-Security-Policy
-   curl.exe https://www.condominiosantalaura.cl/api/v1/sitio         # JSON con "portal_url"
-   curl.exe -X POST https://www.condominiosantalaura.cl/api/v1/auth/token   # 404
-   curl.exe -I https://portal.condominiosantalaura.cl/               # 200: el login del portal
-   ```
-
-`enercheck-santalaura.effi4tech.cl` sigue sirviendo el portal; puede quedar como alias o retirarse quitando
-su vhost.
-
-Un **condominio que solo contrata la administración** no necesita los pasos 2 a 4 de la landing: basta con
-el vhost del portal (o el host de effi4tech) y su URL en los parámetros, para enlazarla desde su propia web.
-
+1. [Cloudflare] Si tiene dominio propio, crea los registros A hacia el VPS, igual que en el §1.
+2. [Dokploy] Agrega los dominios en *Domains*: el de la landing va al servicio `landing` y el del portal a `frontend`, con HTTPS.
+3. [Portal, super admin] En Condominios, define los módulos, `portal_url`, los dominios de la landing, el color y el logo.
+4. Si contrata la landing, crea su contenido en `backend/app/sitio/contenido/<slug>.json` (ver [docs/sitio-publico.md](docs/sitio-publico.md)) y despliega.

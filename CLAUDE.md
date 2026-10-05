@@ -77,6 +77,7 @@ EnerCheck/
 │   │   ├── db/
 │   │   │   ├── session.py               # AsyncSession factory
 │   │   │   ├── cargar_residentes.py     # Producción: parcelas y parceleros desde MATRIZ RESIDENTES.xlsx
+│   │   │   ├── copiar_desde_desarrollo.py # Carga inicial: exporta un condominio de dev e importa en prod (sin datos de prueba)
 │   │   │   ├── cambiar_clave.py         # Producción: cambiar una clave desde la consola del servidor
 │   │   │   └── seeds/seeder.py          # Datos de prueba de DESARROLLO (roles, condominio, usuarios, boleta)
 │   │   └── utils/
@@ -134,11 +135,10 @@ EnerCheck/
 │   ├── public/sitio/<condominio>/       # Imágenes del sitio (portada.webp + su fuente portada.svg)
 │   └── Dockerfile / Dockerfile.prod     # Dev :3001 / producción (nginx no root, solo lectura)
 ├── docker-compose.yml                   # Desarrollo
-├── docker-compose.prod.yml              # Producción en el VPS (ver DEPLOY.md)
-├── .env.prod.example                    # Plantilla del .env del VPS (los secretos nunca van al repo)
-├── .github/workflows/deploy.yml         # CI/CD: checks en develop/PR; deploy a main con aprobación
-├── infra/nginx/                         # Vhosts del nginx_proxy del VPS: enercheck.conf (portal en effi4tech) y
-│                                        # condominiosantalaura-{landing,portal}.conf (dominio propio)
+├── docker-compose.prod.yml              # Producción: compose "raw" de Dokploy, imágenes fijadas al commit (ver DEPLOY.md)
+├── .env.prod.example                    # Plantilla del Environment de Dokploy (los secretos nunca van al repo)
+├── .github/workflows/deploy.yml         # CI/CD: checks en develop/PR; main → aprobación → Docker Hub → Dokploy
+├── infra/servidor/                      # enercheck-ci (respaldos y espera-sano, comando forzado del CI) + instalar.sh
 ├── security/                            # Excepciones de pip-audit y Trivy (documentadas)
 ├── DEPLOY.md                            # Pasos manuales de producción, respaldos, rollback
 ├── openspec/
@@ -240,7 +240,7 @@ Los **roles** dicen qué hace cada persona; los **módulos** dicen qué contrat�
 ### Landing (`landing/`) — producto aparte
 
 - **No importa nada de `frontend/` ni viceversa.** Comparten solo el contrato de la API. `landing/src/types.ts` replica `backend/app/schemas/sitio.py` (fuente de verdad) y `landing/src/color.ts` copia el util del portal a propósito.
-- Su única llamada es `GET /api/v1/sitio` (mismo origen). En producción su vhost expone solo esa ruta y `/uploads/condominios/`, con una CSP estricta: nada de scripts, estilos ni fuentes de terceros.
+- Su única llamada es `GET /api/v1/sitio` (mismo origen). En producción su nginx (`landing/nginx.prod.conf`) expone solo esa ruta y `/uploads/condominios/`, con una CSP estricta: nada de scripts, estilos ni fuentes de terceros.
 - **Contenido editorial:** `backend/app/sitio/contenido/<slug>.json` (validado al arrancar; inválido = no arranca). **Parametrización** (dominios, portal_url, logo, color): en la base. Ver [docs/sitio-publico.md](docs/sitio-publico.md).
 - Dev: `docker-compose up --build -d landing` → http://localhost:3001 (muestra `SITIO_POR_DEFECTO` del `backend/.env`).
 
@@ -420,6 +420,8 @@ Siempre invalidar la key correcta en `onSuccess` de mutations.
 Detalle y pasos manuales en [DEPLOY.md](DEPLOY.md). Lo que hay que saber al cambiar código:
 
 - **Ramas:** se trabaja en `develop` y `main` es solo producción. Cada push a `main` despliega, previa aprobación del environment `production`. No hagas push a `main` sin que lo pidan.
+- **Producción = Dokploy** en `86.48.21.250` (`comunidadsantalaura.cl`, DNS en Cloudflare). El VPS **nunca construye**: el pipeline publica en Docker Hub y Dokploy solo descarga. Traefik enruta por dominio; las reglas por ruta, los encabezados de seguridad y el límite de login viven en `frontend/` y `landing/nginx.prod.conf` (+ `snippets/seguridad.conf`): un cambio de seguridad HTTP se hace ahí, no en el servidor.
+- **Scripts que corren en Linux** (`*.sh`, `infra/servidor/*`, `*.conf`, `Dockerfile*`) van con LF (`.gitattributes`).
 - **El CI debe quedar en verde:** `pytest`, `pip-audit`, `npm audit --omit=dev --audit-level=high` y `npm run build`. Una vulnerabilidad nueva se corrige actualizando la dependencia. Solo si no hay parche se documenta en `security/excepciones.md`.
 - **Seeds:** `app/db/seeds/` es solo para desarrollo y tiene la clave pública `admin123`.
   - En producción, `app.arranque` carga únicamente roles y menús, y **se niega a arrancar si alguna cuenta tiene `admin123`**.

@@ -2,8 +2,8 @@
 # Landing pública (React + Vite) para producción. Aplicación aparte del portal: imagen, contenedor y
 # dominio propios. Lo construye el pipeline.
 # Contexto de build: landing/.   docker build -f landing/Dockerfile.prod -t enercheck-landing landing
-# Solo sirve estáticos: /api/v1/sitio y /uploads/condominios/ los enruta el nginx_proxy al backend
-# (infra/nginx/condominiosantalaura-landing.conf).
+# Sirve los estáticos y hace de proxy solo de GET /api/v1/sitio y /uploads/condominios/ hacia
+# enercheck_backend (nginx.prod.conf), con la CSP de snippets/seguridad.conf. Delante solo está Traefik.
 
 FROM node:22-alpine AS build
 WORKDIR /app
@@ -14,6 +14,7 @@ RUN npm run build
 
 FROM nginxinc/nginx-unprivileged:alpine
 COPY nginx.prod.conf /etc/nginx/conf.d/default.conf
+COPY snippets/ /etc/nginx/snippets/
 COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
