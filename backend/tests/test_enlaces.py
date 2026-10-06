@@ -120,7 +120,9 @@ async def test_no_se_invita_a_una_cuenta_activa_ni_de_otro_condominio(tx, buzon)
     assert r.status_code in (403, 409)   # el super admin no es del condominio: 403 antes que 409
 
     from app.models.condominio import Condominio
-    otro = (await session.execute(select(Condominio).where(Condominio.nombre != "Santa Laura"))).scalars().first()
+    otro = Condominio(nombre="Otro Condominio", rut_comunidad="55555555-5", plan_suscripcion="basico", activo=True)
+    session.add(otro)
+    await session.flush()
     ajeno = await _pendiente(session, email="ajeno@ejemplo.cl", condominio_id=otro.id)
     assert (await c.post(f"/api/v1/usuarios/{ajeno.id}/invitacion", headers=cab)).status_code == 403
 
