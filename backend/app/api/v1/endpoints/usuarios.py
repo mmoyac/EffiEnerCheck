@@ -1,19 +1,23 @@
+import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.audit import registrar_auditoria
-from app.core.dependencies import AdminRequired, CurrentUser, SuperAdminRequired, get_db
+from app.core.dependencies import AdminRequired, CurrentUser, SuperAdminRequired, get_db, modulos_del_condominio
 from app.models.usuario import Usuario
+from app.services import correo, enlaces
 from app.services.claves import asignar_clave
 from app.schemas.usuario import UsuarioCreate, UsuarioDetailResponse, UsuarioResponse, UsuarioUpdate
 
 router = APIRouter(prefix="/usuarios", tags=["usuarios"])
 
 DB = Annotated[AsyncSession, Depends(get_db)]
+PAUSA_ENTRE_CORREOS = 0.6   # segundos
 
 
 @router.get("/", response_model=list[UsuarioDetailResponse])
@@ -155,3 +159,93 @@ async def eliminar_usuario(
     )
     await db.delete(usuario)
     await db.commit()
+
+
+# ---- Invitaciones (spec acceso-por-enlace) -------------------------------------------------------------
+
+class InvitacionResponse(BaseModel):
+    """El enlace vuelve al administrador para que pueda reenviarlo por WhatsApp."""
+    enlace: str
+    correo_enviado: bool
+    motivo: str | None = None
+
+
+class InvitacionesMasivasRequest(BaseModel):
+    condominio_id: int | None = None   # obligatorio para super_admin
+
+
+class InvitacionesMasivasResponse(BaseModel):
+    enviados: int
+    fallidos: int
+
+
+async def _exigir_portal_contratado(db: AsyncSession, condominio_id: int | None) -> None:
+    if condominio_id is not None and "portal" not in await modulos_del_condominio(db, condominio_id):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="El condominio no tiene contratado el portal de administración")
+
+
+@router.post("/{usuario_id}/invitacion", response_model=InvitacionResponse)
+async def invitar_usuario(
+    usuario_id: int,
+    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    db: DB,
+):
+    """Emite una invitación (anula la anterior) y la envía por correo. Solo a cuentas pendientes."""
+    usuario = await db.get(Usuario, usuario_id)
+    if usuario is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
+    if current_user.rol.nombre != "super_admin" and usuario.condominio_id != current_user.condominio_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin acceso a este usuario")
+    if usuario.password_hash is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="La cuenta ya está activa: el usuario puede usar «¿Olvidaste tu clave?»")
+    await _exigir_portal_contratado(db, usuario.condominio_id)
+
+    url, mensaje = await enlaces.preparar_correo(db, usuario, "invitacion")
+    resultado = await correo.enviar(**mensaje)
+    await registrar_auditoria(
+        db, usuario_id=current_user.id, condominio_id=usuario.condominio_id, accion="INVITACION_ENVIADA",
+        detalles={"invitado_id": usuario.id, "email": usuario.email, "correo_enviado": resultado.ok},
+    )
+    await db.commit()
+    return InvitacionResponse(enlace=url, correo_enviado=resultado.ok, motivo=resultado.motivo)
+
+
+@router.post("/invitaciones", response_model=InvitacionesMasivasResponse)
+async def invitar_pendientes(
+    data: InvitacionesMasivasRequest,
+    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    db: DB,
+):
+    """Invita por correo a todas las cuentas pendientes de un condominio. Sin correo configurado: 503."""
+    if current_user.rol.nombre == "super_admin":
+        if data.condominio_id is None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Indica el condominio")
+        condominio_id = data.condominio_id
+    else:
+        condominio_id = current_user.condominio_id
+    if not correo.configurado():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="El envío de correos no está configurado")
+    await _exigir_portal_contratado(db, condominio_id)
+
+    pendientes = (await db.execute(
+        select(Usuario).where(Usuario.condominio_id == condominio_id, Usuario.password_hash.is_(None))
+        .order_by(Usuario.id)
+    )).scalars().all()
+    enviados = fallidos = 0
+    for i, usuario in enumerate(pendientes):
+        if i:
+            await asyncio.sleep(PAUSA_ENTRE_CORREOS)   # límite de envíos por segundo de Resend
+        _, mensaje = await enlaces.preparar_correo(db, usuario, "invitacion")
+        resultado = await correo.enviar(**mensaje)
+        enviados += resultado.ok
+        fallidos += not resultado.ok
+        await registrar_auditoria(
+            db, usuario_id=current_user.id, condominio_id=condominio_id, accion="INVITACION_ENVIADA",
+            detalles={"invitado_id": usuario.id, "email": usuario.email, "correo_enviado": resultado.ok,
+                      "masiva": True},
+        )
+        await db.commit()
+    return InvitacionesMasivasResponse(enviados=enviados, fallidos=fallidos)

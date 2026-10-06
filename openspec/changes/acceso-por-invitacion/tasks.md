@@ -19,16 +19,16 @@
 
 ## 3. Enlaces y correo (backend)
 
-- [ ] 3.1 `services/enlaces.py`:
+- [x] 3.1 `services/enlaces.py`:
   - `emitir(db, usuario, tipo) -> token`: anula los vigentes y guarda el hash;
   - `consumir(db, token) -> EnlaceAcceso | None`;
   - `url_de(usuario, tipo, token)`: `portal_url` del condominio o `PORTAL_URL_POR_DEFECTO`, con el token en `#`.
 
   Verificar con pruebas de uso único, vencimiento, anulación al reemitir y forma de la URL.
-- [ ] 3.2 `services/correo.py` (Resend por `httpx`, con timeout, sin lanzar excepciones ni registrar el cuerpo) y las plantillas de invitación y recuperación (HTML con escape y texto plano). Agregar `httpx` a `requirements.txt`, y `RESEND_API_KEY`, `EMAIL_REMITENTE` y `PORTAL_URL_POR_DEFECTO` a `config.py`. Verificar con pruebas que usan un transporte falso de `httpx`: éxito, rechazo y sin configurar.
-- [ ] 3.3 Endpoints `POST /usuarios/{id}/invitacion` y `POST /usuarios/invitaciones`, con tenant, 409 si la cuenta está activa, 503 si la masiva no tiene correo, y auditoría `INVITACION_ENVIADA` sin el token. Verificar con pruebas por rol, otro condominio, cuenta activa y conteo de la masiva.
-- [ ] 3.4 Endpoints `POST /auth/recuperar` (siempre 202, envío en `BackgroundTasks`, auditoría `RECUPERACION_SOLICITADA`), `POST /auth/verificar-enlace`, `POST /auth/establecer-clave` (política, uso único, `clave_cambiada_en`, `CLAVE_ESTABLECIDA`) y `POST /auth/cambiar-clave` (clave actual, token nuevo, `CLAVE_CAMBIADA`). Verificar con pruebas de todos los escenarios de la spec `acceso-por-enlace`, incluida la respuesta idéntica para un email inexistente.
-- [ ] 3.5 Comprobar que el token y la clave no aparecen en la auditoría ni en los logs, con una prueba que busca el token en `auditoria_logs.detalles`.
+- [x] 3.2 `services/correo.py` (Resend por `httpx`, con timeout, sin lanzar excepciones ni registrar el cuerpo) y las plantillas de invitación y recuperación (HTML con escape y texto plano). Agregar `httpx` a `requirements.txt`, y `RESEND_API_KEY`, `EMAIL_REMITENTE` y `PORTAL_URL_POR_DEFECTO` a `config.py`. Verificar con pruebas que usan un transporte falso de `httpx`: éxito, rechazo y sin configurar.
+- [x] 3.3 Endpoints `POST /usuarios/{id}/invitacion` y `POST /usuarios/invitaciones`, con tenant, 409 si la cuenta está activa, 503 si la masiva no tiene correo, y auditoría `INVITACION_ENVIADA` sin el token. Verificar con pruebas por rol, otro condominio, cuenta activa y conteo de la masiva.
+- [x] 3.4 Endpoints `POST /auth/recuperar` (siempre 202, envío en `BackgroundTasks`, auditoría `RECUPERACION_SOLICITADA`), `POST /auth/verificar-enlace`, `POST /auth/establecer-clave` (política, uso único, `clave_cambiada_en`, `CLAVE_ESTABLECIDA`) y `POST /auth/cambiar-clave` (clave actual, token nuevo, `CLAVE_CAMBIADA`). Verificar con pruebas de todos los escenarios de la spec `acceso-por-enlace`, incluida la respuesta idéntica para un email inexistente.
+- [x] 3.5 Comprobar que el token y la clave no aparecen en la auditoría ni en los logs, con una prueba que busca el token en `auditoria_logs.detalles`.
 
 ## 4. Cargas de producción sin clave
 

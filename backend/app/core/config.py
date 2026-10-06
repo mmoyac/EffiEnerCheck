@@ -35,5 +35,12 @@ class Settings(BaseSettings):
     SUPERADMIN_NOMBRE: str = "Super Admin"
     SUPERADMIN_PASSWORD: str = ""
 
+    # Correo transaccional (invitaciones y recuperación de clave) vía Resend. Sin RESEND_API_KEY el
+    # envío falla con un motivo claro y las invitaciones se reenvían por WhatsApp (spec acceso-por-enlace).
+    RESEND_API_KEY: str = ""
+    EMAIL_REMITENTE: str = ""          # p. ej. no-responder@comunidadsantalaura.cl (dominio verificado en Resend)
+    # Portal al que apuntan los enlaces cuando el usuario no tiene condominio o este no tiene portal_url
+    PORTAL_URL_POR_DEFECTO: str = "http://localhost:3000"
+
 
 settings = Settings()
