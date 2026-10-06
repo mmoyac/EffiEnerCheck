@@ -35,6 +35,9 @@ const ROLES = [
   { id: 5, nombre: 'porteria' },
 ]
 
+// Roles que pueden ser vecinos de una parcela: parcelero (4) y admin del condominio (2)
+const ROLES_CON_PARCELA = ['2', '4']
+
 interface FormState {
   nombre: string
   email: string
@@ -109,7 +112,12 @@ function UsuarioForm({
           <label className="text-sm font-medium text-slate-300">Rol</label>
           <select
             value={form.rol_id}
-            onChange={(e) => onChange({ rol_id: e.target.value, parcela_ids: [] })}
+            // Cambiar entre roles con parcela (parcelero, admin del condominio) conserva las parcelas;
+            // a un rol sin parcelas (lector, portería, super admin) se le quitan
+            onChange={(e) => onChange({
+              rol_id: e.target.value,
+              ...(ROLES_CON_PARCELA.includes(e.target.value) ? {} : { parcela_ids: [] }),
+            })}
             className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:border-primary-500 focus:outline-none"
           >
             {ROLES.map((r) => (
@@ -141,7 +149,7 @@ function UsuarioForm({
         </div>
       </div>
 
-      {form.rol_id === '4' && (
+      {ROLES_CON_PARCELA.includes(form.rol_id) && (
         <div className="flex flex-col gap-1">
           <label className="text-sm font-medium text-slate-300">Parcelas asignadas</label>
           <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-600 bg-slate-800 p-2 space-y-1">
