@@ -7,7 +7,17 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      workbox: { globPatterns: ['**/*.{js,css,html,ico,png,svg}'] },
+      // El registro lo hace src/actualizacion.ts (busca versiones nuevas y recarga sola)
+      injectRegister: false,
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        cleanupOutdatedCaches: true,
+        // El service worker nuevo toma el control de inmediato y la página se recarga con la versión nueva
+        skipWaiting: true,
+        clientsClaim: true,
+        // La API y los archivos subidos nunca salen de la caché del service worker
+        navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
+      },
       manifest: {
         name: 'EFFIComunidad — Portal de la comunidad',
         short_name: 'EFFIComunidad',

@@ -6,7 +6,10 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { AuthProvider } from './context/AuthContext'
 import { TemaCondominio } from './components/layout/TemaCondominio'
 import App from './App'
+import { activarActualizacionAutomatica } from './actualizacion'
 import './index.css'
+
+activarActualizacionAutomatica()
 
 const queryClient = new QueryClient({
   defaultOptions: {
