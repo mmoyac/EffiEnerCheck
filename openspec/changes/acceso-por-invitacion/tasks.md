@@ -2,20 +2,20 @@
 
 ## 1. Modelo y migración
 
-- [ ] 1.1 En `Usuario`: `password_hash` nullable y `clave_cambiada_en` (TIMESTAMPTZ NULL). Modelo nuevo `EnlaceAcceso` (`models/enlace_acceso.py`, registrado en `db/base.py`) con `CHECK` del tipo, `token_hash` único e índice por `(usuario_id, tipo)`. Verificar que `alembic revision --autogenerate` genera solo esos cambios.
-- [ ] 1.2 Revisar a mano la migración y aplicarla en desarrollo. Verificar con `alembic upgrade head` → `downgrade -1` → `upgrade head` sin errores, y actualizar `schema.dbml`.
+- [x] 1.1 En `Usuario`: `password_hash` nullable y `clave_cambiada_en` (TIMESTAMPTZ NULL). Modelo nuevo `EnlaceAcceso` (`models/enlace_acceso.py`, registrado en `db/base.py`) con `CHECK` del tipo, `token_hash` único e índice por `(usuario_id, tipo)`. Verificar que `alembic revision --autogenerate` genera solo esos cambios.
+- [x] 1.2 Revisar a mano la migración y aplicarla en desarrollo. Verificar con `alembic upgrade head` → `downgrade -1` → `upgrade head` sin errores, y actualizar `schema.dbml`.
 
 ## 2. Seguridad y sesiones
 
-- [ ] 2.1 En `security.py`:
+- [x] 2.1 En `security.py`:
   - `validar_clave()`, con `CLAVES_CONOCIDAS` movidas desde `arranque.py`;
   - `iat` en `create_access_token`;
   - `verify_password` devuelve `False` con hash `None`.
 
   Verificar con pruebas unitarias: largo mínimo, clave conocida y hash `None`.
-- [ ] 2.2 `get_current_user` rechaza los tokens con `iat` anterior a `clave_cambiada_en`, y `PATCH /usuarios` con `password` actualiza `clave_cambiada_en`. Verificar con una prueba: login → cambio de clave por un admin → el token anterior da 401.
-- [ ] 2.3 Validadores de `UsuarioCreate` y `UsuarioUpdate`: contraseña opcional en el alta y con `validar_clave` si viene. Schema de salida con `estado` (`pendiente`/`activa`). Verificar con pruebas de alta sin clave (estado pendiente; el login da 401 genérico) y de clave débil (422).
-- [ ] 2.4 `arranque.usuarios_con_clave_conocida` ignora los NULL, y `cambiar_clave.py` usa `validar_clave`. Verificar que `python -m app.arranque` funciona con una cuenta pendiente en la base.
+- [x] 2.2 `get_current_user` rechaza los tokens con `iat` anterior a `clave_cambiada_en`, y `PATCH /usuarios` con `password` actualiza `clave_cambiada_en`. Verificar con una prueba: login → cambio de clave por un admin → el token anterior da 401.
+- [x] 2.3 Validadores de `UsuarioCreate` y `UsuarioUpdate`: contraseña opcional en el alta y con `validar_clave` si viene. Schema de salida con `estado` (`pendiente`/`activa`). Verificar con pruebas de alta sin clave (estado pendiente; el login da 401 genérico) y de clave débil (422).
+- [x] 2.4 `arranque.usuarios_con_clave_conocida` ignora los NULL, y `cambiar_clave.py` usa `validar_clave`. Verificar que `python -m app.arranque` funciona con una cuenta pendiente en la base.
 
 ## 3. Enlaces y correo (backend)
 

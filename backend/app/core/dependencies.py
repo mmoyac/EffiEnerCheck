@@ -71,6 +71,12 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise credentials_error
+    # Sesiones cerradas por un cambio de clave: el token es anterior a clave_cambiada_en.
+    # iat va en segundos enteros; se compara contra la hora del cambio truncada al segundo.
+    if user.clave_cambiada_en is not None:
+        iat = payload.get("iat")
+        if not isinstance(iat, int) or iat < int(user.clave_cambiada_en.timestamp()):
+            raise credentials_error
 
     # Se consulta en cada petición (no va en el JWT): quitar un módulo tiene efecto inmediato.
     # Queda en el objeto para que modulo_requerido no repita la consulta en la misma petición.

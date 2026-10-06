@@ -62,7 +62,8 @@ async def get_me(
         condominio = await db.get(Condominio, current_user.condominio_id)
     # Sin model_validate(current_user) directo: leería la relación lazy `condominio` (MissingGreenlet)
     return SesionResponse(
-        **UsuarioDetailResponse.model_validate(current_user).model_dump(),
+        **UsuarioDetailResponse.model_validate(current_user).model_dump(exclude={"estado"}),
+        password_hash=current_user.password_hash,   # para el estado; no sale en la respuesta
         modulos=list(current_user.modulos),
         condominio=CondominioMarca.model_validate(condominio) if condominio else None,
     )

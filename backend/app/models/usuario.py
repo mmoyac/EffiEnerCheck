@@ -22,13 +22,16 @@ class Usuario(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     nombre: Mapped[str] = mapped_column(String, nullable=False)
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    # NULL = invitación pendiente: la cuenta existe pero no puede iniciar sesión hasta crear su clave
+    password_hash: Mapped[Optional[str]] = mapped_column(String)
     rol_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), nullable=False)
     # NULL para super_admin
     condominio_id: Mapped[Optional[int]] = mapped_column(ForeignKey("condominios.id"))
     ultimo_login: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     # Normalizado a 56XXXXXXXXX (ver app/utils/telefono.py)
     telefono: Mapped[Optional[str]] = mapped_column(String)
+    # Último establecimiento o cambio de clave: los JWT emitidos antes dejan de valer
+    clave_cambiada_en: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     rol: Mapped["Rol"] = relationship("Rol", back_populates="usuarios")
     condominio: Mapped[Optional["Condominio"]] = relationship(

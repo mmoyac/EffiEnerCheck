@@ -36,11 +36,26 @@ Table usuarios {
   id integer [primary key]
   nombre varchar
   email varchar [unique]
-  password_hash varchar
+  password_hash varchar [note: 'NULL = invitación pendiente (no inicia sesión)']
   rol_id integer [ref: > roles.id]
   condominio_id integer [ref: > condominios.id, note: 'NULL para Super Admin']
   ultimo_login timestamp
   telefono varchar [note: '56XXXXXXXXX']
+  clave_cambiada_en timestamptz [note: 'Los JWT emitidos antes dejan de valer']
+}
+
+Table enlaces_acceso {
+  id integer [primary key]
+  usuario_id integer [ref: > usuarios.id, note: 'ON DELETE CASCADE']
+  tipo varchar [note: 'invitacion (7 días) | recuperacion (1 hora)']
+  token_hash char(64) [unique, note: 'sha256 del token; el token solo viaja en el enlace']
+  creado_en timestamptz
+  expira_en timestamptz
+  usado_en timestamptz [note: 'Un solo uso']
+  anulado_en timestamptz [note: 'Lo anula un enlace nuevo del mismo tipo']
+  indexes {
+    (usuario_id, tipo)
+  }
 }
 
 Table roles {

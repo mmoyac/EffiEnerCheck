@@ -7,8 +7,8 @@ from sqlalchemy.orm import selectinload
 
 from app.core.audit import registrar_auditoria
 from app.core.dependencies import AdminRequired, CurrentUser, SuperAdminRequired, get_db
-from app.core.security import hash_password
 from app.models.usuario import Usuario
+from app.services.claves import asignar_clave
 from app.schemas.usuario import UsuarioCreate, UsuarioDetailResponse, UsuarioResponse, UsuarioUpdate
 
 router = APIRouter(prefix="/usuarios", tags=["usuarios"])
@@ -51,11 +51,12 @@ async def crear_usuario(
     usuario = Usuario(
         nombre=data.nombre,
         email=data.email,
-        password_hash=hash_password(data.password),
         rol_id=data.rol_id,
         condominio_id=data.condominio_id,
         telefono=data.telefono,
     )
+    if data.password is not None:   # sin clave: cuenta pendiente, se invita después
+        asignar_clave(usuario, data.password)
     db.add(usuario)
     await db.flush()
 
@@ -102,10 +103,11 @@ async def actualizar_usuario(
     cambios = data.model_dump(exclude_unset=True)
     parcela_ids = cambios.pop("parcela_ids", None)
 
-    if "password" in cambios:
-        cambios["password_hash"] = hash_password(cambios.pop("password"))
+    nueva_clave = cambios.pop("password", None)
+    if nueva_clave is not None:
+        asignar_clave(usuario, nueva_clave)   # cierra las sesiones abiertas del usuario
 
-    estado_anterior = {k: getattr(usuario, k) for k in cambios if k != "password_hash"}
+    estado_anterior = {k: getattr(usuario, k) for k in cambios}
     for campo, valor in cambios.items():
         setattr(usuario, campo, valor)
 

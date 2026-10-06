@@ -22,7 +22,7 @@ import sys
 from sqlalchemy import select, text
 
 from app.core.config import settings
-from app.core.security import hash_password, verify_password
+from app.core.security import CLAVES_CONOCIDAS, hash_password, verify_password
 from app.db.seeds.menus import seed_menus
 from app.db.seeds.roles import seed_roles
 from app.db.session import AsyncSessionLocal, engine
@@ -32,8 +32,6 @@ from app.models.usuario import Usuario
 
 import app.db.base  # noqa: F401 — registra todos los modelos (relaciones por nombre)
 
-# Clave de los usuarios de prueba (app/db/seeds/usuarios.py). Es pública: está en el repositorio.
-CLAVES_CONOCIDAS = ("admin123",)
 VALOR_EJEMPLO_SECRET_KEY = ("changeme-in-production", "your-super-secret-key-change-in-production")
 
 
@@ -100,7 +98,9 @@ async def crear_super_admin(db) -> None:
 
 async def usuarios_con_clave_conocida(db) -> list[str]:
     """Emails de las cuentas cuya clave es una de CLAVES_CONOCIDAS (bcrypt una vez por hash distinto)."""
-    filas = (await db.execute(select(Usuario.email, Usuario.password_hash))).all()
+    filas = (await db.execute(
+        select(Usuario.email, Usuario.password_hash).where(Usuario.password_hash.is_not(None))  # sin pendientes
+    )).all()
     por_hash: dict[str, list[str]] = {}
     for email, password_hash in filas:
         por_hash.setdefault(password_hash, []).append(email)
