@@ -57,10 +57,14 @@ Admin crea la rifa (premios, precio, cantidad de números, datos para transferir
 | PATCH | `/rifas/{id}/imputaciones/{iid}` | Admin — `{cargada}` |
 | GET | `/rifas/{id}/imputaciones.csv` | Admin — para Comunidad Feliz |
 | GET | `/rifas/{id}/export.csv` | Admin — lista para el sorteo |
+| GET | `/rifas/{id}/eliminacion` | **Solo super admin**: resumen de lo que se borrará |
+| DELETE | `/rifas/{id}?confirmacion=<nombre>` | **Solo super admin**: borra la rifa con sus compras, números, imputaciones y vouchers |
 
 Los CSV salen en UTF-8 con BOM, separados por `;` y con hora de Chile.
 
-Auditoría: `CREATE_RIFA`, `UPDATE_RIFA`, `COMPRAR_RIFA`, `ANULAR_COMPRA_RIFA`, `CONFIRMAR_PAGO_RIFA`, `CERRAR_RIFA`, `REABRIR_RIFA`, `MARCAR_IMPUTACION_RIFA`.
+Auditoría: `CREATE_RIFA`, `UPDATE_RIFA`, `COMPRAR_RIFA`, `ANULAR_COMPRA_RIFA`, `CONFIRMAR_PAGO_RIFA`, `CERRAR_RIFA`, `REABRIR_RIFA`, `MARCAR_IMPUTACION_RIFA`, `ELIMINAR_RIFA` (con el resumen de lo borrado).
+
+**Eliminar una rifa** (botón "Eliminar rifa" en el detalle, solo super admin): sirve en cualquier estado y es irreversible. Muestra antes qué se borrará y exige escribir el nombre exacto. Si hay imputaciones ya cargadas en Comunidad Feliz, lo advierte: esos cobros hay que revertirlos allá a mano. Si fue un error, la única vuelta atrás son los respaldos (DEPLOY.md §7).
 
 ## Pantallas
 

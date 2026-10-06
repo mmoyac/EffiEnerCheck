@@ -333,6 +333,7 @@ Módulo **aparte** de la boleta: nada de lo recaudado entra a `liquidaciones_par
 - **Vouchers** en `/app/privado/vouchers` (volumen `privado_data`), **nunca** en `/app/uploads`, que se sirve como estático público. Se entregan solo por `GET .../compras/{cid}/voucher` (staff o usuarios de la parcela). `POST /compras` es multipart (`datos` JSON + `voucher`); en transferencias de portería el voucher es obligatorio.
 - `GET /rifas/{id}` recorta la respuesta: `numeros_vendidos` sin dueño para todos; `compras` e `imputaciones` solo de las parcelas del usuario (todas si es admin o portería).
 - Estados: `abierta` → `cerrar` (genera imputaciones) → `cerrada` → `reabrir` (solo sin imputaciones `cargada`; las borra).
+- **Eliminar** (`DELETE /rifas/{id}?confirmacion=<nombre>`, solo `super_admin`, cualquier estado): borra por `ON DELETE CASCADE` compras, números e imputaciones; los vouchers se borran del disco **después** del commit. Auditoría `ELIMINAR_RIFA`.
 - Comprobante por WhatsApp: enlace `wa.me` armado en el frontend (`utils/comprobante.ts`); el sistema no envía mensajes.
 - React Query keys: `['rifas']`, `['rifas', 'abierta']`, `['rifa', id]`, `['rifa-caja', id]`, `['rifa-parcelas', id]`, `['rifa-telefonos', id, parcelaId]`, `['rifa-compras', id, filtros]`.
 

@@ -7,6 +7,7 @@ Ver openspec/changes/rifas-solidarias/design.md.
 """
 import csv
 import io
+import logging
 import os
 import re
 import uuid
@@ -16,7 +17,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +28,7 @@ from app.core.dependencies import (
     AdminRequired,
     PorteriaRequired,
     RifaAccesoRequired,
+    SuperAdminRequired,
     TenantId,
     get_db,
 )
@@ -62,6 +64,7 @@ ZONA_HORARIA = ZoneInfo("America/Santiago")
 
 # Vouchers de transferencia: fuera de /app/uploads, que se sirve como estático público
 VOUCHERS_DIR = "/app/privado/vouchers"
+log = logging.getLogger(__name__)
 VOUCHER_MIME_EXT = {
     "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
     "image/heic": "heic", "application/pdf": "pdf",
@@ -1003,3 +1006,79 @@ async def exportar_csv(
         ],
         f"rifa-{rifa.id}-numeros.csv",
     )
+
+
+# ---- Eliminación (solo super admin; spec rifas-solidarias, cambio eliminar-rifa) --------------------------
+
+class ResumenEliminacion(BaseModel):
+    """Lo que se borrará junto con la rifa (también va a la auditoría: solo conteos y montos)."""
+    nombre: str
+    estado: str
+    compras_vigentes: int
+    compras_anuladas: int
+    numeros_vendidos: int
+    monto_pagado: int
+    imputaciones_pendientes: int
+    imputaciones_cargadas: int
+    vouchers: int
+
+
+async def _resumen_eliminacion(rifa: Rifa, db: AsyncSession) -> tuple[ResumenEliminacion, list[str]]:
+    compras = (await db.execute(select(CompraRifa).where(CompraRifa.rifa_id == rifa.id))).scalars().all()
+    imputaciones = (await db.execute(
+        select(ImputacionRifa).where(ImputacionRifa.rifa_id == rifa.id)
+    )).scalars().all()
+    vigentes = [c for c in compras if not c.anulada]
+    vouchers = [c.voucher_archivo for c in compras if c.voucher_archivo]
+    return ResumenEliminacion(
+        nombre=rifa.nombre,
+        estado=rifa.estado,
+        compras_vigentes=len(vigentes),
+        compras_anuladas=len(compras) - len(vigentes),
+        numeros_vendidos=sum(len(c.numeros) for c in vigentes),
+        monto_pagado=sum(c.monto for c in vigentes if c.pagada),
+        imputaciones_pendientes=sum(1 for i in imputaciones if not i.cargada),
+        imputaciones_cargadas=sum(1 for i in imputaciones if i.cargada),
+        vouchers=len(vouchers),
+    ), vouchers
+
+
+@router.get("/{rifa_id}/eliminacion", response_model=ResumenEliminacion)
+async def resumen_eliminacion(
+    rifa_id: int,
+    current_user: Annotated[Usuario, Depends(SuperAdminRequired)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    rifa = await _get_rifa_o_404(rifa_id, None, db)
+    resumen, _ = await _resumen_eliminacion(rifa, db)
+    return resumen
+
+
+@router.delete("/{rifa_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def eliminar_rifa(
+    rifa_id: int,
+    confirmacion: str,
+    request: Request,
+    current_user: Annotated[Usuario, Depends(SuperAdminRequired)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Borra la rifa y todo lo que depende de ella (compras, números, imputaciones y vouchers)."""
+    rifa = await _get_rifa_o_404(rifa_id, None, db, for_update=True)
+    if confirmacion.strip() != rifa.nombre.strip():
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="Escribe el nombre exacto de la rifa para confirmar")
+    resumen, vouchers = await _resumen_eliminacion(rifa, db)
+    await registrar_auditoria(
+        db, usuario_id=current_user.id, condominio_id=rifa.condominio_id, accion="ELIMINAR_RIFA",
+        detalles={"rifa_id": rifa.id, **resumen.model_dump()}, ip_address=_ip(request),
+    )
+    # ON DELETE CASCADE en compras, números e imputaciones: una sola sentencia borra todo
+    await db.execute(delete(Rifa).where(Rifa.id == rifa.id))
+    await db.commit()
+    # Los archivos se borran después del commit: si este fallaba, la rifa y sus vouchers seguían intactos
+    for nombre in vouchers:
+        try:
+            _borrar_voucher(nombre)
+        except OSError:
+            log.warning("No se pudo borrar un voucher de la rifa eliminada %s", rifa_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

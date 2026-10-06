@@ -120,4 +120,27 @@ export const rifasApi = {
   exportarCsv: (id: number) => descargar(`/rifas/${id}/export.csv`, `rifa-${id}-numeros.csv`),
 
   exportarImputaciones: (id: number) => descargar(`/rifas/${id}/imputaciones.csv`, `rifa-${id}-imputaciones.csv`),
+
+  /** Solo super admin: lo que se borrará junto con la rifa */
+  resumenEliminacion: async (id: number): Promise<ResumenEliminacionRifa> => {
+    const { data } = await api.get<ResumenEliminacionRifa>(`/rifas/${id}/eliminacion`)
+    return data
+  },
+
+  /** Solo super admin: borra la rifa con sus compras, números, imputaciones y vouchers */
+  eliminar: async (id: number, confirmacion: string): Promise<void> => {
+    await api.delete(`/rifas/${id}`, { params: { confirmacion } })
+  },
+}
+
+export interface ResumenEliminacionRifa {
+  nombre: string
+  estado: string
+  compras_vigentes: number
+  compras_anuladas: number
+  numeros_vendidos: number
+  monto_pagado: number
+  imputaciones_pendientes: number
+  imputaciones_cargadas: number
+  vouchers: number
 }

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AxiosError } from 'axios'
-import { ChevronLeft, Download, HeartHandshake, Lock, Pencil, Trophy, Unlock } from 'lucide-react'
+import { ChevronLeft, Download, HeartHandshake, Lock, Pencil, Trash2, Trophy, Unlock } from 'lucide-react'
 import { rifasApi } from '../../api/rifas'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
@@ -15,6 +15,8 @@ import { ComprasLista } from '../../components/rifas/ComprasLista'
 import { ComprobanteVenta } from '../../components/rifas/ComprobanteVenta'
 import { CajaResumen } from '../../components/rifas/CajaResumen'
 import { RifaFormModal } from './RifaFormModal'
+import { EliminarRifaModal } from '../../components/rifas/EliminarRifaModal'
+import { useRole } from '../../hooks/useAuth'
 import { clp, fecha } from '../../utils/format'
 import type { CompraRifa, RifaCreate } from '../../types'
 
@@ -38,6 +40,8 @@ export default function RifaDetalle() {
   const [editError, setEditError] = useState('')
   const [confirmarCierre, setConfirmarCierre] = useState(false)
   const [vendida, setVendida] = useState<CompraRifa | null>(null)
+  const [eliminando, setEliminando] = useState(false)
+  const esSuperAdmin = useRole() === 'super_admin'
 
   const { data: rifa, isLoading } = useQuery({ queryKey: ['rifa', rifaId], queryFn: () => rifasApi.get(rifaId) })
   const { data: parcelas = [] } = useQuery({
@@ -144,6 +148,11 @@ export default function RifaDetalle() {
             {!abierta && !hayCargadas && (
               <Button variant="secondary" size="sm" loading={reabrirMut.isPending} onClick={() => { setActionError(''); reabrirMut.mutate() }}>
                 <Unlock className="h-4 w-4" /> Reabrir
+              </Button>
+            )}
+            {esSuperAdmin && (
+              <Button variant="danger" size="sm" onClick={() => setEliminando(true)}>
+                <Trash2 className="h-4 w-4" /> Eliminar rifa
               </Button>
             )}
           </div>
@@ -270,6 +279,8 @@ export default function RifaDetalle() {
         rifa={rifa}
         precioBloqueado={rifa.numeros_vendidos_total > 0}
       />
+
+      {esSuperAdmin && <EliminarRifaModal rifa={rifa} open={eliminando} onClose={() => setEliminando(false)} />}
 
       <Modal open={confirmarCierre} onClose={() => setConfirmarCierre(false)} title="Cerrar rifa" size="sm">
         <div className="space-y-4">
