@@ -194,11 +194,27 @@ export default function Usuarios() {
   const condominioNombre = (id: number | null) =>
     id ? (condominios.find((c) => c.id === id)?.nombre ?? `#${id}`) : '—'
 
-  const usuariosFiltrados = filtroCondominio === ''
+  // Orden natural por parcela (2, 3, … 13 A, 13 B); sin parcela (personal, administración) al final, por nombre
+  const primeraParcela = (u: Usuario) =>
+    [...u.parcelas.map((p) => p.numero_parcela)]
+      .sort((a, b) => a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' }))[0]
+  const porParcela = (a: Usuario, b: Usuario) => {
+    const pa = primeraParcela(a)
+    const pb = primeraParcela(b)
+    if (pa && pb) {
+      return pa.localeCompare(pb, 'es', { numeric: true, sensitivity: 'base' })
+        || a.nombre.localeCompare(b.nombre, 'es')
+    }
+    if (pa || pb) return pa ? -1 : 1
+    return a.nombre.localeCompare(b.nombre, 'es')
+  }
+
+  const usuariosFiltrados = (filtroCondominio === ''
     ? usuarios
     : filtroCondominio === 'sin'
       ? usuarios.filter((u) => u.condominio_id === null)
       : usuarios.filter((u) => u.condominio_id === Number(filtroCondominio))
+  ).slice().sort(porParcela)
 
   const createMut = useMutation({
     mutationFn: usuariosApi.create,
@@ -390,7 +406,16 @@ export default function Usuarios() {
                     {u.estado === 'pendiente' && (
                       <Button size="sm" variant="ghost" title="Enviar invitación para crear su clave"
                               loading={invitarMut.isPending && invitarMut.variables?.id === u.id}
-                              onClick={() => invitarMut.mutate(u)}>
+                              onClick={() => {
+                                // El correo sale de inmediato: confirmar a quién y a qué dirección
+                                if (window.confirm(`¿Enviar la invitación a ${u.nombre}?
+
+Correo: ${u.email}
+
+Revisa que el correo sea el correcto: quien lo reciba podrá crear la clave de esta cuenta.`)) {
+                                  invitarMut.mutate(u)
+                                }
+                              }}>
                         <Send className="h-3.5 w-3.5" /> Invitar
                       </Button>
                     )}
