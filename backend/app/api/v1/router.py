@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     menus,
     parcelas,
     rifas,
+    portal,
     sitio,
     usuarios,
 )
@@ -22,6 +23,7 @@ api_router.include_router(condominios.router)
 api_router.include_router(parcelas.router)
 api_router.include_router(menus.router)
 api_router.include_router(sitio.router)  # público: landing (sin login)
+api_router.include_router(portal.router)  # público: marca y manifiesto de la app según el dominio
 
 # Módulos del portal: todo router de un módulo se incluye con su guarda (spec modulos-plataforma)
 _energia = [Depends(modulo_requerido("energia"))]

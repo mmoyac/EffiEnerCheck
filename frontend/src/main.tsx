@@ -7,9 +7,11 @@ import { AuthProvider } from './context/AuthContext'
 import { TemaCondominio } from './components/layout/TemaCondominio'
 import App from './App'
 import { activarActualizacionAutomatica } from './actualizacion'
+import { aplicarMarcaPortal } from './marcaPortal'
 import './index.css'
 
 activarActualizacionAutomatica()
+aplicarMarcaPortal()
 
 const queryClient = new QueryClient({
   defaultOptions: {
