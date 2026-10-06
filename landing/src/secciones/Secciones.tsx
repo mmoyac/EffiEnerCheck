@@ -238,7 +238,11 @@ export function Pie({ sitio, plataforma }: { sitio: SitioPublico; plataforma: st
           {portal_url && <a href={portal_url} className="font-medium text-marca-700 hover:underline">{portada.cta_texto}</a>}
         </div>
       </div>
-      <p className="pb-6 text-center text-xs text-slate-400">Plataforma {plataforma}</p>
+      <p className="pb-6 text-center text-xs text-slate-400">
+        Plataforma {plataforma} · Desarrollado por{' '}
+        <a href="https://effi4tech.cl" target="_blank" rel="noopener noreferrer"
+           className="font-medium text-slate-500 hover:text-marca-700">Effi4Tech.cl</a>
+      </p>
     </footer>
   )
 }
