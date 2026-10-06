@@ -92,6 +92,9 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
+      <p className="border-t border-slate-800 px-4 py-2 text-[11px] text-slate-600" title="Versión del portal">
+        Versión {__VERSION__}
+      </p>
     </aside>
   )
 }
