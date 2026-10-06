@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Zap } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { Input } from '../components/ui/Input'
 import { Button } from '../components/ui/Button'
@@ -8,7 +8,7 @@ import { Alert } from '../components/ui/Alert'
 import { Modal } from '../components/ui/Modal'
 import { authApi } from '../api/auth'
 import { pantallaDeInicio } from '../config/inicio'
-import { PLATAFORMA } from '../config/marca'
+import { IconoPlataforma, PLATAFORMA } from '../config/marca'
 
 export default function Login() {
   const { login, user } = useAuth()
@@ -46,7 +46,7 @@ export default function Login() {
         {/* Logo */}
         <div className="mb-8 flex flex-col items-center gap-3">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-600 shadow-lg shadow-primary-900/50">
-            <Zap className="h-7 w-7 text-white" />
+            <IconoPlataforma className="h-7 w-7 text-white" />
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-bold text-slate-100">{PLATAFORMA.nombre}</h1>
@@ -109,9 +109,6 @@ export default function Login() {
         <RecuperarClaveModal open={recuperar} onClose={() => setRecuperar(false)} emailInicial={email} />
 
         <p className="mt-4 text-center text-xs text-slate-600">
-          EnerCheck v0.1 · Gestión eléctrica
-        </p>
-        <p className="mt-1 text-center text-xs text-slate-600">
           Desarrollado por{' '}
           <a
             href="https://effi4tech.cl"

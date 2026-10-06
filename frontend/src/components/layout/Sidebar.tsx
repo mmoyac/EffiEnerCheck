@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, Users, MapPin,
-  FileText, Activity, Calculator, Shield, Zap, Ticket,
+  FileText, Activity, Calculator, Shield, Ticket,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { menusApi } from '../../api/menus'
 import { useAuth } from '../../hooks/useAuth'
-import { PLATAFORMA } from '../../config/marca'
+import { IconoPlataforma, PLATAFORMA } from '../../config/marca'
 import { grupoDeMenu, ORDEN_GRUPOS } from '../../config/modulos'
 import type { MenuItem } from '../../types'
 
@@ -51,7 +51,7 @@ export function MarcaPortal() {
         <img src={condominio.logo_url} alt="" className="h-8 w-8 flex-shrink-0 rounded-lg bg-white object-contain p-0.5" />
       ) : (
         <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary-600">
-          <Zap className="h-4 w-4 text-white" />
+          <IconoPlataforma className="h-4 w-4 text-white" />
         </div>
       )}
       <div className="min-w-0">

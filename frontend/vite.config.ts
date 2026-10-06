@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: { globPatterns: ['**/*.{js,css,html,ico,png,svg}'] },
       manifest: {
-        name: 'EnerCheck — Gestión Eléctrica',
-        short_name: 'EnerCheck',
-        description: 'Prorrateo de cuentas eléctricas para condominios',
+        name: 'EFFIComunidad — Portal de la comunidad',
+        short_name: 'EFFIComunidad',
+        description: 'Portal de la comunidad: cobros, energía y actividades del condominio',
         theme_color: '#16a34a',
         background_color: '#0f172a',
         display: 'standalone',

@@ -1,9 +1,11 @@
 /**
- * Marca de la plataforma. "EnerCheck" identifica al módulo de energía; el nombre comercial de la
- * plataforma completa todavía no está definido y se cambia aquí, en un solo lugar.
+ * Marca de la plataforma: se cambia aquí, en un solo lugar (nombre, lema e ícono).
+ * "EnerCheck" sigue identificando al módulo de energía.
  */
+export { UsersRound as IconoPlataforma } from 'lucide-react'
+
 export const PLATAFORMA = {
-  nombre: 'EnerCheck',
+  nombre: 'EFFIComunidad',
   lema: 'Portal de la comunidad',
   modulos: {
     energia: 'EnerCheck',
