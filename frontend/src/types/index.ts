@@ -149,6 +149,8 @@ export interface Rifa {
   datos_transferencia: string | null
   precio_numero: number
   cantidad_numeros: number
+  /** Formas de pago que acepta la rifa (al menos una) */
+  medios_pago: MedioPago[]
   estado: EstadoRifa
   created_at: string
   cerrada_at: string | null
@@ -243,6 +245,7 @@ export interface RifaCreate {
   datos_transferencia?: string | null
   precio_numero: number
   cantidad_numeros: number
+  medios_pago?: MedioPago[]
 }
 
 export type RifaUpdate = Partial<Omit<RifaCreate, 'condominio_id'>>

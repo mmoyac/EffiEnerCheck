@@ -44,11 +44,13 @@ const errorMsg = (err: unknown) => {
 export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false }: Props) {
   const qc = useQueryClient()
   const esStaff = modo !== 'portal'
-  const medios = esStaff ? MEDIOS : MEDIOS.filter((m) => m.valor !== 'efectivo')
+  // Las que acepta la rifa; el efectivo, además, solo en portería o administración
+  const medios = MEDIOS.filter((m) => rifa.medios_pago.includes(m.valor) && (esStaff || m.valor !== 'efectivo'))
+  const medioInicial: MedioPago = medios[0]?.valor ?? 'transferencia'
 
   const [parcelaId, setParcelaId] = useState<number | null>(parcelas.length === 1 ? parcelas[0].id : null)
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set())
-  const [medioPago, setMedioPago] = useState<MedioPago>(esStaff ? 'efectivo' : 'gasto_comun')
+  const [medioPago, setMedioPago] = useState<MedioPago>(medioInicial)
   const [comprador, setComprador] = useState('')
   const [telefono, setTelefono] = useState('')
   const [voucher, setVoucher] = useState<Blob | null>(null)
@@ -116,7 +118,7 @@ export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false
       setParcelaId(null)
       setComprador('')
       setTelefono('')
-      setMedioPago('efectivo')
+      setMedioPago(medioInicial)
     }
   }
 
@@ -214,7 +216,7 @@ export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false
 
         <div className="space-y-1">
           <p className="text-sm font-medium text-slate-300">Forma de pago</p>
-          <div className={`grid gap-2 ${medios.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`} role="radiogroup">
+          <div className={`grid gap-2 ${medios.length === 3 ? 'grid-cols-3' : medios.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`} role="radiogroup">
             {medios.map(({ valor, icono: Icono, ayuda }) => (
               <button
                 key={valor}

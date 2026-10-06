@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import ARRAY, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import ARRAY, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -19,6 +19,12 @@ CANALES = ("portal", "porteria", "administracion")
 class Rifa(Base):
     """Rifa solidaria del condominio. Independiente de la boleta eléctrica y de las liquidaciones."""
     __tablename__ = "rifas"
+    __table_args__ = (
+        CheckConstraint(
+            "cardinality(medios_pago) > 0 AND medios_pago <@ ARRAY['efectivo','transferencia','gasto_comun']::varchar[]",
+            name="ck_rifas_medios_pago",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     condominio_id: Mapped[int] = mapped_column(ForeignKey("condominios.id"), nullable=False, index=True)
@@ -27,6 +33,10 @@ class Rifa(Base):
     descripcion: Mapped[Optional[str]] = mapped_column(Text)
     # En orden: el primero es el primer premio
     premios: Mapped[List[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
+    # Formas de pago que acepta la rifa (al menos una). Las compras ya hechas conservan la suya.
+    medios_pago: Mapped[List[str]] = mapped_column(
+        ARRAY(String), nullable=False, server_default=text("'{efectivo,transferencia,gasto_comun}'")
+    )
     # Texto libre: banco, tipo y número de cuenta, titular, RUT, correo
     datos_transferencia: Mapped[Optional[str]] = mapped_column(Text)
     precio_numero: Mapped[int] = mapped_column(Integer, nullable=False)

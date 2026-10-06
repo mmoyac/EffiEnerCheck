@@ -6,6 +6,16 @@ from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 from app.utils.telefono import normalizar_telefono
 
 MedioPago = Literal["efectivo", "transferencia", "gasto_comun"]
+MEDIOS_PAGO: list[str] = ["efectivo", "transferencia", "gasto_comun"]
+
+
+def _medios_validos(v: list[str] | None) -> list[str] | None:
+    """Al menos una forma de pago, sin repetidas y en el orden del catálogo."""
+    if v is None:
+        return v
+    if not v:
+        raise ValueError("La rifa debe aceptar al menos una forma de pago")
+    return [m for m in MEDIOS_PAGO if m in v]
 Canal = Literal["portal", "porteria", "administracion"]
 
 
@@ -28,11 +38,17 @@ class RifaCreate(BaseModel):
     datos_transferencia: str | None = None
     precio_numero: PositiveInt
     cantidad_numeros: PositiveInt
+    medios_pago: list[MedioPago] = Field(default_factory=lambda: list(MEDIOS_PAGO))
 
     @field_validator("premios")
     @classmethod
     def premios_no_vacios(cls, v: list[str]) -> list[str]:
         return _limpiar_premios(v)
+
+    @field_validator("medios_pago")
+    @classmethod
+    def medios_no_vacios(cls, v: list[str]) -> list[str]:
+        return _medios_validos(v)
 
 
 class RifaUpdate(BaseModel):
@@ -43,11 +59,17 @@ class RifaUpdate(BaseModel):
     datos_transferencia: str | None = None
     precio_numero: PositiveInt | None = None
     cantidad_numeros: PositiveInt | None = None
+    medios_pago: list[MedioPago] | None = None
 
     @field_validator("premios")
     @classmethod
     def premios_no_vacios(cls, v: list[str] | None) -> list[str] | None:
         return _limpiar_premios(v)
+
+    @field_validator("medios_pago")
+    @classmethod
+    def medios_no_vacios(cls, v: list[str] | None) -> list[str] | None:
+        return _medios_validos(v)
 
 
 class RifaResponse(BaseModel):
@@ -62,6 +84,7 @@ class RifaResponse(BaseModel):
     datos_transferencia: str | None
     precio_numero: int
     cantidad_numeros: int
+    medios_pago: list[str]
     estado: str
     created_at: datetime
     cerrada_at: datetime | None

@@ -588,6 +588,11 @@ async def comprar_numeros(
     elif not parcela.activa:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="La parcela no está activa")
 
+    if data.medio_pago not in rifa.medios_pago:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Esta rifa no acepta pagos con {_MEDIO_PAGO_TEXTO[data.medio_pago].lower()}",
+        )
     if data.medio_pago != "transferencia" and voucher_datos:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

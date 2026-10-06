@@ -4,7 +4,10 @@ import { Modal } from '../../components/ui/Modal'
 import { Input } from '../../components/ui/Input'
 import { Button } from '../../components/ui/Button'
 import { Alert } from '../../components/ui/Alert'
-import type { Rifa, RifaCreate } from '../../types'
+import type { MedioPago, Rifa, RifaCreate } from '../../types'
+import { MEDIO_PAGO_TEXTO } from '../../utils/comprobante'
+
+const TODOS_LOS_MEDIOS: MedioPago[] = ['efectivo', 'transferencia', 'gasto_comun']
 
 interface Props {
   open: boolean
@@ -32,6 +35,7 @@ export function RifaFormModal({ open, onClose, onSubmit, loading, error, rifa, c
   const [precio, setPrecio] = useState('')
   const [cantidad, setCantidad] = useState('')
   const [condominioId, setCondominioId] = useState('')
+  const [medios, setMedios] = useState<MedioPago[]>(TODOS_LOS_MEDIOS)
 
   useEffect(() => {
     if (!open) return
@@ -43,6 +47,7 @@ export function RifaFormModal({ open, onClose, onSubmit, loading, error, rifa, c
     setPrecio(rifa ? String(rifa.precio_numero) : '')
     setCantidad(rifa ? String(rifa.cantidad_numeros) : '')
     setCondominioId('')
+    setMedios(rifa?.medios_pago ?? TODOS_LOS_MEDIOS)
   }, [open, rifa])
 
   const precioNum = Number(precio)
@@ -52,7 +57,7 @@ export function RifaFormModal({ open, onClose, onSubmit, loading, error, rifa, c
     nombre.trim() && beneficiario.trim() && premiosLimpios.length > 0 &&
     Number.isInteger(precioNum) && precioNum > 0 &&
     Number.isInteger(cantidadNum) && cantidadNum > 0 &&
-    (!condominios || condominioId)
+    (!condominios || condominioId) && medios.length > 0
 
   const setPremio = (i: number, v: string) => setPremios((ps) => ps.map((p, j) => (j === i ? v : p)))
   const moverPremio = (i: number, d: -1 | 1) =>
@@ -74,6 +79,7 @@ export function RifaFormModal({ open, onClose, onSubmit, loading, error, rifa, c
       datos_transferencia: datosTransferencia.trim() || null,
       ...(precioBloqueado ? {} : { precio_numero: precioNum }),
       cantidad_numeros: cantidadNum,
+      medios_pago: TODOS_LOS_MEDIOS.filter((m) => medios.includes(m)),
     } as RifaCreate)
   }
 
@@ -123,6 +129,26 @@ export function RifaFormModal({ open, onClose, onSubmit, loading, error, rifa, c
             <Plus className="h-4 w-4" /> Agregar premio
           </Button>
         </div>
+
+        <fieldset className="space-y-1">
+          <legend className="text-sm font-medium text-slate-300">Formas de pago aceptadas</legend>
+          <div className="flex flex-wrap gap-2">
+            {TODOS_LOS_MEDIOS.map((m) => (
+              <label key={m} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${medios.includes(m) ? 'border-primary-500 bg-primary-600/10 text-slate-100' : 'border-slate-600 text-slate-400'}`}>
+                <input
+                  type="checkbox"
+                  className="accent-primary-500"
+                  checked={medios.includes(m)}
+                  onChange={(e) => setMedios((ms) => (e.target.checked ? [...ms, m] : ms.filter((x) => x !== m)))}
+                />
+                {MEDIO_PAGO_TEXTO[m]}
+              </label>
+            ))}
+          </div>
+          {medios.length === 0
+            ? <p className="text-xs text-red-400">Elige al menos una forma de pago.</p>
+            : <p className="text-xs text-slate-500">Las compras ya hechas conservan su forma de pago; solo las nuevas usan esta lista.</p>}
+        </fieldset>
 
         <div className="flex flex-col gap-1">
           <label htmlFor="rifa-transferencia" className="text-sm font-medium text-slate-300">Datos para transferir (opcional)</label>
