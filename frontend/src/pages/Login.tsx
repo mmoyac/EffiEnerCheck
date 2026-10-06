@@ -5,6 +5,8 @@ import { useAuth } from '../hooks/useAuth'
 import { Input } from '../components/ui/Input'
 import { Button } from '../components/ui/Button'
 import { Alert } from '../components/ui/Alert'
+import { Modal } from '../components/ui/Modal'
+import { authApi } from '../api/auth'
 import { pantallaDeInicio } from '../config/inicio'
 import { PLATAFORMA } from '../config/marca'
 
@@ -16,6 +18,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [recuperar, setRecuperar] = useState(false)
 
   if (user) {
     navigate(pantallaDeInicio(user.rol?.nombre, user.modulos), { replace: true })
@@ -95,7 +98,15 @@ export default function Login() {
               Ingresar
             </Button>
           </form>
+          <button
+            type="button"
+            onClick={() => setRecuperar(true)}
+            className="mt-4 w-full text-center text-sm text-slate-400 transition-colors hover:text-primary-400"
+          >
+            ¿Olvidaste tu clave? ¿Primera vez?
+          </button>
         </div>
+        <RecuperarClaveModal open={recuperar} onClose={() => setRecuperar(false)} emailInicial={email} />
 
         <p className="mt-4 text-center text-xs text-slate-600">
           EnerCheck v0.1 · Gestión eléctrica
@@ -113,5 +124,61 @@ export default function Login() {
         </p>
       </div>
     </div>
+  )
+}
+
+
+/** Siempre muestra el mismo mensaje, exista o no la cuenta: no revela qué correos están registrados. */
+function RecuperarClaveModal({ open, onClose, emailInicial }: { open: boolean; onClose: () => void; emailInicial: string }) {
+  const [email, setEmail] = useState('')
+  const [enviado, setEnviado] = useState(false)
+  const [enviando, setEnviando] = useState(false)
+  const [error, setError] = useState('')
+
+  const cerrar = () => { setEnviado(false); setError(''); onClose() }
+
+  const enviar = async (e: FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setEnviando(true)
+    try {
+      await authApi.recuperar(email || emailInicial)
+      setEnviado(true)
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      setError(status === 429 ? 'Demasiados intentos: espera un minuto y vuelve a intentarlo' : 'No se pudo enviar la solicitud')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={cerrar} title="Crear o recuperar tu clave" size="sm">
+      {enviado ? (
+        <div className="space-y-4">
+          <Alert variant="success">
+            Si el correo está registrado, te enviamos un enlace para crear tu clave. Revisa también la carpeta
+            de spam. El enlace vence en 1 hora.
+          </Alert>
+          <Button fullWidth onClick={cerrar}>Cerrar</Button>
+        </div>
+      ) : (
+        <form onSubmit={enviar} className="space-y-4">
+          <p className="text-sm text-slate-400">
+            Escribe tu correo y te enviaremos un enlace para crear una clave nueva.
+          </p>
+          {error && <Alert variant="error">{error}</Alert>}
+          <Input
+            label="Correo electrónico"
+            type="email"
+            defaultValue={emailInicial}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
+          <Button type="submit" fullWidth loading={enviando}>Enviar enlace</Button>
+        </form>
+      )}
+    </Modal>
   )
 }

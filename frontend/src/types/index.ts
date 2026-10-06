@@ -23,6 +23,15 @@ export interface Usuario {
   ultimo_login: string | null
   parcelas: Parcela[]
   telefono: string | null
+  /** pendiente = todavía no crea su clave (no puede iniciar sesión) */
+  estado: 'pendiente' | 'activa'
+}
+
+/** Resultado de invitar a un usuario: el enlace vuelve para reenviarlo por WhatsApp */
+export interface Invitacion {
+  enlace: string
+  correo_enviado: boolean
+  motivo: string | null
 }
 
 /** Identidad del condominio en el portal (nombre, logo y color institucional) */

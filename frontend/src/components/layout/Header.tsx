@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { LogOut, Ticket, User } from 'lucide-react'
+import { KeyRound, LogOut, Ticket, User } from 'lucide-react'
 import { useAuth, useModulo } from '../../hooks/useAuth'
+import { CambiarClaveModal } from '../CambiarClaveModal'
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin:      'Super Admin',
@@ -13,6 +15,7 @@ const ROLE_LABELS: Record<string, string> = {
 export function Header() {
   const { user, logout } = useAuth()
   const conRifas = useModulo('rifas')
+  const [cambiarClave, setCambiarClave] = useState(false)
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-slate-700 bg-slate-900 px-5">
@@ -38,6 +41,14 @@ export function Header() {
           </div>
         </div>
         <button
+          onClick={() => setCambiarClave(true)}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-400 hover:bg-slate-700 hover:text-slate-100 transition-colors"
+          title="Cambiar mi clave"
+        >
+          <KeyRound className="h-4 w-4" />
+          <span className="hidden md:inline">Mi clave</span>
+        </button>
+        <button
           onClick={logout}
           className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-400 hover:bg-slate-700 hover:text-slate-100 transition-colors"
           title="Cerrar sesión"
@@ -46,6 +57,7 @@ export function Header() {
           <span className="hidden sm:inline">Salir</span>
         </button>
       </div>
+      <CambiarClaveModal open={cambiarClave} onClose={() => setCambiarClave(false)} />
     </header>
   )
 }

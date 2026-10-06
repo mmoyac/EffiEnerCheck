@@ -36,7 +36,7 @@
 
 ## 5. Frontend
 
-- [ ] 5.1 `api/auth.ts` y `api/usuarios.ts`: métodos nuevos. `types`: `estado` en el usuario. `utils/whatsapp.ts` extraído de `comprobante.ts`, sin cambiar el comportamiento de las rifas. Verificar con `npm run build`.
+- [x] 5.1 `api/auth.ts` y `api/usuarios.ts`: métodos nuevos. `types`: `estado` en el usuario. `utils/whatsapp.ts` extraído de `comprobante.ts`, sin cambiar el comportamiento de las rifas. Verificar con `npm run build`.
 - [ ] 5.2 Página pública `EstablecerClave`, que atiende `/crear-clave` y `/restablecer-clave`:
   - lee el token del hash y lo borra de la URL;
   - verifica el enlace, pide la clave dos veces y muestra los estados de enlace inválido y de éxito.
@@ -47,8 +47,8 @@
 
 ## 6. Infraestructura y documentación
 
-- [ ] 6.1 En `frontend/nginx.prod.conf`, la zona `enercheck_auth` en `recuperar`, `verificar-enlace` y `establecer-clave`. Verificar con `nginx -t` y una ráfaga local que produzca 429.
-- [ ] 6.2 Agregar `RESEND_API_KEY`, `EMAIL_REMITENTE` y `PORTAL_URL_POR_DEFECTO` a `.env.prod.example`. En `DEPLOY.md`: Resend (cuenta, verificación del dominio en Cloudflare, API key en Dokploy); el §6 sin clave inicial y con "Invitar a todos los pendientes"; y el aviso de rollback con cuentas pendientes. Actualizar `CLAUDE.md` (estructura, endpoints y patrón de enlaces). Verificar con `grep` que no queden menciones a la "clave inicial" de los residentes.
+- [x] 6.1 En `frontend/nginx.prod.conf`, la zona `enercheck_auth` en `recuperar`, `verificar-enlace` y `establecer-clave`. Verificar con `nginx -t` y una ráfaga local que produzca 429.
+- [x] 6.2 Agregar `RESEND_API_KEY`, `EMAIL_REMITENTE` y `PORTAL_URL_POR_DEFECTO` a `.env.prod.example`. En `DEPLOY.md`: Resend (cuenta, verificación del dominio en Cloudflare, API key en Dokploy); el §6 sin clave inicial y con "Invitar a todos los pendientes"; y el aviso de rollback con cuentas pendientes. Actualizar `CLAUDE.md` (estructura, endpoints y patrón de enlaces). Verificar con `grep` que no queden menciones a la "clave inicial" de los residentes.
 
 ## 7. Puesta en marcha
 

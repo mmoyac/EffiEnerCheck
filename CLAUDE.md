@@ -40,7 +40,7 @@ EnerCheck/
 │   │   ├── api/v1/
 │   │   │   ├── router.py                # api_router (prefix /api/v1); agrupa los endpoints
 │   │   │   └── endpoints/
-│   │   │       ├── auth.py              # Login → JWT + /auth/me
+│   │   │       ├── auth.py              # Login → JWT + /auth/me + recuperar / verificar-enlace / establecer-clave / cambiar-clave
 │   │   │       ├── boletas.py           # CRUD boleta maestra + OCR + candados de período
 │   │   │       ├── condominios.py       # CRUD condominios + parametrización comercial (módulos, dominios, portal_url, color, logo)
 │   │   │       ├── lecturas.py          # CRUD lecturas de remarcadores
@@ -49,7 +49,7 @@ EnerCheck/
 │   │   │       ├── parcelas.py          # CRUD parcelas del condominio
 │   │   │       ├── rifas.py             # Rifas: venta, pagos, voucher, caja, cierre, imputaciones, CSV
 │   │   │       ├── sitio.py             # GET /sitio: contenido PÚBLICO de la landing (resuelve el condominio por dominio)
-│   │   │       └── usuarios.py          # CRUD usuarios
+│   │   │       └── usuarios.py          # CRUD usuarios + invitaciones ({id}/invitacion e invitaciones masivas)
 │   │   ├── core/
 │   │   │   ├── config.py                # Pydantic Settings (lee .env)
 │   │   │   ├── modulos.py               # Catálogo de módulos: sitio, portal, energia, rifas
@@ -72,11 +72,14 @@ EnerCheck/
 │   │   ├── schemas/                     # Pydantic v2 (request/response)
 │   │   ├── services/
 │   │   │   ├── enercheck.py             # Motor EnerCheck — fórmulas de distribución
+│   │   │   ├── enlaces.py               # Enlaces de acceso de un solo uso (invitación 7 d, recuperación 1 h)
+│   │   │   ├── correo.py                # Correo transaccional vía Resend (HTTP); nunca lanza
+│   │   │   ├── claves.py                # asignar_clave(): política + hash + cierra sesiones
 │   │   │   └── ocr.py                   # extraer_datos_boleta() → llama Gemini Vision
 │   │   ├── arranque.py                  # Arranque de producción: valida .env, migra, catálogos, super admin
 │   │   ├── db/
 │   │   │   ├── session.py               # AsyncSession factory
-│   │   │   ├── cargar_residentes.py     # Producción: parcelas y parceleros desde MATRIZ RESIDENTES.xlsx
+│   │   │   ├── cargar_residentes.py     # Producción: parcelas y parceleros (pendientes) desde MATRIZ RESIDENTES.xlsx
 │   │   │   ├── copiar_desde_desarrollo.py # Carga inicial: exporta un condominio de dev e importa en prod (sin datos de prueba)
 │   │   │   ├── cambiar_clave.py         # Producción: cambiar una clave desde la consola del servidor
 │   │   │   └── seeds/seeder.py          # Datos de prueba de DESARROLLO (roles, condominio, usuarios, boleta)
@@ -92,7 +95,8 @@ EnerCheck/
 │   │   ├── App.tsx                      # Rutas (protegidas por rol y por módulo con ModuloRoute)
 │   │   ├── config/                      # modulos.ts (espejo del catálogo), marca.ts (nombre de la plataforma), inicio.ts (home por rol)
 │   │   ├── pages/
-│   │   │   ├── Login.tsx                # Formulario de acceso
+│   │   │   ├── Login.tsx                # Formulario de acceso + «¿Olvidaste tu clave?»
+│   │   │   ├── EstablecerClave.tsx      # Públicas /crear-clave y /restablecer-clave (token en el #)
 │   │   │   ├── admin/
 │   │   │   │   ├── Dashboard.tsx        # KPIs del período + boletas recientes
 │   │   │   │   ├── Boletas.tsx          # Lista de boletas + botón Calcular → navega a detalle
@@ -243,6 +247,18 @@ Los **roles** dicen qué hace cada persona; los **módulos** dicen qué contrat�
 - Su única llamada es `GET /api/v1/sitio` (mismo origen). En producción su nginx (`landing/nginx.prod.conf`) expone solo esa ruta y `/uploads/condominios/`, con una CSP estricta: nada de scripts, estilos ni fuentes de terceros.
 - **Contenido editorial:** `backend/app/sitio/contenido/<slug>.json` (validado al arrancar; inválido = no arranca). **Parametrización** (dominios, portal_url, logo, color): en la base. Ver [docs/sitio-publico.md](docs/sitio-publico.md).
 - Dev: `docker-compose up --build -d landing` → http://localhost:3001 (muestra `SITIO_POR_DEFECTO` del `backend/.env`).
+
+---
+
+## Acceso por invitación (claves)
+
+Nadie conoce la clave de otro (spec `acceso-por-enlace`):
+
+- **Cuenta pendiente** = `password_hash` NULL: no inicia sesión (401 genérico). El listado de usuarios expone `estado: pendiente|activa`. Las cargas de producción crean siempre cuentas pendientes.
+- **Enlaces de un solo uso** (`enlaces_acceso`, solo el sha256 del token): invitación (7 días) y recuperación (1 hora). Emitir uno nuevo anula los vigentes del mismo tipo. El token va en el **fragmento** (`/crear-clave#<token>`), nunca en la ruta ni en logs.
+- **Toda clave pasa por `services/claves.asignar_clave()`**: política (`security.validar_clave`: ≥ 10 caracteres y no una de `CLAVES_CONOCIDAS`), hash y `clave_cambiada_en`. `get_current_user` rechaza los JWT con `iat` anterior: cambiar la clave cierra las demás sesiones.
+- **`/auth/recuperar` responde siempre 202 igual**, exista o no la cuenta (no revela correos). nginx limita por IP `recuperar`, `verificar-enlace` y `establecer-clave` (zona `enercheck_auth`).
+- **Correo:** `services/correo.enviar()` (Resend; sin `RESEND_API_KEY` devuelve `ok=False` con el motivo). La invitación individual devuelve el enlace al admin para reenviarlo por WhatsApp (`utils/whatsapp.ts`).
 
 ---
 

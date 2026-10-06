@@ -9,6 +9,8 @@ interface AuthCtx {
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => void
+  /** Tras cambiar la clave: el token anterior ya no vale */
+  actualizarToken: (token: string) => void
 }
 
 const AuthContext = createContext<AuthCtx | null>(null)
@@ -37,6 +39,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(me)
   }
 
+  const actualizarToken = (nuevo: string) => {
+    localStorage.setItem('token', nuevo)
+    setToken(nuevo)
+  }
+
   const logout = () => {
     localStorage.removeItem('token')
     setToken(null)
@@ -45,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout, actualizarToken }}>
       {children}
     </AuthContext.Provider>
   )

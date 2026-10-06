@@ -109,6 +109,22 @@ Comprueba [PC]:
 
 5. **API key:** créala en Profile → API/CLI Keys. El **composeId** aparece en la URL del servicio compose.
 
+### 3.1 Correo de invitaciones (Resend)
+
+Las invitaciones y "¿Olvidaste tu clave?" se envían por correo con [Resend](https://resend.com). Sin Resend todo funciona igual, pero las invitaciones solo pueden enviarse por WhatsApp y la recuperación de clave no llega.
+
+1. [Resend] Crea la cuenta. En **Domains → Add domain**, agrega `comunidadsantalaura.cl`.
+2. [Cloudflare] Crea los registros DNS que muestra Resend (MX y TXT de SPF, y TXT de DKIM), con **Solo DNS**. Espera a que Resend marque el dominio como *Verified*.
+3. [Resend] En **API Keys**, crea una key con permiso *Sending access*, limitada al dominio.
+4. [Dokploy] En el Environment, completa:
+   - `RESEND_API_KEY=` con la key;
+   - `EMAIL_REMITENTE=no-responder@comunidadsantalaura.cl`.
+
+   Presiona **Deploy**.
+5. Prueba: en el ingreso del portal, usa **«¿Olvidaste tu clave?»** con tu correo. Debe llegar el correo de "Santa Laura" y el enlace debe funcionar.
+
+> Plan gratuito de Resend: alrededor de 3.000 correos al mes y 100 al día. Alcanza de sobra para invitar a los 69 vecinos de una vez.
+
 > No conectes el servicio a GitHub. Dokploy no debe construir nada.
 
 ## 4. GitHub (una vez)
@@ -144,7 +160,7 @@ Comprueba:
 
 ## 6. Carga inicial (una vez): Santa Laura desde desarrollo
 
-Solo pasan a producción la configuración del condominio, sus parcelas y sus parceleros con sus asignaciones. **No** pasan boletas, lecturas, liquidaciones, rifas, auditoría, otros condominios ni las cuentas del seed. Todos los parceleros reciben una clave inicial nueva (`app/db/copiar_desde_desarrollo.py`).
+Solo pasan a producción la configuración del condominio, sus parcelas y sus parceleros con sus asignaciones. **No** pasan boletas, lecturas, liquidaciones, rifas, auditoría, otros condominios ni las cuentas del seed. Los parceleros quedan como **cuentas pendientes, sin clave**: nadie puede entrar como ellos hasta que cada uno cree la suya con su invitación (`app/db/copiar_desde_desarrollo.py`).
 
 > **El JSON tiene datos personales.** `*.carga.json` está en `.gitignore`. Se borra apenas termina la carga.
 
@@ -162,23 +178,26 @@ Remove-Item santa-laura.carga.json
 
 ```sh
 chmod 600 /root/santa-laura.carga.json
-docker cp /root/santa-laura.carga.json enercheck_backend:/tmp/carga.json
-ARGS="--portal-url https://portal.comunidadsantalaura.cl --dominio comunidadsantalaura.cl --dominio www.comunidadsantalaura.cl"
+# Por stdin, no con docker cp: así el archivo queda del usuario `app` (el contenedor no tiene CAP_CHOWN)
+docker exec -i enercheck_backend sh -c "umask 077; cat > /tmp/carga.json" < /root/santa-laura.carga.json
+ARGS="--portal-url https://portal.comunidadsantalaura.cl --dominio comunidadsantalaura.cl"
 docker exec enercheck_backend python -m app.db.copiar_desde_desarrollo importar /tmp/carga.json $ARGS --simular
-docker exec -it enercheck_backend python -m app.db.copiar_desde_desarrollo importar /tmp/carga.json $ARGS   # pide la clave inicial
-docker exec -u 0 enercheck_backend rm -f /tmp/carga.json
+docker exec enercheck_backend python -m app.db.copiar_desde_desarrollo importar /tmp/carga.json $ARGS
+docker exec enercheck_backend rm -f /tmp/carga.json
 shred -u /root/santa-laura.carga.json
 ```
 
 - La carga es idempotente.
-- Con los datos de desarrollo actuales crea **53 parcelas y 69 parceleros**.
+- Con los datos de desarrollo actuales crea **53 parcelas y 69 parceleros**, todos pendientes.
+- `www.` no hace falta como dominio aparte: se guarda sin `www`, y la landing redirige `www` al dominio sin él.
 
 **Después de la carga**, desde el portal con el super admin:
-1. Crea las cuentas del personal: `admin_condominio`, los lectores y `porteria`.
+1. Crea las cuentas del personal (`admin_condominio`, lectores, `porteria`) **sin contraseña** y envíales su invitación con **Invitar**.
 2. Sube el logo en Condominios.
-3. Comunica a los residentes la clave inicial por un canal privado.
+3. Prueba primero con una cuenta propia: **Invitar** → abre el enlace → crea la clave → ingresa.
+4. En **Usuarios**, filtra Santa Laura y presiona **Invitar pendientes (N)**: cada vecino recibe su correo. A quien no lo reciba, reenvíale el enlace con **Invitar → Enviar por WhatsApp**.
 
-> ⚠️ Todos los residentes parten con la misma clave inicial y todavía no pueden cambiarla ellos mismos: solo un administrador puede hacerlo, desde **Usuarios**.
+Los vecinos también pueden pedir su enlace solos con **«¿Olvidaste tu clave? ¿Primera vez?»** en el ingreso.
 
 > ⚠️ **Primer período:** las lecturas se generan con `lectura_anterior = 0`. Antes de calcular, la lectura anterior de cada parcela debe ser la última lectura real. Hoy solo la API permite editarla: `PATCH /api/v1/lecturas/{id}` con `lectura_anterior`.
 
@@ -219,6 +238,8 @@ Cada imagen está publicada con el SHA de su commit: **un rollback no reconstruy
 
 1. [Dokploy] En el Environment del proyecto, define `TAG=<sha completo anterior>` y presiona **Deploy**.
 2. Para volver al flujo normal, borra `TAG`. El próximo deploy del pipeline usará su commit.
+
+> ⚠️ **Cuentas pendientes:** desde `acceso-por-invitacion`, `usuarios.password_hash` admite NULL. Una imagen anterior a ese cambio no arranca con cuentas pendientes en la base, y su migración no se puede bajar mientras existan. Si hay que volver atrás, restaura el respaldo previo.
 
 > ⚠️ **Las migraciones no se revierten solas.** Si la versión nueva migró la base, primero restaura el respaldo `predeploy-…-<sha_nuevo>` (§7) y después levanta la imagen anterior. Se pierde lo escrito en producción entre ese deploy y la restauración.
 

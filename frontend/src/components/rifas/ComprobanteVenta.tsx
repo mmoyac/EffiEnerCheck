@@ -1,7 +1,8 @@
 import { CheckCircle2, MessageCircle, Plus, Printer } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { clp, fechaHora } from '../../utils/format'
-import { estadoPagoTexto, MEDIO_PAGO_TEXTO, mensajeComprobante, urlWhatsApp } from '../../utils/comprobante'
+import { estadoPagoTexto, MEDIO_PAGO_TEXTO, mensajeComprobante } from '../../utils/comprobante'
+import { urlWhatsApp } from '../../utils/whatsapp'
 import { formatearTelefono } from '../../utils/telefono'
 import type { CompraRifa, Rifa } from '../../types'
 

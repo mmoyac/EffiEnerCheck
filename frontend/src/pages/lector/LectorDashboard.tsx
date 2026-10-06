@@ -6,6 +6,7 @@ import { boletasApi } from '../../api/boletas'
 import { lecturasApi } from '../../api/lecturas'
 import { parcelasApi } from '../../api/parcelas'
 import { Spinner } from '../../components/ui/Spinner'
+import { CambiarClaveModal } from '../../components/CambiarClaveModal'
 import { periodoCorto } from '../../utils/format'
 import type { Parcela } from '../../types'
 import { useAuth } from '../../hooks/useAuth'
@@ -15,6 +16,7 @@ type Filtro = 'pendientes' | 'todas'
 export default function LectorDashboard() {
   const navigate = useNavigate()
   const { logout, user } = useAuth()
+  const [cambiarClave, setCambiarClave] = useState(false)
   const [filtro, setFiltro] = useState<Filtro>('pendientes')
 
   const { data: boletas = [], isLoading: loadingBoletas } = useQuery({
@@ -63,9 +65,14 @@ export default function LectorDashboard() {
               <p className="text-xs text-slate-500">{user?.nombre}</p>
             </div>
           </div>
-          <button onClick={logout} className="text-xs text-slate-500 hover:text-slate-300 px-2 py-1">
-            Salir
-          </button>
+          <div className="flex items-center">
+            <button onClick={() => setCambiarClave(true)} className="text-xs text-slate-500 hover:text-slate-300 px-2 py-1">
+              Mi clave
+            </button>
+            <button onClick={logout} className="text-xs text-slate-500 hover:text-slate-300 px-2 py-1">
+              Salir
+            </button>
+          </div>
         </div>
 
         {/* Período y progreso */}
@@ -161,6 +168,7 @@ export default function LectorDashboard() {
           </ul>
         )}
       </div>
+      <CambiarClaveModal open={cambiarClave} onClose={() => setCambiarClave(false)} />
     </div>
   )
 }

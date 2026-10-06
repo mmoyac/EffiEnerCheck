@@ -16,6 +16,7 @@ import Condominios from './pages/admin/Condominios'
 import LectorDashboard from './pages/lector/LectorDashboard'
 import CapturarLectura from './pages/lector/CapturarLectura'
 import MiLiquidacion from './pages/parcelero/MiLiquidacion'
+import EstablecerClave from './pages/EstablecerClave'
 import MisRifas from './pages/parcelero/Rifas'
 import Rifas from './pages/admin/Rifas'
 import RifaDetalle from './pages/admin/RifaDetalle'
@@ -51,6 +52,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* Públicas: el token del enlace va en el fragmento (#), no en la ruta */}
+      <Route path="/crear-clave" element={<EstablecerClave />} />
+      <Route path="/restablecer-clave" element={<EstablecerClave />} />
 
       {/* Lector: pantalla completa sin AppLayout */}
       <Route element={<ProtectedRoute />}>

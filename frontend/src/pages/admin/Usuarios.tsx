@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, UserCircle, Pencil } from 'lucide-react'
+import { Plus, UserCircle, Pencil, Send, MessageCircle, Copy, Check, Mail } from 'lucide-react'
 import { usuariosApi } from '../../api/usuarios'
 import { parcelasApi } from '../../api/parcelas'
 import { condominiosApi } from '../../api/condominios'
@@ -14,7 +14,8 @@ import { Spinner } from '../../components/ui/Spinner'
 import { fecha } from '../../utils/format'
 import { formatearTelefono, normalizarTelefono } from '../../utils/telefono'
 import { useAuth, useRole } from '../../hooks/useAuth'
-import type { Usuario } from '../../types'
+import { mensajeInvitacion, urlWhatsApp } from '../../utils/whatsapp'
+import type { Invitacion, Usuario } from '../../types'
 import type { Condominio } from '../../api/condominios'
 
 const ROLE_COLOR: Record<string, 'purple' | 'blue' | 'yellow' | 'green'> = {
@@ -92,11 +93,14 @@ function UsuarioForm({
         hint="Se usa para enviar comprobantes por WhatsApp"
       />
       <Input
-        label={isEdit ? 'Nueva contraseña (dejar vacío para no cambiar)' : 'Contraseña (mín. 8 caracteres)'}
+        label={isEdit ? 'Nueva contraseña (opcional)' : 'Contraseña (opcional)'}
         type="password"
         value={form.password}
         onChange={(e) => onChange({ password: e.target.value })}
-        required={!isEdit}
+        autoComplete="new-password"
+        hint={isEdit
+          ? 'Déjala vacía para no cambiarla. Mejor: que la persona use «¿Olvidaste tu clave?»'
+          : 'Déjala vacía y envía una invitación: la persona creará su propia clave (mín. 10 caracteres)'}
       />
 
       <div className="grid grid-cols-2 gap-3">
@@ -180,6 +184,8 @@ export default function Usuarios() {
   const [editForm, setEditForm] = useState<FormState>(EMPTY_FORM)
   const [error, setError] = useState('')
   const [filtroCondominio, setFiltroCondominio] = useState<string>('')
+  const [invitacion, setInvitacion] = useState<{ usuario: Usuario; resultado: Invitacion } | null>(null)
+  const [aviso, setAviso] = useState<{ variante: 'success' | 'error'; texto: string } | null>(null)
 
   const { data: usuarios = [], isLoading } = useQuery({ queryKey: ['usuarios'], queryFn: usuariosApi.list })
   const { data: parcelas = [] } = useQuery({ queryKey: ['parcelas'], queryFn: parcelasApi.list })
@@ -217,6 +223,38 @@ export default function Usuarios() {
       setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al actualizar'),
   })
 
+  const errorDe = (e: unknown, porDefecto: string) =>
+    (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? porDefecto
+
+  const invitarMut = useMutation({
+    mutationFn: (u: Usuario) => usuariosApi.invitar(u.id).then((resultado) => ({ usuario: u, resultado })),
+    onSuccess: (r) => { setInvitacion(r); setAviso(null) },
+    onError: (e: unknown) => setAviso({ variante: 'error', texto: errorDe(e, 'No se pudo emitir la invitación') }),
+  })
+
+  // Pendientes del condominio a la vista: el admin ve el suyo; el super admin debe elegir uno en el filtro
+  const condominioMasivo = isSuperAdmin
+    ? (filtroCondominio && filtroCondominio !== 'sin' ? Number(filtroCondominio) : null)
+    : (me?.condominio_id ?? null)
+  const pendientesMasivo = condominioMasivo === null ? []
+    : usuarios.filter((u) => u.estado === 'pendiente' && u.condominio_id === condominioMasivo)
+
+  const masivaMut = useMutation({
+    mutationFn: () => usuariosApi.invitarPendientes(isSuperAdmin ? condominioMasivo ?? undefined : undefined),
+    onSuccess: ({ enviados, fallidos }) => setAviso({
+      variante: fallidos ? 'error' : 'success',
+      texto: `Invitaciones enviadas por correo: ${enviados}.`
+        + (fallidos ? ` Fallaron ${fallidos}: reenvíalas una a una o por WhatsApp.` : ''),
+    }),
+    onError: (e: unknown) => setAviso({ variante: 'error', texto: errorDe(e, 'No se pudieron enviar las invitaciones') }),
+  })
+
+  const invitarTodos = () => {
+    if (window.confirm(`Se enviará un correo de invitación a ${pendientesMasivo.length} persona(s) que aún no crean su clave. ¿Continuar?`)) {
+      masivaMut.mutate()
+    }
+  }
+
   const openEdit = (u: Usuario) => {
     setEditForm({
       nombre: u.nombre,
@@ -239,7 +277,7 @@ export default function Usuarios() {
       telefono,
       nombre: createForm.nombre,
       email: createForm.email,
-      password: createForm.password,
+      password: createForm.password || undefined,   // sin clave: cuenta pendiente, se invita
       rol_id: Number(createForm.rol_id),
       condominio_id: createForm.condominio_id ? Number(createForm.condominio_id) : (me?.condominio_id ?? undefined),
       parcela_ids: createForm.parcela_ids,
@@ -292,11 +330,18 @@ export default function Usuarios() {
               <option value="sin">— Sin condominio</option>
             </select>
           )}
+          {pendientesMasivo.length > 0 && (
+            <Button variant="secondary" loading={masivaMut.isPending} onClick={invitarTodos}>
+              <Mail className="h-4 w-4" /> Invitar pendientes ({pendientesMasivo.length})
+            </Button>
+          )}
           <Button onClick={() => { setCreateForm({ ...EMPTY_FORM, condominio_id: filtroCondominio && filtroCondominio !== 'sin' ? filtroCondominio : (me?.condominio_id ? String(me.condominio_id) : '') }); setCreateOpen(true) }}>
             <Plus className="h-4 w-4" /> Nuevo usuario
           </Button>
         </div>
       </div>
+
+      {aviso && <Alert variant={aviso.variante}>{aviso.texto}</Alert>}
 
       <Card padding={false}>
         <table className="w-full text-sm">
@@ -305,6 +350,7 @@ export default function Usuarios() {
               <th className="px-5 py-3">Nombre</th>
               <th className="px-5 py-3">Email</th>
               <th className="px-5 py-3">Rol</th>
+              <th className="px-5 py-3">Cuenta</th>
               <th className="px-5 py-3">Condominio</th>
               <th className="px-5 py-3">Parcelas</th>
               <th className="px-5 py-3">Último acceso</th>
@@ -324,21 +370,44 @@ export default function Usuarios() {
                 <td className="px-5 py-3">
                   <Badge color={ROLE_COLOR[u.rol?.nombre] ?? 'slate'}>{u.rol?.nombre}</Badge>
                 </td>
+                <td className="px-5 py-3">
+                  {u.estado === 'pendiente'
+                    ? <Badge color="yellow">Pendiente</Badge>
+                    : <Badge color="green">Activa</Badge>}
+                </td>
                 <td className="px-5 py-3 text-slate-400 text-sm">{condominioNombre(u.condominio_id)}</td>
                 <td className="px-5 py-3 text-slate-400">
                   {u.parcelas.length > 0 ? u.parcelas.map((p) => p.numero_parcela).join(', ') : '—'}
                 </td>
                 <td className="px-5 py-3 text-slate-500">{fecha(u.ultimo_login)}</td>
                 <td className="px-5 py-3">
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(u)}>
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
+                  <div className="flex items-center justify-end gap-1">
+                    {u.estado === 'pendiente' && (
+                      <Button size="sm" variant="ghost" title="Enviar invitación para crear su clave"
+                              loading={invitarMut.isPending && invitarMut.variables?.id === u.id}
+                              onClick={() => invitarMut.mutate(u)}>
+                        <Send className="h-3.5 w-3.5" /> Invitar
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" title="Editar" onClick={() => openEdit(u)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </Card>
+
+      {invitacion && (
+        <InvitacionModal
+          usuario={invitacion.usuario}
+          resultado={invitacion.resultado}
+          condominio={condominioNombre(invitacion.usuario.condominio_id)}
+          onClose={() => setInvitacion(null)}
+        />
+      )}
 
       {/* Modal Crear */}
       <Modal open={createOpen} onClose={() => { setCreateOpen(false); setError('') }} title="Nuevo usuario" size="md">
@@ -378,5 +447,51 @@ export default function Usuarios() {
         </div>
       </Modal>
     </div>
+  )
+}
+
+
+/** Resultado de una invitación: estado del correo y reenvío por WhatsApp o copiando el enlace. */
+function InvitacionModal({ usuario, resultado, condominio, onClose }: {
+  usuario: Usuario
+  resultado: Invitacion
+  condominio: string
+  onClose: () => void
+}) {
+  const [copiado, setCopiado] = useState(false)
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(resultado.enlace)
+      setCopiado(true)
+    } catch { /* sin permiso de portapapeles: el enlace queda visible para copiarlo a mano */ }
+  }
+  const whatsapp = usuario.telefono
+    ? urlWhatsApp(usuario.telefono, mensajeInvitacion(usuario.nombre, condominio, resultado.enlace))
+    : null
+
+  return (
+    <Modal open onClose={onClose} title={`Invitación — ${usuario.nombre}`} size="md">
+      <div className="space-y-4">
+        {resultado.correo_enviado
+          ? <Alert variant="success">Enviamos el correo a {usuario.email}. El enlace vence en 7 días y sirve una sola vez.</Alert>
+          : <Alert variant="warning">No se envió el correo: {resultado.motivo}. Reenvía el enlace por WhatsApp o cópialo.</Alert>}
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {whatsapp && (
+            <a href={whatsapp} target="_blank" rel="noopener noreferrer" className="flex-1">
+              <Button fullWidth variant="secondary"><MessageCircle className="h-4 w-4" /> Enviar por WhatsApp</Button>
+            </a>
+          )}
+          <Button className="flex-1" variant="secondary" onClick={copiar}>
+            {copiado ? <><Check className="h-4 w-4" /> Copiado</> : <><Copy className="h-4 w-4" /> Copiar enlace</>}
+          </Button>
+        </div>
+        {!usuario.telefono && <p className="text-xs text-slate-500">Sin teléfono registrado: no se puede enviar por WhatsApp.</p>}
+        <p className="break-all rounded-lg bg-slate-900 p-3 font-mono text-xs text-slate-400">{resultado.enlace}</p>
+        <p className="text-xs text-slate-500">
+          Comparte este enlace solo con {usuario.nombre}: quien lo abra puede crear la clave de esta cuenta.
+        </p>
+        <div className="flex justify-end"><Button onClick={onClose}>Cerrar</Button></div>
+      </div>
+    </Modal>
   )
 }

@@ -35,8 +35,3 @@ export function mensajeComprobante(rifa: Rifa, compra: CompraRifa): string {
   lineas.push('', '¡Gracias por colaborar!')
   return lineas.join('\n')
 }
-
-/** Abre WhatsApp (app o web) con el destinatario y el mensaje listos; el envío lo confirma la persona. */
-export function urlWhatsApp(telefono: string, mensaje: string): string {
-  return `https://wa.me/${telefono}?text=${encodeURIComponent(mensaje)}`
-}
