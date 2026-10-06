@@ -1,11 +1,9 @@
 """Carga inicial de producción copiada desde desarrollo: sin claves, sin cuentas del seed, idempotente."""
 import json
 
-import pytest
 from sqlalchemy import insert, select
 from sqlalchemy.orm import selectinload
 
-from app.db import cargar_residentes
 from app.db.copiar_desde_desarrollo import exportar, importar
 from app.models.condominio import Condominio
 from app.models.condominio_modulo import CondominioModulo
@@ -66,8 +64,7 @@ async def test_importar_crea_todo_y_es_idempotente(db, monkeypatch):
     monkeypatch.setattr("app.db.copiar_desde_desarrollo.emails_del_seed", lambda: set())
     await _condominio_de_desarrollo(db)
     datos = _como_otro_condominio(await exportar(db, "Copia Origen"))
-    kwargs = dict(portal_url="https://portal.destino.cl", dominios=["WWW.Destino.cl", "destino.cl"],
-                  clave_hash="hash-inicial")
+    kwargs = dict(portal_url="https://portal.destino.cl", dominios=["WWW.Destino.cl", "destino.cl"])
 
     primera = await importar(db, datos, **kwargs)
     assert (primera.condominio_creado, primera.modulos_agregados, primera.dominios_agregados,
@@ -90,7 +87,7 @@ async def test_importar_crea_todo_y_es_idempotente(db, monkeypatch):
     eva = (await db.execute(
         select(Usuario).options(selectinload(Usuario.parcelas)).where(Usuario.email == "eva+destino@ejemplo.cl")
     )).scalar_one()
-    assert eva.password_hash == "hash-inicial"          # nunca la clave de desarrollo
+    assert eva.password_hash is None                     # pendiente; nunca la clave de desarrollo
     assert sorted(p.numero_parcela for p in eva.parcelas) == ["10", "2"]
     assert (await db.execute(select(Parcela).where(
         Parcela.condominio_id == destino.id, Parcela.numero_parcela == "2"))).scalar_one().activa is False
@@ -103,16 +100,10 @@ async def test_importar_omite_cuentas_del_seed(db, monkeypatch):
     monkeypatch.setattr("app.db.copiar_desde_desarrollo.emails_del_seed",
                         lambda: {"gchacon+destino@santalaura.cl.copia"})
 
-    resumen = await importar(db, datos, portal_url=None, dominios=[], clave_hash="hash-inicial")
+    resumen = await importar(db, datos, portal_url=None, dominios=[])
 
     assert resumen.usuarios_creados == 1
     assert any("cuenta de prueba del seed" in a for a in resumen.avisos)
     assert (await db.execute(
         select(Usuario).where(Usuario.email == "gchacon+destino@santalaura.cl.copia"))).scalar_one_or_none() is None
 
-
-@pytest.mark.parametrize("clave", ["corta", "admin123"])
-def test_clave_inicial_debil_se_rechaza(monkeypatch, clave):
-    monkeypatch.setattr(cargar_residentes.getpass, "getpass", lambda _: clave)
-    with pytest.raises(ValueError):
-        cargar_residentes.pedir_clave_inicial()

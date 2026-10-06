@@ -6,8 +6,8 @@ Carga inicial de producción copiada desde la base de desarrollo, sin datos de p
                          --portal-url https://portal.comunidadsantalaura.cl --dominio comunidadsantalaura.cl [--simular]
 
 El JSON lleva solo la configuración del condominio (módulos, color, dirección, plan), sus parcelas y sus
-parceleros con teléfono y parcelas asignadas. Nunca claves: todos los residentes reciben en producción una
-clave inicial que se pide por teclado. Quedan fuera los datos operativos (boletas, lecturas, liquidaciones,
+parceleros con teléfono y parcelas asignadas. Nunca claves: en producción todos quedan como cuentas
+pendientes y cada uno crea su clave con su invitación (spec acceso-por-enlace). Quedan fuera los datos operativos (boletas, lecturas, liquidaciones,
 rifas, auditoría), los otros condominios y las cuentas del seed (app/db/seeds/usuarios.py).
 
 Importar es idempotente: no duplica nada ni toca las cuentas que ya existen. El JSON tiene datos personales:
@@ -26,8 +26,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.audit import registrar_auditoria
 from app.core.modulos import MODULOS
-from app.core.security import hash_password
-from app.db.cargar_residentes import _orden_natural, pedir_clave_inicial
+from app.db.cargar_residentes import _orden_natural
 from app.db.session import AsyncSessionLocal, engine
 from app.models.condominio import Condominio
 from app.models.condominio_modulo import CondominioDominio, CondominioModulo
@@ -115,7 +114,6 @@ async def importar(
     *,
     portal_url: str | None,
     dominios: list[str],
-    clave_hash: str,
 ) -> Resumen:
     """Aplica la carga en la sesión, sin commit: quien llama confirma o descarta."""
     if datos.get("version") != VERSION_FORMATO:
@@ -206,7 +204,7 @@ async def importar(
             usuario = Usuario(
                 nombre=r["nombre"],
                 email=email,
-                password_hash=clave_hash,
+                password_hash=None,   # pendiente: crea su clave con la invitación
                 rol_id=rol_parcelero.id,
                 condominio_id=condominio.id,
                 telefono=r["telefono"],
@@ -270,11 +268,8 @@ async def main_importar(args: argparse.Namespace) -> None:
     datos = json.loads(Path(args.archivo).read_text(encoding="utf-8"))
     print(f"Archivo: {datos['condominio']['nombre']}, {len(datos['parcelas'])} parcelas, "
           f"{len(datos['residentes'])} parceleros")
-    # Al simular, los usuarios nuevos llevan un hash ficticio que se descarta con el rollback.
-    clave_hash = "simulacion" if args.simular else hash_password(pedir_clave_inicial())
     async with AsyncSessionLocal() as db:
-        resumen = await importar(db, datos, portal_url=args.portal_url, dominios=args.dominio,
-                                 clave_hash=clave_hash)
+        resumen = await importar(db, datos, portal_url=args.portal_url, dominios=args.dominio)
         if args.simular:
             await db.rollback()
         else:

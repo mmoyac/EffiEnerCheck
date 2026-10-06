@@ -37,7 +37,7 @@ async def test_carga_de_residentes_es_idempotente(db, tmp_path):
     assert residentes[1].email == "beto@ejemplo.cl"
     assert any("teléfono inválido" in a for a in avisos)
 
-    kwargs = dict(condominio_nombre="Condominio Prueba", rut="88888888-8", clave_hash="hash-de-prueba")
+    kwargs = dict(condominio_nombre="Condominio Prueba", rut="88888888-8")
     primera = await cargar(db, residentes, **kwargs)
     assert (primera.condominio_creado, primera.parcelas_creadas, primera.usuarios_creados,
             primera.asignaciones_creadas) == (True, 3, 4, 4)
@@ -55,6 +55,7 @@ async def test_carga_de_residentes_es_idempotente(db, tmp_path):
         .where(Usuario.email == "beto@ejemplo.cl")
     )).scalar_one()
     assert beto.rol.nombre == "parcelero"
+    assert beto.password_hash is None   # pendiente: crea su clave con la invitación
     assert [p.id for p in beto.parcelas] == [parcela_2.id]
 
 

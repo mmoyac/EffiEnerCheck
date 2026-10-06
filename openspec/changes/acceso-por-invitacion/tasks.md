@@ -32,7 +32,7 @@
 
 ## 4. Cargas de producción sin clave
 
-- [ ] 4.1 `cargar_residentes` y `copiar_desde_desarrollo importar` crean las cuentas pendientes y ya no piden clave; se elimina `pedir_clave_inicial`. Ajustar sus pruebas: las cuentas cargadas quedan con `password_hash` NULL. Verificar que `pytest` completo pasa.
+- [x] 4.1 `cargar_residentes` y `copiar_desde_desarrollo importar` crean las cuentas pendientes y ya no piden clave; se elimina `pedir_clave_inicial`. Ajustar sus pruebas: las cuentas cargadas quedan con `password_hash` NULL. Verificar que `pytest` completo pasa.
 
 ## 5. Frontend
 

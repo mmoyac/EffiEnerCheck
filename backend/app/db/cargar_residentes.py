@@ -8,16 +8,15 @@ Crea, si no existen:
   - una parcela por cada "Unidad" (propietario = primer "Dueño" de la unidad),
   - un usuario parcelero por cada "Correo", con su "Teléfono" normalizado, asignado a su unidad.
 
-Todos los residentes nuevos quedan con la misma clave inicial, que se pide por teclado (no queda
-en el historial ni en los logs). Es idempotente: no toca las claves ni los datos de las cuentas que
-ya existen, solo completa el teléfono si estaba vacío y agrega las asignaciones que falten.
+Los residentes nuevos quedan como cuentas pendientes, sin clave: cada uno crea la suya con su
+invitación (spec acceso-por-enlace). Es idempotente: no toca las cuentas que ya existen, solo
+completa el teléfono si estaba vacío y agrega las asignaciones que falten.
 Con --simular muestra el resumen sin escribir nada.
 
 La planilla tiene datos personales: nunca va al repositorio ni a la imagen (ver DEPLOY.md).
 """
 import argparse
 import asyncio
-import getpass
 import sys
 import unicodedata
 import warnings
@@ -29,9 +28,7 @@ from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.arranque import CLAVES_CONOCIDAS
 from app.core.audit import registrar_auditoria
-from app.core.security import hash_password
 from app.db.session import AsyncSessionLocal, engine
 from app.models.condominio import Condominio
 from app.models.parcela import Parcela
@@ -41,8 +38,6 @@ from app.models.usuario_parcela import usuario_parcelas
 from app.utils.telefono import normalizar_telefono
 
 import app.db.base  # noqa: F401 — registra todos los modelos (relaciones por nombre)
-
-LARGO_MINIMO_CLAVE = 10
 
 # Encabezado normalizado → campo. La fila de encabezados se busca por la celda "Unidad".
 COLUMNAS = {
@@ -139,7 +134,6 @@ async def cargar(
     *,
     condominio_nombre: str,
     rut: str | None,
-    clave_hash: str,
 ) -> Resumen:
     """Aplica la carga en la sesión, sin commit: quien llama confirma o descarta."""
     resumen = Resumen()
@@ -189,7 +183,7 @@ async def cargar(
             usuario = Usuario(
                 nombre=r.nombre,
                 email=r.email,
-                password_hash=clave_hash,
+                password_hash=None,   # pendiente: crea su clave con la invitación
                 rol_id=rol_parcelero.id,
                 condominio_id=condominio.id,
                 telefono=r.telefono,
@@ -234,23 +228,13 @@ async def cargar(
     return resumen
 
 
-def pedir_clave_inicial() -> str:
-    clave = getpass.getpass("Clave inicial de los residentes nuevos: ")
-    if len(clave) < LARGO_MINIMO_CLAVE or clave in CLAVES_CONOCIDAS:
-        raise ValueError(f"La clave debe tener al menos {LARGO_MINIMO_CLAVE} caracteres y no ser una clave conocida")
-    if getpass.getpass("Repite la clave: ") != clave:
-        raise ValueError("Las claves no coinciden")
-    return clave
-
 
 async def main(args: argparse.Namespace) -> None:
     residentes, avisos = leer_planilla(Path(args.planilla))
     print(f"Planilla: {len(residentes)} residentes en {len({r.unidad for r in residentes})} unidades")
 
-    # Al simular, los usuarios nuevos llevan un hash ficticio que se descarta con el rollback.
-    clave_hash = "simulacion" if args.simular else hash_password(pedir_clave_inicial())
     async with AsyncSessionLocal() as db:
-        resumen = await cargar(db, residentes, condominio_nombre=args.condominio, rut=args.rut, clave_hash=clave_hash)
+        resumen = await cargar(db, residentes, condominio_nombre=args.condominio, rut=args.rut)
         if args.simular:
             await db.rollback()
         else:
