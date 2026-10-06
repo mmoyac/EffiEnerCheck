@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { KeyRound } from 'lucide-react'
 import type { AxiosError } from 'axios'
 import { authApi } from '../api/auth'
-import { Input } from '../components/ui/Input'
+import { InputClave } from '../components/ui/InputClave'
 import { Button } from '../components/ui/Button'
 import { Alert } from '../components/ui/Alert'
 import { Spinner } from '../components/ui/Spinner'
@@ -97,18 +97,16 @@ export default function EstablecerClave() {
               </p>
               {error && <div className="mb-4"><Alert variant="error">{error}</Alert></div>}
               <form onSubmit={enviar} className="space-y-4">
-                <Input
+                <InputClave
                   label="Clave nueva"
-                  type="password"
                   value={clave}
                   onChange={(e) => setClave(e.target.value)}
                   required
                   autoComplete="new-password"
                   hint={`${clave.length} de ${LARGO_MINIMO} caracteres como mínimo`}
                 />
-                <Input
+                <InputClave
                   label="Repite la clave"
-                  type="password"
                   value={repetida}
                   onChange={(e) => setRepetida(e.target.value)}
                   required

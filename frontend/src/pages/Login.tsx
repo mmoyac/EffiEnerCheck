@@ -1,8 +1,8 @@
 import { FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { Input } from '../components/ui/Input'
+import { InputClave } from '../components/ui/InputClave'
 import { Button } from '../components/ui/Button'
 import { Alert } from '../components/ui/Alert'
 import { Modal } from '../components/ui/Modal'
@@ -15,7 +15,6 @@ export default function Login() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [recuperar, setRecuperar] = useState(false)
@@ -74,25 +73,13 @@ export default function Login() {
               required
               autoComplete="email"
             />
-            <Input
+            <InputClave
               label="Contraseña"
-              type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
               autoComplete="current-password"
-              rightElement={
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="rounded p-1 text-slate-400 transition-colors hover:text-slate-200 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                  title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              }
             />
             <Button type="submit" fullWidth loading={loading} size="lg">
               Ingresar

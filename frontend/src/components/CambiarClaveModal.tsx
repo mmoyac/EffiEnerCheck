@@ -3,7 +3,7 @@ import type { AxiosError } from 'axios'
 import { authApi } from '../api/auth'
 import { useAuth } from '../hooks/useAuth'
 import { Modal } from './ui/Modal'
-import { Input } from './ui/Input'
+import { InputClave } from './ui/InputClave'
 import { Button } from './ui/Button'
 import { Alert } from './ui/Alert'
 
@@ -53,11 +53,11 @@ export function CambiarClaveModal({ open, onClose }: { open: boolean; onClose: (
       ) : (
         <form onSubmit={enviar} className="space-y-4">
           {error && <Alert variant="error">{error}</Alert>}
-          <Input label="Clave actual" type="password" value={actual} onChange={(e) => setActual(e.target.value)}
+          <InputClave label="Clave actual" value={actual} onChange={(e) => setActual(e.target.value)}
                  required autoComplete="current-password" />
-          <Input label="Clave nueva" type="password" value={nueva} onChange={(e) => setNueva(e.target.value)}
+          <InputClave label="Clave nueva" value={nueva} onChange={(e) => setNueva(e.target.value)}
                  required autoComplete="new-password" hint={`Al menos ${LARGO_MINIMO} caracteres`} />
-          <Input label="Repite la clave nueva" type="password" value={repetida}
+          <InputClave label="Repite la clave nueva" value={repetida}
                  onChange={(e) => setRepetida(e.target.value)} required autoComplete="new-password" />
           <Button type="submit" fullWidth loading={enviando}>Guardar</Button>
         </form>
