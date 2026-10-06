@@ -15,6 +15,7 @@ import { fecha } from '../../utils/format'
 import { formatearTelefono, normalizarTelefono } from '../../utils/telefono'
 import { useAuth, useRole } from '../../hooks/useAuth'
 import { mensajeInvitacion, urlWhatsApp } from '../../utils/whatsapp'
+import { mensajeError } from '../../utils/errores'
 import type { Invitacion, Usuario } from '../../types'
 import type { Condominio } from '../../api/condominios'
 
@@ -224,8 +225,7 @@ export default function Usuarios() {
       setCreateForm(EMPTY_FORM)
       setError('')
     },
-    onError: (e: unknown) =>
-      setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al crear usuario'),
+    onError: (e: unknown) => setError(mensajeError(e, 'Error al crear usuario')),
   })
 
   const updateMut = useMutation({
@@ -235,12 +235,10 @@ export default function Usuarios() {
       setEditUser(null)
       setError('')
     },
-    onError: (e: unknown) =>
-      setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al actualizar'),
+    onError: (e: unknown) => setError(mensajeError(e, 'Error al actualizar')),
   })
 
-  const errorDe = (e: unknown, porDefecto: string) =>
-    (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? porDefecto
+  const errorDe = mensajeError
 
   const invitarMut = useMutation({
     mutationFn: (u: Usuario) => usuariosApi.invitar(u.id).then((resultado) => ({ usuario: u, resultado })),
