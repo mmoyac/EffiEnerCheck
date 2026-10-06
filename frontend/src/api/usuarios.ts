@@ -33,8 +33,11 @@ export const usuariosApi = {
     return data
   },
 
-  invitar: async (id: number): Promise<Invitacion> => {
-    const { data } = await api.post<Invitacion>(`/usuarios/${id}/invitacion`)
+  /** porCorreo=false: solo genera el enlace (para WhatsApp o copiar), sin gastar un envío de correo */
+  invitar: async (id: number, porCorreo = true): Promise<Invitacion> => {
+    const { data } = await api.post<Invitacion>(`/usuarios/${id}/invitacion`, null, {
+      params: { correo_electronico: porCorreo },
+    })
     return data
   },
 

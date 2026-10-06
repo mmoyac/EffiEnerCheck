@@ -102,6 +102,19 @@ async def test_invitacion_sin_correo_entrega_el_enlace(tx, sin_correo):
     assert "/crear-clave#" in r.json()["enlace"]
 
 
+async def test_invitacion_solo_enlace_no_envia_correo(tx, buzon):
+    c, session = tx
+    u = await _pendiente(session)
+    r = await c.post(f"/api/v1/usuarios/{u.id}/invitacion", headers=await _cabecera(c, EMAIL_ADMIN),
+                     params={"correo_electronico": "false"})
+    assert r.status_code == 200
+    assert r.json()["correo_enviado"] is False
+    assert "/crear-clave#" in r.json()["enlace"]
+    assert buzon == []   # no gasta envíos
+    token = _token(r.json()["enlace"])
+    assert (await c.post("/api/v1/auth/verificar-enlace", json={"token": token})).status_code == 200
+
+
 async def test_reenviar_anula_la_invitacion_anterior(tx, buzon):
     c, session = tx
     u = await _pendiente(session)

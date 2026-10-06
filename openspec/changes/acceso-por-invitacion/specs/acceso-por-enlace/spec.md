@@ -45,7 +45,9 @@ El enlace DEBE (SHALL) tener la forma `<portal_url>/crear-clave#<token>` (invita
 
 ### Requirement: Invitación por un administrador
 
-El sistema DEBE (SHALL) permitir que un `super_admin`, o un `admin_condominio` sobre los usuarios de su condominio, invite a un usuario cuya cuenta está **pendiente** (sin clave). La invitación emite un enlace de invitación y lo envía por correo al email de la cuenta.
+El sistema DEBE (SHALL) permitir que un `super_admin`, o un `admin_condominio` sobre los usuarios de su condominio, invite a un usuario cuya cuenta está **pendiente** (sin clave). La invitación emite un enlace de invitación y, si el administrador lo elige, lo envía por correo al email de la cuenta. Si elige no enviar correo, el enlace se emite igual, sin gastar un envío, para compartirlo por WhatsApp o copiarlo.
+
+El portal DEBE (SHALL) pedir al administrador que elija el canal (correo, o solo WhatsApp y enlace) antes de emitir la invitación, mostrando el correo y el teléfono de la cuenta.
 
 La respuesta DEBE (SHALL) incluir el enlace, para que el administrador pueda reenviarlo por WhatsApp, e indicar si el correo se envió.
 
@@ -53,6 +55,11 @@ La respuesta DEBE (SHALL) incluir el enlace, para que el administrador pueda ree
 
 - **WHEN** un `admin_condominio` invita a un parcelero pendiente de su condominio y el correo está configurado
 - **THEN** el usuario recibe el correo con el enlace, la respuesta indica `correo_enviado: true` e incluye el enlace, y se registra `INVITACION_ENVIADA` sin el token
+
+#### Scenario: Invitación solo por enlace
+
+- **WHEN** el administrador elige «Solo WhatsApp / enlace»
+- **THEN** no se envía ningún correo, la respuesta incluye el enlace y se registra `INVITACION_ENVIADA` con el canal `enlace`
 
 #### Scenario: Correo no configurado o rechazado
 

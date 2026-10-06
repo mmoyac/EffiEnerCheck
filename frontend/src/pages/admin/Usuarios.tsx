@@ -185,7 +185,7 @@ export default function Usuarios() {
   const [editForm, setEditForm] = useState<FormState>(EMPTY_FORM)
   const [error, setError] = useState('')
   const [filtroCondominio, setFiltroCondominio] = useState<string>('')
-  const [invitacion, setInvitacion] = useState<{ usuario: Usuario; resultado: Invitacion } | null>(null)
+  const [invitando, setInvitando] = useState<Usuario | null>(null)
   const [aviso, setAviso] = useState<{ variante: 'success' | 'error'; texto: string } | null>(null)
 
   const { data: usuarios = [], isLoading } = useQuery({ queryKey: ['usuarios'], queryFn: usuariosApi.list })
@@ -239,12 +239,6 @@ export default function Usuarios() {
   })
 
   const errorDe = mensajeError
-
-  const invitarMut = useMutation({
-    mutationFn: (u: Usuario) => usuariosApi.invitar(u.id).then((resultado) => ({ usuario: u, resultado })),
-    onSuccess: (r) => { setInvitacion(r); setAviso(null) },
-    onError: (e: unknown) => setAviso({ variante: 'error', texto: errorDe(e, 'No se pudo emitir la invitación') }),
-  })
 
   // Pendientes del condominio a la vista: el admin ve el suyo; el super admin debe elegir uno en el filtro
   const condominioMasivo = isSuperAdmin
@@ -402,18 +396,8 @@ export default function Usuarios() {
                 <td className="px-5 py-3">
                   <div className="flex items-center justify-end gap-1">
                     {u.estado === 'pendiente' && (
-                      <Button size="sm" variant="ghost" title="Enviar invitación para crear su clave"
-                              loading={invitarMut.isPending && invitarMut.variables?.id === u.id}
-                              onClick={() => {
-                                // El correo sale de inmediato: confirmar a quién y a qué dirección
-                                if (window.confirm(`¿Enviar la invitación a ${u.nombre}?
-
-Correo: ${u.email}
-
-Revisa que el correo sea el correcto: quien lo reciba podrá crear la clave de esta cuenta.`)) {
-                                  invitarMut.mutate(u)
-                                }
-                              }}>
+                      <Button size="sm" variant="ghost" title="Invitar a crear su clave (correo o WhatsApp)"
+                              onClick={() => { setAviso(null); setInvitando(u) }}>
                         <Send className="h-3.5 w-3.5" /> Invitar
                       </Button>
                     )}
@@ -428,12 +412,11 @@ Revisa que el correo sea el correcto: quien lo reciba podrá crear la clave de e
         </table>
       </Card>
 
-      {invitacion && (
+      {invitando && (
         <InvitacionModal
-          usuario={invitacion.usuario}
-          resultado={invitacion.resultado}
-          condominio={condominioNombre(invitacion.usuario.condominio_id)}
-          onClose={() => setInvitacion(null)}
+          usuario={invitando}
+          condominio={condominioNombre(invitando.condominio_id)}
+          onClose={() => setInvitando(null)}
         />
       )}
 
@@ -479,47 +462,89 @@ Revisa que el correo sea el correcto: quien lo reciba podrá crear la clave de e
 }
 
 
-/** Resultado de una invitación: estado del correo y reenvío por WhatsApp o copiando el enlace. */
-function InvitacionModal({ usuario, resultado, condominio, onClose }: {
+/**
+ * Invitación en dos pasos: primero se elige el canal (nada se envía todavía) y luego se muestra el enlace.
+ * "Solo enlace" no gasta un envío de correo: el administrador lo comparte por WhatsApp o lo copia.
+ */
+function InvitacionModal({ usuario, condominio, onClose }: {
   usuario: Usuario
-  resultado: Invitacion
   condominio: string
   onClose: () => void
 }) {
+  const [resultado, setResultado] = useState<Invitacion | null>(null)
+  const [error, setError] = useState('')
   const [copiado, setCopiado] = useState(false)
+
+  const emitirMut = useMutation({
+    mutationFn: (porCorreo: boolean) => usuariosApi.invitar(usuario.id, porCorreo),
+    onSuccess: (r) => { setResultado(r); setError('') },
+    onError: (e: unknown) => setError(mensajeError(e, 'No se pudo emitir la invitación')),
+  })
+
   const copiar = async () => {
+    if (!resultado) return
     try {
       await navigator.clipboard.writeText(resultado.enlace)
       setCopiado(true)
     } catch { /* sin permiso de portapapeles: el enlace queda visible para copiarlo a mano */ }
   }
-  const whatsapp = usuario.telefono
+  const whatsapp = resultado && usuario.telefono
     ? urlWhatsApp(usuario.telefono, mensajeInvitacion(usuario.nombre, condominio, resultado.enlace))
     : null
 
   return (
     <Modal open onClose={onClose} title={`Invitación — ${usuario.nombre}`} size="md">
-      <div className="space-y-4">
-        {resultado.correo_enviado
-          ? <Alert variant="success">Enviamos el correo a {usuario.email}. El enlace vence en 7 días y sirve una sola vez.</Alert>
-          : <Alert variant="warning">No se envió el correo. {resultado.motivo}. Reenvía el enlace por WhatsApp o cópialo.</Alert>}
-        <div className="flex flex-col gap-2 sm:flex-row">
-          {whatsapp && (
-            <a href={whatsapp} target="_blank" rel="noopener noreferrer" className="flex-1">
-              <Button fullWidth variant="secondary"><MessageCircle className="h-4 w-4" /> WhatsApp</Button>
-            </a>
-          )}
-          <Button className="flex-1" variant="secondary" onClick={copiar}>
-            {copiado ? <><Check className="h-4 w-4" /> Copiado</> : <><Copy className="h-4 w-4" /> Copiar enlace</>}
-          </Button>
+      {!resultado ? (
+        <div className="space-y-4">
+          <p className="text-sm text-slate-300">
+            ¿Cómo quieres invitar a <strong>{usuario.nombre}</strong>? Revisa que sus datos sean correctos: quien reciba
+            el enlace podrá crear la clave de esta cuenta.
+          </p>
+          <ul className="space-y-1 rounded-lg bg-slate-900 p-3 text-sm text-slate-400">
+            <li>Correo: <span className="text-slate-200">{usuario.email}</span></li>
+            <li>Teléfono: <span className="text-slate-200">{usuario.telefono ?? 'sin teléfono'}</span></li>
+          </ul>
+          {error && <Alert variant="error">{error}</Alert>}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button className="flex-1" loading={emitirMut.isPending && emitirMut.variables === true}
+                    disabled={emitirMut.isPending} onClick={() => emitirMut.mutate(true)}>
+              <Mail className="h-4 w-4" /> Enviar por correo
+            </Button>
+            <Button className="flex-1" variant="secondary" loading={emitirMut.isPending && emitirMut.variables === false}
+                    disabled={emitirMut.isPending} onClick={() => emitirMut.mutate(false)}>
+              <MessageCircle className="h-4 w-4" /> Solo WhatsApp / enlace
+            </Button>
+          </div>
+          <p className="text-xs text-slate-500">
+            «Solo WhatsApp / enlace» no envía correo. En ambos casos el enlace vence en 7 días y sirve una sola vez;
+            invitar de nuevo anula el enlace anterior.
+          </p>
         </div>
-        {!usuario.telefono && <p className="text-xs text-slate-500">Sin teléfono registrado: no se puede enviar por WhatsApp.</p>}
-        <p className="break-all rounded-lg bg-slate-900 p-3 font-mono text-xs text-slate-400">{resultado.enlace}</p>
-        <p className="text-xs text-slate-500">
-          Comparte este enlace solo con {usuario.nombre}: quien lo abra puede crear la clave de esta cuenta.
-        </p>
-        <div className="flex justify-end"><Button onClick={onClose}>Cerrar</Button></div>
-      </div>
+      ) : (
+        <div className="space-y-4">
+          {resultado.correo_enviado
+            ? <Alert variant="success">Enviamos el correo a {usuario.email}. El enlace vence en 7 días y sirve una sola vez.</Alert>
+            : emitirMut.variables === false
+              ? <Alert variant="info">Enlace listo, sin correo. Compártelo por WhatsApp o cópialo. Vence en 7 días y sirve una sola vez.</Alert>
+              : <Alert variant="warning">No se envió el correo. {resultado.motivo}. Comparte el enlace por WhatsApp o cópialo.</Alert>}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {whatsapp && (
+              <a href={whatsapp} target="_blank" rel="noopener noreferrer" className="flex-1">
+                <Button fullWidth variant="secondary"><MessageCircle className="h-4 w-4" /> WhatsApp</Button>
+              </a>
+            )}
+            <Button className="flex-1" variant="secondary" onClick={copiar}>
+              {copiado ? <><Check className="h-4 w-4" /> Copiado</> : <><Copy className="h-4 w-4" /> Copiar enlace</>}
+            </Button>
+          </div>
+          {!usuario.telefono && <p className="text-xs text-slate-500">Sin teléfono registrado: no se puede enviar por WhatsApp.</p>}
+          <p className="break-all rounded-lg bg-slate-900 p-3 font-mono text-xs text-slate-400">{resultado.enlace}</p>
+          <p className="text-xs text-slate-500">
+            Comparte este enlace solo con {usuario.nombre}: quien lo abra puede crear la clave de esta cuenta.
+          </p>
+          <div className="flex justify-end"><Button onClick={onClose}>Cerrar</Button></div>
+        </div>
+      )}
     </Modal>
   )
 }

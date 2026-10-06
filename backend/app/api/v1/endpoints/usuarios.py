@@ -192,8 +192,13 @@ async def invitar_usuario(
     usuario_id: int,
     current_user: Annotated[Usuario, Depends(AdminRequired)],
     db: DB,
+    correo_electronico: bool = True,
 ):
-    """Emite una invitación (anula la anterior) y la envía por correo. Solo a cuentas pendientes."""
+    """Emite una invitación (anula la anterior). Solo a cuentas pendientes.
+
+    Con `correo_electronico=false` no se envía correo (no gasta envíos): el administrador comparte el
+    enlace por WhatsApp o lo copia.
+    """
     usuario = await db.get(Usuario, usuario_id)
     if usuario is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
@@ -205,10 +210,12 @@ async def invitar_usuario(
     await _exigir_portal_contratado(db, usuario.condominio_id)
 
     url, mensaje = await enlaces.preparar_correo(db, usuario, "invitacion")
-    resultado = await correo.enviar(**mensaje)
+    resultado = (await correo.enviar(**mensaje) if correo_electronico
+                 else correo.ResultadoEnvio(False, "Elegiste compartir el enlace sin enviar correo"))
     await registrar_auditoria(
         db, usuario_id=current_user.id, condominio_id=usuario.condominio_id, accion="INVITACION_ENVIADA",
-        detalles={"invitado_id": usuario.id, "email": usuario.email, "correo_enviado": resultado.ok},
+        detalles={"invitado_id": usuario.id, "email": usuario.email, "canal": "correo" if correo_electronico else "enlace",
+                  "correo_enviado": resultado.ok},
     )
     await db.commit()
     return InvitacionResponse(enlace=url, correo_enviado=resultado.ok, motivo=resultado.motivo)
