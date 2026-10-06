@@ -7,7 +7,7 @@ import { Portada } from './secciones/Portada'
 import { Administracion, Avisos, Comunidad, Contacto, Documentos, Espacios, Pie } from './secciones/Secciones'
 
 /** Nombre comercial de la plataforma (mismo valor que frontend/src/config/marca.ts) */
-const PLATAFORMA = 'EnerCheck'
+const PLATAFORMA = 'EFFIComunidad'
 
 function fijarMeta(nombre: string, valor: string, atributo: 'name' | 'property' = 'name') {
   let meta = document.querySelector<HTMLMetaElement>(`meta[${atributo}="${nombre}"]`)
@@ -30,6 +30,11 @@ function aplicarMetadatos(sitio: SitioPublico) {
   if (imagen) fijarMeta('og:image', new URL(imagen, location.origin).href, 'property')
 }
 
+/** ¿Hay algo que mostrar en Contacto? Sin datos, la sección y su enlace no se dibujan */
+function tieneContacto({ contacto: c, ubicacion }: SitioPublico): boolean {
+  return c.telefonos.length > 0 || !!c.correo || !!c.whatsapp || c.horarios.length > 0 || !!ubicacion
+}
+
 /** Enlaces de navegación: solo las secciones que vienen con contenido */
 function enlacesDe(s: SitioPublico): Enlace[] {
   return [
@@ -38,7 +43,7 @@ function enlacesDe(s: SitioPublico): Enlace[] {
     s.espacios.length > 0 && { id: 'espacios', texto: 'Espacios' },
     s.administracion && { id: 'administracion', texto: 'Administración' },
     s.documentos.length > 0 && { id: 'documentos', texto: 'Documentos' },
-    { id: 'contacto', texto: 'Contacto' },
+    tieneContacto(s) && { id: 'contacto', texto: 'Contacto' },
   ].filter(Boolean) as Enlace[]
 }
 
@@ -77,7 +82,7 @@ export default function App() {
         {sitio.espacios.length > 0 && <Espacios espacios={sitio.espacios} />}
         {sitio.administracion && <Administracion adm={sitio.administracion} />}
         {sitio.documentos.length > 0 && <Documentos documentos={sitio.documentos} />}
-        <Contacto contacto={sitio.contacto} ubicacion={sitio.ubicacion} />
+        {tieneContacto(sitio) && <Contacto contacto={sitio.contacto} ubicacion={sitio.ubicacion} />}
       </main>
       <Pie sitio={sitio} plataforma={PLATAFORMA} />
     </>

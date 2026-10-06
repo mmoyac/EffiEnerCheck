@@ -7,7 +7,7 @@ La landing es uno de los **dos productos** de la plataforma. El otro es el porta
 | Aplicación | `landing/` (Vite + React + Tailwind), contenedor `enercheck_landing` |
 | Contrato | `GET /api/v1/sitio`, público, schema `backend/app/schemas/sitio.py` |
 | Resolución y armado | `backend/app/services/sitio.py` |
-| Contenido editorial (v1) | `backend/app/sitio/contenido/<slug>.json` |
+| Contenido editorial (v1) | `backend/app/sitio/contenido/<slug>.json` (publicado) y `backend/app/sitio/borradores/` (en preparación, no se publica) |
 | Parametrización | Base de datos: `condominio_modulos`, `condominio_dominios`, `condominios.portal_url`, `logo_url`, `color_primario` |
 | Imágenes | `landing/public/sitio/<slug>/` |
 | Spec | `openspec/specs/sitio-publico` (tras archivar el cambio `plataforma-comunidad-landing`) |

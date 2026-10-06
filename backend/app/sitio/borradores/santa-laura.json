@@ -1,0 +1,68 @@
+{
+  "ruts_comunidad": ["1-9", "[POR CONFIRMAR] RUT real de la comunidad Santa Laura"],
+  "sitio": {
+    "condominio": {
+      "nombre": "Condominio Santa Laura",
+      "lema": "[POR CONFIRMAR] Lema de la comunidad",
+      "descripcion_corta": "Sitio de la comunidad del Condominio Santa Laura: información, avisos y contacto para propietarios y residentes."
+    },
+    "portada": {
+      "titulo": "Bienvenidos a Santa Laura",
+      "subtitulo": "Una comunidad de parcelas que se organiza, se informa y se cuida.",
+      "imagen_url": "/sitio/santa-laura/portada.webp",
+      "cta_texto": "Acceso propietarios"
+    },
+    "comunidad": {
+      "titulo": "Nuestra comunidad",
+      "parrafos": [
+        "Santa Laura es un condominio de parcelas con portería, administrado por su comunidad de copropietarios.",
+        "Los propietarios cuentan con un portal privado donde revisan el detalle de su consumo eléctrico de cada mes y participan en las rifas solidarias de la comunidad.",
+        "[POR CONFIRMAR] Breve historia de la comunidad, entorno y lo que la distingue."
+      ],
+      "datos_clave": [
+        { "etiqueta": "Parcelas", "valor": "[POR CONFIRMAR]" },
+        { "etiqueta": "Superficie", "valor": "[POR CONFIRMAR]" }
+      ]
+    },
+    "avisos": [
+      {
+        "titulo": "Estrenamos el sitio de la comunidad",
+        "fecha": "2026-10-03",
+        "cuerpo": "Desde este sitio los propietarios acceden a su portal para revisar su liquidación eléctrica mensual y participar en las rifas solidarias.",
+        "destacado": true
+      }
+    ],
+    "espacios": [
+      {
+        "nombre": "Portería",
+        "descripcion": "Control de acceso y atención a residentes y visitas. También vende los números de las rifas solidarias.",
+        "icono": "porteria"
+      },
+      {
+        "nombre": "[POR CONFIRMAR] Áreas comunes",
+        "descripcion": "[POR CONFIRMAR] Espacios comunes del condominio (sede, áreas verdes, senderos u otros).",
+        "icono": "areas-verdes"
+      }
+    ],
+    "administracion": {
+      "empresa": "[POR CONFIRMAR] Administración del condominio",
+      "directiva": [
+        { "cargo": "Presidencia", "nombre": "[POR CONFIRMAR]" },
+        { "cargo": "Secretaría", "nombre": "[POR CONFIRMAR]" },
+        { "cargo": "Tesorería", "nombre": "[POR CONFIRMAR]" }
+      ],
+      "horario_atencion": "[POR CONFIRMAR] Horario de atención de la administración"
+    },
+    "contacto": {
+      "telefonos": [
+        { "etiqueta": "Portería", "numero": "[POR CONFIRMAR]" },
+        { "etiqueta": "Administración", "numero": "[POR CONFIRMAR]" }
+      ],
+      "correo": "[POR CONFIRMAR] correo de la administración",
+      "horarios": ["[POR CONFIRMAR] Portería: horario de atención"]
+    },
+    "pie": {
+      "texto": "Comunidad Condominio Santa Laura"
+    }
+  }
+}
