@@ -11,7 +11,10 @@ from app.models.boleta import BoletaMaestra
 from app.models.lectura import LecturaParcela
 from app.models.parcela import Parcela
 from app.models.usuario import Usuario
-from app.schemas.lectura import LecturaParcelaCreate, LecturaParcelaResponse, LecturaParcelaUpdate
+from app.schemas.lectura import (
+    LecturaParcelaCreate, LecturaParcelaResponse, LecturaParcelaUpdate,
+    ResultadoSincronizacion, SincronizarLecturasRequest, SincronizarLecturasResponse,
+)
 
 router = APIRouter(prefix="/lecturas", tags=["lecturas"])
 
@@ -143,3 +146,89 @@ async def actualizar_lectura(
     await db.commit()
     await db.refresh(lectura)
     return lectura
+
+
+# ---- Sincronización de lecturas tomadas sin conexión (cambio lecturas-sin-conexion) ----------------------
+
+def _mismo_instante(a: datetime | None, b: datetime | None) -> bool:
+    """Igualdad al milisegundo: el navegador guarda la hora con milisegundos y la base con microsegundos."""
+    if a is None or b is None:
+        return a is b
+    return abs((a - b).total_seconds()) < 0.001
+
+
+def _mismo_valor(a: float, b: float) -> bool:
+    return abs(a - b) < 1e-9
+
+
+@router.post("/sincronizar", response_model=SincronizarLecturasResponse)
+async def sincronizar_lecturas(
+    data: SincronizarLecturasRequest,
+    current_user: Annotated[Usuario, Depends(LectorRequired)],
+    tenant_id: TenantId,
+    db: DB,
+):
+    """
+    Aplica un lote de lecturas tomadas sin conexión. Cada una se resuelve por separado (savepoint propio):
+    - aplicada: coincidía con la base descargada (o ya estaba aplicada: reintento idempotente);
+    - conflicto: alguien la cambió en el servidor después de la descarga; no se pisa;
+    - rechazada: período cerrado, contador regresivo u otro condominio.
+    """
+    resultados: list[ResultadoSincronizacion] = []
+    for item in data.items:
+        lectura = (await db.execute(
+            select(LecturaParcela).where(LecturaParcela.id == item.lectura_id)
+        )).scalar_one_or_none()
+        if lectura is None:
+            resultados.append(ResultadoSincronizacion(lectura_id=item.lectura_id, estado="rechazada",
+                                                      motivo="La lectura no existe"))
+            continue
+        parcela = await db.get(Parcela, lectura.parcela_id)
+        if tenant_id is not None and parcela.condominio_id != tenant_id:
+            resultados.append(ResultadoSincronizacion(lectura_id=item.lectura_id, estado="rechazada",
+                                                      motivo="La lectura no pertenece a su condominio"))
+            continue
+        vigente = LecturaParcelaResponse.model_validate(lectura)
+
+        # Reintento: ya está exactamente lo que se envía
+        if _mismo_valor(lectura.lectura_actual, item.lectura_actual) and _mismo_instante(lectura.fecha_toma, item.fecha_toma):
+            resultados.append(ResultadoSincronizacion(lectura_id=lectura.id, estado="aplicada", lectura=vigente))
+            continue
+
+        boleta = await db.get(BoletaMaestra, lectura.boleta_id)
+        if boleta.lecturas_cerradas:
+            resultados.append(ResultadoSincronizacion(lectura_id=lectura.id, estado="rechazada", lectura=vigente,
+                                                      motivo="Las lecturas del período ya están cerradas"))
+            continue
+        if not (_mismo_valor(lectura.lectura_actual, item.base.lectura_actual)
+                and _mismo_instante(lectura.fecha_toma, item.base.fecha_toma)):
+            resultados.append(ResultadoSincronizacion(
+                lectura_id=lectura.id, estado="conflicto", lectura=vigente,
+                motivo="La lectura cambió en el servidor después de preparar el recorrido"))
+            continue
+        if item.lectura_actual < lectura.lectura_anterior:
+            resultados.append(ResultadoSincronizacion(
+                lectura_id=lectura.id, estado="rechazada", lectura=vigente,
+                motivo=f"La lectura actual ({item.lectura_actual:g}) no puede ser menor que la anterior "
+                       f"({lectura.lectura_anterior:g})"))
+            continue
+
+        async with db.begin_nested():
+            antes = {"lectura_actual": lectura.lectura_actual,
+                     "fecha_toma": lectura.fecha_toma.isoformat() if lectura.fecha_toma else None,
+                     "lector_id": lectura.lector_id}
+            lectura.lectura_actual = item.lectura_actual
+            lectura.fecha_toma = item.fecha_toma
+            lectura.kwh_consumidos = lectura.lectura_actual - lectura.lectura_anterior
+            lectura.lector_id = current_user.id
+            await registrar_auditoria(
+                db, usuario_id=current_user.id, condominio_id=parcela.condominio_id, accion="UPDATE_LECTURA",
+                detalles={"before": antes, "origen": "sin_conexion",
+                          "after": {"lectura_actual": item.lectura_actual, "fecha_toma": item.fecha_toma.isoformat(),
+                                    "lector_id": current_user.id}},
+            )
+        await db.flush()
+        resultados.append(ResultadoSincronizacion(lectura_id=lectura.id, estado="aplicada",
+                                                  lectura=LecturaParcelaResponse.model_validate(lectura)))
+    await db.commit()
+    return SincronizarLecturasResponse(resultados=resultados)

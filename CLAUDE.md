@@ -108,8 +108,8 @@ EnerCheck/
 │   │   │   │   ├── RifaDetalle.tsx      # Compras / Registrar compra / Cobros, cerrar, reabrir, CSV
 │   │   │   │   └── Usuarios.tsx         # CRUD usuarios
 │   │   │   ├── lector/
-│   │   │   │   ├── LectorDashboard.tsx  # Vista móvil: parcelas pendientes + progreso
-│   │   │   │   └── CapturarLectura.tsx  # Pantalla de captura por parcela
+│   │   │   │   ├── LectorDashboard.tsx  # Vista móvil SIN CONEXIÓN: recorrido en IndexedDB, avance, sincronizar, revisar
+│   │   │   │   └── CapturarLectura.tsx  # Captura: guarda en el celular y sincroniza si hay señal
 │   │   │   └── parcelero/
 │   │   │       ├── MiLiquidacion.tsx    # Vista del parcelero: lista de períodos → detalle (+ aviso de rifa abierta)
 │   │   │       └── Rifas.tsx            # /mis-rifas: grilla de compra y compras de su parcela
@@ -259,6 +259,16 @@ Nadie conoce la clave de otro (spec `acceso-por-enlace`):
 - **Toda clave pasa por `services/claves.asignar_clave()`**: política (`security.validar_clave`: ≥ 10 caracteres y no una de `CLAVES_CONOCIDAS`), hash y `clave_cambiada_en`. `get_current_user` rechaza los JWT con `iat` anterior: cambiar la clave cierra las demás sesiones.
 - **`/auth/recuperar` responde siempre 202 igual**, exista o no la cuenta (no revela correos). nginx limita por IP `recuperar`, `verificar-enlace` y `establecer-clave` (zona `enercheck_auth`).
 - **Correo:** `services/correo.enviar()` (Resend; sin `RESEND_API_KEY` devuelve `ok=False` con el motivo). La invitación individual devuelve el enlace al admin para reenviarlo por WhatsApp (`utils/whatsapp.ts`).
+
+---
+
+## Lecturas sin conexión
+
+La app del lector (`/lecturas`) funciona sin señal (guía: [docs/lecturas-sin-conexion.md](docs/lecturas-sin-conexion.md)). Es la **única** parte del portal que lo hace.
+
+- `frontend/src/offline/lecturas.ts` (IndexedDB con `idb`) + `useLecturasOffline`. La captura **siempre** guarda primero en el celular y luego intenta `POST /lecturas/sincronizar`.
+- Cada lectura viaja con la **base** descargada: el servidor no pisa una lectura que cambió después (responde `conflicto`). Una pendiente no se borra hasta que el servidor dice `aplicada`.
+- `AuthContext` usa la última sesión guardada cuando `/auth/me` falla **sin respuesta** (sin red); con 401 la cierra. No convertir eso en "usar la sesión guardada siempre".
 
 ---
 

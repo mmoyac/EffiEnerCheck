@@ -15,6 +15,15 @@ interface AuthCtx {
 
 const AuthContext = createContext<AuthCtx | null>(null)
 
+// Última sesión conocida: permite abrir la app sin señal (la sesión real la sigue validando el servidor)
+const CLAVE_SESION = 'sesion'
+function guardarSesion(s: Sesion) {
+  try { localStorage.setItem(CLAVE_SESION, JSON.stringify(s)) } catch { /* sin almacenamiento: no es crítico */ }
+}
+function sesionGuardada(): Sesion | null {
+  try { return JSON.parse(localStorage.getItem(CLAVE_SESION) ?? 'null') } catch { return null }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Sesion | null>(null)
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'))
@@ -25,8 +34,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!token) { setIsLoading(false); return }
     authApi.me()
-      .then(setUser)
-      .catch(() => { localStorage.removeItem('token'); setToken(null) })
+      .then((sesion) => { setUser(sesion); guardarSesion(sesion) })
+      .catch((err: unknown) => {
+        // Sin red (no hubo respuesta): se trabaja con la última sesión conocida, como en la app de lecturas
+        // en terreno. Si el servidor respondió (401 u otro), la sesión ya no vale.
+        const sinRespuesta = !(err as { response?: unknown })?.response
+        const guardada = sinRespuesta ? sesionGuardada() : null
+        if (guardada) { setUser(guardada); return }
+        localStorage.removeItem('token'); localStorage.removeItem(CLAVE_SESION); setToken(null)
+      })
       .finally(() => setIsLoading(false))
   }, [token])
 
@@ -37,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(access_token)
     const me = await authApi.me()
     setUser(me)
+    guardarSesion(me)
   }
 
   const actualizarToken = (nuevo: string) => {
@@ -46,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem('token')
+    localStorage.removeItem(CLAVE_SESION)
     setToken(null)
     setUser(null)
     queryClient.clear()

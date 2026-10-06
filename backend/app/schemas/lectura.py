@@ -1,6 +1,7 @@
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class LecturaParcelaCreate(BaseModel):
@@ -40,3 +41,33 @@ class LecturaParcelaResponse(BaseModel):
     kwh_consumidos: float
     lector_id: int
     fecha_toma: datetime | None
+
+
+# ---- Sincronización de lecturas tomadas sin conexión (cambio lecturas-sin-conexion) ----------------------
+
+class BaseLectura(BaseModel):
+    """Lo que el dispositivo descargó al preparar el recorrido: detecta cambios hechos en el servidor."""
+    lectura_actual: float
+    fecha_toma: datetime | None = None
+
+
+class LecturaSinConexion(BaseModel):
+    lectura_id: int
+    lectura_actual: float
+    fecha_toma: datetime          # hora real de la toma en terreno
+    base: BaseLectura
+
+
+class SincronizarLecturasRequest(BaseModel):
+    items: list[LecturaSinConexion] = Field(min_length=1, max_length=200)
+
+
+class ResultadoSincronizacion(BaseModel):
+    lectura_id: int
+    estado: Literal["aplicada", "conflicto", "rechazada"]
+    motivo: str | None = None
+    lectura: LecturaParcelaResponse | None = None   # la vigente en el servidor
+
+
+class SincronizarLecturasResponse(BaseModel):
+    resultados: list[ResultadoSincronizacion]
