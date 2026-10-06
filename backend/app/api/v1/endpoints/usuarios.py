@@ -177,6 +177,8 @@ class InvitacionesMasivasRequest(BaseModel):
 class InvitacionesMasivasResponse(BaseModel):
     enviados: int
     fallidos: int
+    pendientes: int = 0                 # sin intentar: se detuvo al alcanzar el límite del servicio de correo
+    limite_alcanzado: bool = False
 
 
 async def _exigir_portal_contratado(db: AsyncSession, condominio_id: int | None) -> None:
@@ -248,4 +250,7 @@ async def invitar_pendientes(
                       "masiva": True},
         )
         await db.commit()
+        if resultado.limite_alcanzado:   # el resto queda pendiente para otro día; sin enlaces emitidos de más
+            return InvitacionesMasivasResponse(enviados=enviados, fallidos=fallidos,
+                                               pendientes=len(pendientes) - i - 1, limite_alcanzado=True)
     return InvitacionesMasivasResponse(enviados=enviados, fallidos=fallidos)

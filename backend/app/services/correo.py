@@ -23,6 +23,16 @@ transporte: httpx.AsyncBaseTransport | None = None
 class ResultadoEnvio:
     ok: bool
     motivo: str | None = None
+    limite_alcanzado: bool = False   # cuota diaria/mensual de Resend: no tiene sentido seguir intentando
+
+
+# Motivos para el administrador, según la respuesta de Resend
+MOTIVOS = {
+    401: "La clave del servicio de correo no es válida",
+    403: "El remitente no está autorizado: el dominio no está verificado o la cuenta está en modo de prueba",
+    422: "El servicio de correo rechazó la dirección o el contenido del mensaje",
+    429: "Se alcanzó el límite de envíos del servicio de correo: vuelve a intentarlo mañana",
+}
 
 
 def configurado() -> bool:
@@ -45,7 +55,8 @@ async def enviar(destino: str, asunto: str, texto: str, html: str, nombre_remite
         return ResultadoEnvio(False, "El servicio de correo no respondió")
     if r.status_code >= 300:
         log.warning("Resend rechazó el envío: HTTP %s", r.status_code)
-        return ResultadoEnvio(False, f"El servicio de correo rechazó el envío (HTTP {r.status_code})")
+        motivo = MOTIVOS.get(r.status_code, f"El servicio de correo rechazó el envío (HTTP {r.status_code})")
+        return ResultadoEnvio(False, motivo, limite_alcanzado=r.status_code == 429)
     log.info("Correo enviado por Resend: %s", r.json().get("id") if r.content else "")
     return ResultadoEnvio(True)
 

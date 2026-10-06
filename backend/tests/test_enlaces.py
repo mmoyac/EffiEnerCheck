@@ -55,6 +55,13 @@ async def _pendiente(session, email="vecina@ejemplo.cl", condominio_id=None, tel
     return u
 
 
+async def _sin_otros_pendientes(session) -> None:
+    """Las pruebas masivas no deben depender de las cuentas pendientes que haya en la base de desarrollo."""
+    from sqlalchemy import update
+    await session.execute(update(Usuario).where(Usuario.password_hash.is_(None)).values(password_hash="x"))
+    await session.flush()
+
+
 def _token(url: str) -> str:
     assert "#" in url
     return url.split("#", 1)[1]
@@ -125,12 +132,13 @@ async def test_no_se_invita_a_una_cuenta_activa_ni_de_otro_condominio(tx, buzon)
 
 async def test_invitacion_masiva(tx, buzon):
     c, session = tx
+    await _sin_otros_pendientes(session)
     cab = await _cabecera(c, EMAIL_ADMIN)
     for i in range(3):
         await _pendiente(session, email=f"masiva{i}@ejemplo.cl")
     r = await c.post("/api/v1/usuarios/invitaciones", headers=cab, json={})
     assert r.status_code == 200, r.text
-    assert r.json() == {"enviados": 3, "fallidos": 0}
+    assert r.json() == {"enviados": 3, "fallidos": 0, "pendientes": 0, "limite_alcanzado": False}
     assert sorted(m["to"][0] for m in buzon) == [f"masiva{i}@ejemplo.cl" for i in range(3)]
     assert "enlace" not in r.text
 
@@ -207,7 +215,24 @@ async def test_correo_rechazado_por_resend(monkeypatch):
     monkeypatch.setattr(settings, "EMAIL_REMITENTE", "no-responder@ejemplo.cl")
     monkeypatch.setattr(correo, "transporte", httpx.MockTransport(lambda req: httpx.Response(422, json={})))
     r = await correo.enviar("a@b.cl", "x", "x", "<p>x</p>", "Santa Laura")
-    assert r.ok is False and "HTTP 422" in r.motivo
+    assert r.ok is False and "rechazó la dirección" in r.motivo
+
+
+async def test_invitacion_masiva_se_detiene_en_el_limite(tx, buzon, monkeypatch):
+    c, session = tx
+    await _sin_otros_pendientes(session)
+    for i in range(4):
+        await _pendiente(session, email=f"limite{i}@ejemplo.cl")
+    llamadas = []
+
+    def responder(request):
+        llamadas.append(1)
+        return httpx.Response(200 if len(llamadas) <= 2 else 429, json={"id": "x"})
+
+    monkeypatch.setattr(correo, "transporte", httpx.MockTransport(responder))
+    r = await c.post("/api/v1/usuarios/invitaciones", headers=await _cabecera(c, EMAIL_ADMIN), json={})
+    assert r.json() == {"enviados": 2, "fallidos": 1, "pendientes": 1, "limite_alcanzado": True}
+    assert len(llamadas) == 3   # no sigue intentando después del 429
 
 
 def test_plantilla_escapa_el_nombre():

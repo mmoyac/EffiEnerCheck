@@ -39,7 +39,7 @@ export const usuariosApi = {
   },
 
   /** Invita por correo a todos los pendientes del condominio (super_admin: indicar condominio) */
-  invitarPendientes: async (condominio_id?: number): Promise<{ enviados: number; fallidos: number }> => {
+  invitarPendientes: async (condominio_id?: number): Promise<{ enviados: number; fallidos: number; pendientes: number; limite_alcanzado: boolean }> => {
     const { data } = await api.post('/usuarios/invitaciones', { condominio_id })
     return data
   },

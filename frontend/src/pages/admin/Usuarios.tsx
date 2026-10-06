@@ -241,11 +241,16 @@ export default function Usuarios() {
 
   const masivaMut = useMutation({
     mutationFn: () => usuariosApi.invitarPendientes(isSuperAdmin ? condominioMasivo ?? undefined : undefined),
-    onSuccess: ({ enviados, fallidos }) => setAviso({
-      variante: fallidos ? 'error' : 'success',
-      texto: `Invitaciones enviadas por correo: ${enviados}.`
-        + (fallidos ? ` Fallaron ${fallidos}: reenvíalas una a una o por WhatsApp.` : ''),
-    }),
+    onSuccess: ({ enviados, fallidos, pendientes, limite_alcanzado }) => {
+      qc.invalidateQueries({ queryKey: ['usuarios'] })
+      setAviso({
+        variante: fallidos || limite_alcanzado ? 'error' : 'success',
+        texto: `Invitaciones enviadas por correo: ${enviados}.`
+          + (limite_alcanzado
+            ? ` Se alcanzó el límite diario del servicio de correo: quedan ${pendientes + fallidos} por invitar. Vuelve a presionar «Invitar pendientes» mañana.`
+            : fallidos ? ` Fallaron ${fallidos}: reenvíalas una a una o por WhatsApp.` : ''),
+      })
+    },
     onError: (e: unknown) => setAviso({ variante: 'error', texto: errorDe(e, 'No se pudieron enviar las invitaciones') }),
   })
 
@@ -474,11 +479,11 @@ function InvitacionModal({ usuario, resultado, condominio, onClose }: {
       <div className="space-y-4">
         {resultado.correo_enviado
           ? <Alert variant="success">Enviamos el correo a {usuario.email}. El enlace vence en 7 días y sirve una sola vez.</Alert>
-          : <Alert variant="warning">No se envió el correo: {resultado.motivo}. Reenvía el enlace por WhatsApp o cópialo.</Alert>}
+          : <Alert variant="warning">No se envió el correo. {resultado.motivo}. Reenvía el enlace por WhatsApp o cópialo.</Alert>}
         <div className="flex flex-col gap-2 sm:flex-row">
           {whatsapp && (
             <a href={whatsapp} target="_blank" rel="noopener noreferrer" className="flex-1">
-              <Button fullWidth variant="secondary"><MessageCircle className="h-4 w-4" /> Enviar por WhatsApp</Button>
+              <Button fullWidth variant="secondary"><MessageCircle className="h-4 w-4" /> WhatsApp</Button>
             </a>
           )}
           <Button className="flex-1" variant="secondary" onClick={copiar}>
