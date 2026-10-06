@@ -95,6 +95,9 @@ Comprueba [PC]:
    python3 -c "import secrets; print(secrets.token_urlsafe(48))"   # SECRET_KEY
    ```
    - `POSTGRES_PASSWORD` se usa **solo al crear** el volumen: cambiarla después no cambia la base.
+   - `GEMINI_API_KEY`: usa una clave **exclusiva de producción**, distinta de la de `backend/.env` de desarrollo. Así su consumo se ve aparte y se puede revocar una sin afectar a la otra. Se crea en https://aistudio.google.com/apikey (*Create API key*, en el mismo proyecto de Google Cloud).
+     > ⚠️ **Pendiente:** el primer deploy usa la misma clave de desarrollo. Para reemplazarla, crea la clave de producción, pégala en el Environment de Dokploy, presiona **Deploy** y luego revisa en AI Studio que la de desarrollo deje de recibir llamadas desde producción.
+   - Escribe los valores **sin comillas** (`SUPERADMIN_EMAIL=correo@dominio.cl`). Las comillas pueden terminar como parte del valor.
    - `TAG` queda vacío.
 4. **Domains:** todos con HTTPS y certificado Let's Encrypt.
 

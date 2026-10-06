@@ -118,6 +118,7 @@ Un `cron` de root (03:30 hora de Chile) ejecuta `enercheck-ci respaldar diario`,
 - **[Cloudflare con proxy activado cambiaría la IP de origen]** → Hoy se usa solo DNS. Si se activa el proxy, hay que confiar en los rangos de Cloudflare y usar `CF-Connecting-IP`. Queda documentado.
 - **[Los respaldos viven en el mismo disco]** → Se acepta por ahora (fuera de alcance). `DEPLOY.md` indica cómo bajarlos con `scp`.
 - **[Primer deploy sin base: `respaldar` debe tolerarlo]** → Si `enercheck_db` no existe, el script lo informa y sigue (lo cubre la spec).
+- **[El primer deploy comparte la clave de Gemini con desarrollo]** → Se acepta para salir antes. La recomendada es una clave exclusiva de producción (AI Studio, el mismo proyecto de Google Cloud): se ve su consumo aparte y se puede revocar una sin afectar a la otra. Es un cambio solo en el Environment de Dokploy (tarea 7.6).
 
 ## Migration Plan
 
