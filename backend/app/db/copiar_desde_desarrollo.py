@@ -122,7 +122,8 @@ async def importar(
         raise ValueError(f"Formato de exportación no soportado: {datos.get('version')}")
     resumen = Resumen()
     c = datos["condominio"]
-    dominios = [normalizar_dominio(d) for d in dominios]
+    # dict.fromkeys: www.x.cl y x.cl son el mismo dominio una vez normalizados.
+    dominios = list(dict.fromkeys(normalizar_dominio(d) for d in dominios))
     modulos_invalidos = set(c["modulos"]) - set(MODULOS)
     if modulos_invalidos:
         raise ValueError(f"Módulos desconocidos: {sorted(modulos_invalidos)}")
@@ -167,6 +168,7 @@ async def importar(
             resumen.avisos.append(f"el dominio {dominio} ya es de otro condominio; no se asigna")
             continue
         condominio.dominios_sitio.append(CondominioDominio(dominio=dominio))
+        propios.add(dominio)
         resumen.dominios_agregados += 1
     await db.flush()
 

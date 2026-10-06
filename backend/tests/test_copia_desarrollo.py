@@ -73,6 +73,7 @@ async def test_importar_crea_todo_y_es_idempotente(db, monkeypatch):
     assert (primera.condominio_creado, primera.modulos_agregados, primera.dominios_agregados,
             primera.parcelas_creadas, primera.usuarios_creados, primera.asignaciones_creadas) == \
            (True, 2, 1, 2, 2, 2)   # www.destino.cl y destino.cl son el mismo dominio
+    assert primera.avisos == []
 
     segunda = await importar(db, datos, **kwargs)
     assert (segunda.condominio_creado, segunda.modulos_agregados, segunda.dominios_agregados,

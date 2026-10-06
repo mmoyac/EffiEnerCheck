@@ -84,8 +84,8 @@
 ## 7. Puesta en marcha (en el servidor, con el usuario)
 
 - [x] 7.1 Instalar `infra/servidor/` en el VPS, agregar la llave del CI con comando forzado y comprobar que `ssh -i llave_ci comunidad` sin orden se rechaza y que `respaldar <sha>` funciona con la base ausente.
-- [ ] 7.2 Crear en Dokploy el proyecto compose *raw*, con un Environment cuyos secretos se generan en el servidor, los dominios `comunidadsantalaura.cl`, `www.` y `portal.` con HTTPS, y la API key. Cargar los secretos en el environment `production` de GitHub.
-- [ ] 7.3 Merge de `develop` a `main`, aprobar y verificar el primer deploy: pipeline en verde, backend `healthy` con la imagen del commit y certificados válidos en los tres dominios.
+- [x] 7.2 Crear en Dokploy el proyecto compose *raw*, con un Environment cuyos secretos se generan en el servidor, los dominios `comunidadsantalaura.cl`, `www.` y `portal.` con HTTPS, y la API key. Cargar los secretos en el environment `production` de GitHub.
+- [x] 7.3 Merge de `develop` a `main`, aprobar y verificar el primer deploy: pipeline en verde, backend `healthy` con la imagen del commit y certificados válidos en los tres dominios.
 - [ ] 7.4 Ejecutar la carga inicial: `exportar` en local, `scp`, `importar` en `enercheck_backend` (el usuario ingresa la clave) y borrar el JSON en ambos lados. Verificar los conteos en producción y el login de un parcelero.
 - [ ] 7.5 Verificación integral: landing con el contenido de Santa Laura; `www` → apex; portal con el color institucional; 404 en las rutas cerradas de la landing; 429 en ráfagas de login; respaldo pre-deploy y diario presentes al día siguiente; `openspec validate --specs --strict` en verde.
 - [ ] 7.6 Reemplazar la `GEMINI_API_KEY` de producción, que en el primer deploy es la misma de desarrollo, por una clave exclusiva de producción creada en AI Studio. Pegarla en el Environment de Dokploy y presionar Deploy. Verificar que el OCR de una boleta de prueba funcione y que la clave de desarrollo ya no reciba llamadas desde producción.
