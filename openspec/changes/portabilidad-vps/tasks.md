@@ -24,7 +24,7 @@
 
 ## 5. Servidor reproducible
 
-- [ ] 5.1 Crear `infra/servidor/preparar-servidor.sh` (D8) con las tres fases, idempotente: sistema (paquetes, sshd solo llaves, ufw 22 limit/80/443, fail2ban `ssh.service`, zona horaria), plataforma (`dokploy-network` con `10.0.1.0/24` creada antes de Dokploy o verificada, instalación de Dokploy, cierre del puerto 3000) y aplicación (lo de `instalar.sh`, llave pública `age`, `rclone.conf` 600 con el token leído por stdin, línea de la llave del CI con comando forzado). Retirar `instalar.sh`. Verificar con `shellcheck` y ejecutándolo dos veces sobre el servidor actual sin cambios en la segunda pasada (fase plataforma: solo verificaciones).
+- [x] 5.1 Crear `infra/servidor/preparar-servidor.sh` (D8) con las tres fases, idempotente: sistema (paquetes, sshd solo llaves, ufw 22 limit/80/443, fail2ban `ssh.service`, zona horaria), plataforma (`dokploy-network` con `10.0.1.0/24` creada antes de Dokploy o verificada, instalación de Dokploy, cierre del puerto 3000) y aplicación (lo de `instalar.sh`, llave pública `age`, `rclone.conf` 600 con el token leído por stdin, línea de la llave del CI con comando forzado). Retirar `instalar.sh`. Verificar con `shellcheck` y ejecutándolo dos veces sobre el servidor actual sin cambios en la segunda pasada (fase plataforma: solo verificaciones).
 - [x] 5.2 Actualizar DEPLOY.md §2 para usar `preparar-servidor.sh` y CLAUDE.md (estructura de `infra/servidor/`). Verificar con `grep -rn instalar.sh` sin referencias vigentes.
 
 ## 6. Dominios en el compose

@@ -25,6 +25,13 @@ BASE=/opt/enercheck
 # Versiones del servidor de referencia (2026-10). Se suben a propósito, probando antes en un simulacro.
 DOCKER_VERSION=${DOCKER_VERSION:-28.5.0}
 DOKPLOY_VERSION=${DOKPLOY_VERSION:-v0.30.8}
+# rclone oficial y no el de Ubuntu (1.60): tras cada subida, el 1.60 consulta ?versionId=, que R2 no
+# implementa (501), y cada subida falla en su primer intento. Checksums de downloads.rclone.org/v1.75.1/SHA256SUMS.
+RCLONE_VERSION=v1.75.1
+declare -A RCLONE_SHA256=(
+    [amd64]=09c9f7606ed9e31eecc1eec26a89992cf2931a8d2d1a5f0ae2bb1c11630ffb15
+    [arm64]=773f3a76615f91f7d4654183a537afddce3343c8d99ac1d74984f060f2ade2d9
+)
 # Subred en la que confían frontend/ y landing/nginx.prod.conf (set_real_ip_from) y FORWARDED_ALLOW_IPS.
 SUBRED_DOKPLOY=10.0.1.0/24
 BUCKET=efficomunidad-respaldos
@@ -37,11 +44,28 @@ uso() {
 titulo() { printf '\n== %s\n' "$*"; }
 
 # ---------------------------------------------------------------------------------------------------
+instalar_rclone() {
+    local arq deb
+    if [ "$(rclone version 2>/dev/null | awk 'NR == 1 { print $2 }')" = "$RCLONE_VERSION" ]; then
+        echo "rclone $RCLONE_VERSION ya instalado"
+        return 0
+    fi
+    arq=$(dpkg --print-architecture)
+    [ -n "${RCLONE_SHA256[$arq]:-}" ] || { echo "Arquitectura sin checksum de rclone: $arq" >&2; exit 1; }
+    deb=/tmp/rclone-$RCLONE_VERSION-linux-$arq.deb
+    curl -fsSL -o "$deb" "https://downloads.rclone.org/$RCLONE_VERSION/rclone-$RCLONE_VERSION-linux-$arq.deb"
+    echo "${RCLONE_SHA256[$arq]}  $deb" | sha256sum -c --quiet || { rm -f "$deb"; echo "Checksum de rclone inválido" >&2; exit 1; }
+    dpkg -i "$deb" >/dev/null
+    rm -f "$deb"
+    echo "rclone $(rclone version | awk 'NR == 1 { print $2 }') instalado"
+}
+
 fase_sistema() {
     titulo "Paquetes"
     apt-get update -q
     DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
-        ufw fail2ban age rclone unattended-upgrades ca-certificates curl
+        ufw fail2ban age unattended-upgrades ca-certificates curl
+    instalar_rclone
     cat > /etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
@@ -93,8 +117,12 @@ bantime.maxtime = 1w
 journalmatch = _SYSTEMD_UNIT=ssh.service + _COMM=sshd
 mode = aggressive
 EOF
-    systemctl enable --now fail2ban
-    systemctl restart fail2ban
+    # reload y no restart: un restart levanta los baneos vigentes.
+    if systemctl is-active --quiet fail2ban; then
+        systemctl reload fail2ban
+    else
+        systemctl enable --now fail2ban
+    fi
 
     titulo "Hora"
     # El cron del respaldo usa la hora del sistema: el servidor debe estar en hora de Chile.
@@ -199,13 +227,28 @@ configurar_token_r2() {
     local id secreto endpoint
     echo "Token de R2 del servidor (Cloudflare → R2 → Administrar tokens de API; permiso «Lectura y"
     echo "escritura de objetos» solo en $BUCKET). Se guarda en $BASE/rclone.conf (600)."
-    read -r -p "  ID de clave de acceso: " id
-    read -r -s -p "  Clave de acceso secreta (no se muestra): " secreto; echo
-    read -r -p "  Endpoint S3 (https://<cuenta>.r2.cloudflarestorage.com): " endpoint
-    endpoint=${endpoint%/}
-    endpoint=${endpoint%/"$BUCKET"}
-    [ -n "$id" ] && [ -n "$secreto" ] && [[ "$endpoint" =~ ^https://[a-z0-9]+\.r2\.cloudflarestorage\.com$ ]] \
-        || { echo "Datos incompletos o endpoint inválido" >&2; exit 1; }
+    echo "Pega cada dato y presiona Enter. Si uno no tiene el formato esperado, se vuelve a pedir."
+    # Al pegar suelen colarse espacios o retornos de carro: se quitan.
+    while :; do
+        read -r -p "  ID de clave de acceso (32 caracteres): " id
+        id=$(tr -d '[:space:]' <<< "$id")
+        [[ "$id" =~ ^[0-9a-f]{32}$ ]] && { echo "    ✔ ${#id} caracteres"; break; }
+        echo "    ✘ llegaron ${#id} caracteres; debe tener 32 de 0-9 y a-f"
+    done
+    while :; do
+        read -r -s -p "  Clave de acceso secreta (64 caracteres; al pegarla no se ve, es normal): " secreto; echo
+        secreto=$(tr -d '[:space:]' <<< "$secreto")
+        [[ "$secreto" =~ ^[0-9a-f]{64}$ ]] && { echo "    ✔ ${#secreto} caracteres"; break; }
+        echo "    ✘ llegaron ${#secreto} caracteres; debe tener 64 de 0-9 y a-f (no es el «Valor del token»)"
+    done
+    while :; do
+        read -r -p "  Endpoint S3 (https://<cuenta>.r2.cloudflarestorage.com): " endpoint
+        endpoint=$(tr -d '[:space:]' <<< "$endpoint")
+        endpoint=${endpoint%/}
+        endpoint=${endpoint%/"$BUCKET"}
+        [[ "$endpoint" =~ ^https://[a-z0-9]+\.r2\.cloudflarestorage\.com$ ]] && { echo "    ✔"; break; }
+        echo "    ✘ formato inválido"
+    done
     (
         umask 077
         cat > "$BASE/rclone.conf.nuevo" <<EOF
