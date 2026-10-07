@@ -54,34 +54,59 @@ La llave SSH del pipeline tiene **comando forzado**: solo puede ejecutar `infra/
 
 ## 2. Servidor (una vez)
 
-[PC]:
+Todo lo del servidor lo hace `infra/servidor/preparar-servidor.sh`, en fases idempotentes (se pueden repetir). Requisito: un **Ubuntu 24.04** recién creado con **tu llave SSH** ya autorizada para `root` (la mayoría de los proveedores la piden al crear el VPS) y el alias en `~/.ssh/config`.
+
+[PC] Copia los scripts:
 
 ```powershell
-scp infra/servidor/* comunidad:/tmp/enercheck-instalar/
-ssh comunidad "bash /tmp/enercheck-instalar/instalar.sh && rm -rf /tmp/enercheck-instalar"
+ssh comunidad "mkdir -p /tmp/enercheck-instalar"
+scp infra/servidor/preparar-servidor.sh infra/servidor/enercheck-ci infra/servidor/respaldos.age.pub comunidad:/tmp/enercheck-instalar/
 ```
 
-`instalar.sh` es idempotente y hace cuatro cosas:
-- instala `/opt/enercheck/bin/enercheck-ci`;
-- crea `/opt/enercheck/respaldos` (700);
-- deja el servidor en hora `America/Santiago`;
-- programa el respaldo diario a las 03:30.
+**2.1 Sistema** [PC]: paquetes (`age`, `rclone`, `ufw`, `fail2ban`), SSH solo con llaves, `ufw` (22 limitado, 80, 443), fail2ban, hora `America/Santiago` y actualizaciones de seguridad automáticas.
 
-**Llave del pipeline** [PC], de uso exclusivo del CI:
+```powershell
+ssh comunidad "bash /tmp/enercheck-instalar/preparar-servidor.sh sistema"
+```
+
+> Se niega a seguir si no hay ninguna llave autorizada: desactivar las contraseñas te dejaría fuera.
+
+**2.2 Dokploy** [PC]: Docker y Dokploy con las versiones fijadas en el script. El panel queda en `:3000` **solo para tu IP** mientras creas el administrador (hasta que exista, quien entre primero lo crea).
+
+```powershell
+ssh comunidad "bash /tmp/enercheck-instalar/preparar-servidor.sh dokploy"
+```
+
+- Verifica que `dokploy-network` tenga la subred `10.0.1.0/24`, en la que confían los nginx de las imágenes y `FORWARDED_ALLOW_IPS`. Si no coincide, se detiene.
+- En un servidor que **ya** tiene Dokploy no reinstala nada (el instalador desarma el swarm): solo verifica.
+
+[Navegador] Sin demora: entra a `http://<IP>:3000`, crea la cuenta de administrador y en **Settings → Web Server** pon el dominio del panel (`dokploy.<dominio>`, HTTPS). [Cloudflare] El registro A de ese dominio → IP del VPS, **Solo DNS**. Cuando el panel responda por HTTPS, cierra `:3000` [PC]:
+
+```powershell
+ssh comunidad "bash /tmp/enercheck-instalar/preparar-servidor.sh cerrar-panel"
+```
+
+**2.3 Aplicación**: `enercheck-ci`, el cron del respaldo diario (03:30), la llave pública de respaldos, el **token de R2** y la **llave del pipeline**.
+
+Llave del pipeline [PC], de uso exclusivo del CI (si ya la tienes de antes, usa su parte pública):
 
 ```powershell
 ssh-keygen -t ed25519 -N '""' -C enercheck-ci@github-actions -f enercheck_ci
 ```
 
-[VPS] Agrega a `/root/.ssh/authorized_keys` **una línea** con la parte pública:
+[PC] Con `-t`, porque el script te pide el token de R2 por teclado (el ID, la clave secreta sin mostrarla y el endpoint; están en tu archivo privado «EnerCheck – token R2 servidor»). Nunca va como argumento ni por el chat:
 
+```powershell
+ssh -t comunidad "bash /tmp/enercheck-instalar/preparar-servidor.sh aplicacion --llave-ci '$(Get-Content enercheck_ci.pub)'; rm -rf /tmp/enercheck-instalar"
 ```
-command="/opt/enercheck/bin/enercheck-ci",restrict ssh-ed25519 AAAA... enercheck-ci@github-actions
-```
+
+- Verifica el token listando el bucket `efficomunidad-respaldos` antes de guardarlo (`/opt/enercheck/rclone.conf`, 600). Para cambiarlo después: `--reemplazar-token`.
+- Agrega la llave del CI a `/root/.ssh/authorized_keys` con **comando forzado** (`command="/opt/enercheck/bin/enercheck-ci",restrict`): esa llave solo puede respaldar y esperar el deploy, no abre una shell.
+- Para actualizar `enercheck-ci` tras un cambio en el repo, repite la copia y esta fase: lo ya configurado no se toca.
 
 Comprueba [PC]:
-- `ssh -i enercheck_ci root@86.48.21.250` debe responder con el uso de `enercheck-ci`, no con una shell;
-- `ssh -i enercheck_ci root@86.48.21.250 "respaldar diario"` debe funcionar, aunque la base todavía no exista.
+- `ssh -i enercheck_ci root@<IP>` debe responder con el uso de `enercheck-ci`, no con una shell;
+- `ssh -i enercheck_ci root@<IP> "respaldar diario"` debe funcionar, aunque la base todavía no exista.
 
 ## 3. Dokploy (una vez)
 
@@ -205,32 +230,59 @@ Los vecinos también pueden pedir su enlace solos con **«¿Olvidaste tu clave? 
 
 ## 7. Respaldos
 
-Todos van en `/opt/enercheck/respaldos/` (700, solo root). Los genera `enercheck-ci`.
+Los genera `enercheck-ci` en dos lugares: una copia **local** en `/opt/enercheck/respaldos/` (700, solo root), para volver atrás rápido tras un deploy, y una copia **externa cifrada** en Cloudflare R2, que sobrevive aunque se pierda el servidor.
 
-| Tipo | Cuándo | Conserva |
-|---|---|---|
-| `predeploy-<fecha>-<sha>.*` | En cada deploy, antes de cambiar las imágenes | 10 |
-| `diario-<fecha>.*` | Cron a las 03:30, hora de Chile (`/etc/cron.d/enercheck-respaldo`, log en `/var/log/enercheck-respaldo.log`) | 14 |
+| Tipo | Cuándo | Local (conserva) | R2 (se borra sola a los) |
+|---|---|---|---|
+| `predeploy-<fecha>-<sha>` | En cada deploy, antes de cambiar las imágenes | 10 | 91 días |
+| `diario-<fecha>` | Cron a las 03:30, hora de Chile (`/etc/cron.d/enercheck-respaldo`, log en `/var/log/enercheck-respaldo.log`) | 14 | 36 días |
 
-Cada conjunto incluye:
-- `.dump`: la base, con `pg_dump -Fc`;
-- `.archivos.tar.gz`: `uploads` (imágenes de boletas y logos) y `privado` (**vouchers, datos personales**);
-- `.compose.yml`: el compose que estaba corriendo;
-- `.imagen.txt`: la imagen que estaba corriendo.
+Cada respaldo tiene dos partes:
+- **La base**, completa: `.dump` (`pg_dump -Fc`), `.compose.yml` (el compose que estaba corriendo) e `.imagen.txt` (la imagen que estaba corriendo).
+- **Los archivos subidos**, de forma **incremental**: imágenes de boletas, logos y vouchers (`uploads` y `privado`). Cada respaldo sube a R2 solo los que aún no están, y en R2 **nunca se borra ninguno**, aunque se borre en el servidor. En el respaldo local no van: un deploy no toca los archivos, y para recuperar uno borrado está R2.
 
-> Las imágenes de boletas y los vouchers **no están en la base**: PostgreSQL guarda solo su ruta. La base y los archivos se restauran siempre juntos.
+> Las imágenes y los vouchers **no están en la base**: PostgreSQL guarda solo su ruta. El respaldo incremental funciona porque **los archivos subidos son inmutables**: cada subida crea un archivo con nombre nuevo y nunca se reescribe uno existente.
 
-> Los respaldos están en el mismo disco del servidor. Para guardar una copia fuera [PC]: `scp comunidad:/opt/enercheck/respaldos/diario-<fecha>.* .`. Guárdala cifrada, porque tiene datos personales.
+**R2** (bucket `efficomunidad-respaldos`, cuenta Cloudflare del DNS):
 
-**Restaurar** [VPS], con el backend detenido para que nadie escriba mientras tanto:
+```
+diario/<nombre>.{dump,compose.yml,imagen.txt}.age  +  <nombre>.sha256   ← el .sha256 se sube al final
+predeploy/...                                                            (sin él, el conjunto está incompleto)
+archivos/uploads/<ruta>.age   archivos/privado/<ruta>.age
+secretos/produccion-<fecha>.env.age
+```
+
+- Todo va **cifrado con `age`** antes de salir del servidor. En el servidor está solo la llave **pública** (`/opt/enercheck/respaldos.age.pub`, copia de `infra/servidor/respaldos.age.pub`): puede cifrar, no descifrar. La **privada** la guarda el operador fuera del servidor, en dos lugares.
+- El token del servidor (`/opt/enercheck/rclone.conf`, 600) solo puede escribir en ese bucket, y las **reglas de bloqueo** impiden borrar o reemplazar objetos: `diario/` 35 días, `predeploy/` 90, `secretos/` 365 y `archivos/` indefinido. Las **reglas de ciclo de vida** borran `diario/` a los 36 días y `predeploy/` a los 91. Ni un servidor comprometido puede destruir el historial.
+- Si la subida a R2 falla, la copia local se conserva y `enercheck-ci` termina con error: antes de un deploy, **el deploy no sigue**; en el diario, queda en el log.
+
+**Ver los respaldos** [VPS]: `enercheck-ci listar` (R2) o `enercheck-ci listar local`. También en el panel de Cloudflare: R2 → `efficomunidad-respaldos` → Objetos.
+
+**Restaurar** [VPS], con la aplicación ya desplegada (`enercheck_db` y `enercheck_backend` existen):
 
 ```sh
-R=/opt/enercheck/respaldos/predeploy-X      # prefijo del conjunto
-docker stop enercheck_backend
-docker exec -i enercheck_db pg_restore -U enercheck -d enercheck --clean --if-exists < $R.dump
-docker start enercheck_backend
-docker exec -i enercheck_backend tar -C /app -xzf - < $R.archivos.tar.gz
+enercheck-ci restaurar ultimo --llave - --confirmar          # desde R2: pega la llave privada y Ctrl-D
+enercheck-ci restaurar <nombre> --desde local --confirmar    # un respaldo local, p. ej. tras un deploy fallido
 ```
+
+- Sin `--confirmar` solo dice qué haría. Por la llave del CI se rechaza: es solo de consola.
+- **Desde R2** baja el conjunto, verifica su `.sha256`, lo descifra y baja los archivos que **faltan** en el servidor (no pisa ni borra los que están). **Desde local** restaura solo la base.
+- Valida todo antes de tocar nada: carga el respaldo en una base aparte (`enercheck_restaurando`) con la aplicación en servicio. Si la llave es incorrecta, el respaldo está alterado o el dump dañado, se detiene **sin modificar nada**.
+- Luego detiene `enercheck_backend`, intercambia las bases y repone los archivos con el dueño de la API. La base vigente queda como **`enercheck_previa`** hasta la próxima restauración: para volver atrás, se intercambian los nombres de nuevo.
+- Termina esperando que la API quede sana.
+
+**Bajar y descifrar a mano** [PC], sin el script (necesitas `age` y `rclone` con las credenciales del token en variables `RCLONE_CONFIG_R2_*`, como en la prueba del bucket):
+
+```powershell
+rclone copy r2:efficomunidad-respaldos/diario/ . --include "diario-<fecha>.*"
+age -d -i "$HOME\.secretos\enercheck-respaldos.key" -o base.dump diario-<fecha>.dump.age
+rclone copy r2:efficomunidad-respaldos/archivos/privado/vouchers/<archivo>.age .
+age -d -i "$HOME\.secretos\enercheck-respaldos.key" -o <archivo> <archivo>.age
+```
+
+> El contenido descifrado tiene **datos personales**: no lo dejes en carpetas sincronizadas ni lo envíes por chat, y bórralo al terminar.
+
+**Prueba local de `enercheck-ci`** [PC]: `infra/servidor/pruebas/probar-enercheck-ci.sh` levanta un servidor falso en Docker con un R2 falso y ejercita respaldos y restauraciones (instrucciones en su encabezado). **Nunca** en el servidor.
 
 ## 8. Rollback
 

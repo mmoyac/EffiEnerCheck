@@ -1,26 +1,53 @@
 #!/usr/bin/env bash
-# EnerCheck — órdenes del servidor de producción para el pipeline y el cron (ver DEPLOY.md).
+# EnerCheck — órdenes del servidor de producción para el pipeline, el cron y el operador (ver DEPLOY.md).
 #
-# Se instala en /opt/enercheck/bin/enercheck-ci (infra/servidor/instalar.sh). La llave SSH del CI lo
+# Se instala en /opt/enercheck/bin/enercheck-ci (infra/servidor/preparar-servidor.sh aplicacion). La llave SSH del CI lo
 # tiene como comando forzado en authorized_keys:
 #     command="/opt/enercheck/bin/enercheck-ci",restrict ssh-ed25519 AAAA... enercheck-ci
-# así que esa llave NO abre una shell: solo puede pedir estas órdenes (llegan en $SSH_ORIGINAL_COMMAND).
+# así que esa llave NO abre una shell: solo puede pedir respaldar y esperar-sano (llegan en
+# $SSH_ORIGINAL_COMMAND). listar y restaurar se rechazan por esa vía: son solo de consola.
 #
-#   respaldar <sha>       respaldo previo a un deploy (conserva 10)
-#   respaldar diario      respaldo diario del cron (conserva 14)
+#   respaldar <sha>       respaldo previo a un deploy (conserva 10 locales)
+#   respaldar diario      respaldo diario del cron (conserva 14 locales)
 #   esperar-sano <sha>    espera a que enercheck_backend corra la imagen del commit y quede sano
+#   listar [r2|local]     respaldos disponibles para restaurar
+#   restaurar <ultimo|nombre> [--desde r2|local] [--llave <archivo>|-] --confirmar
+#
+# Respaldo externo (almacenamiento S3-compatible, Cloudflare R2), cifrado con age ANTES de salir:
+#   - la base, la definición de servicios y la imagen van completas en cada respaldo:
+#       <remoto>/<diario|predeploy>/<nombre>.{dump,compose.yml,imagen.txt}.age  + <nombre>.sha256 al final
+#   - los archivos subidos (volúmenes uploads y privado) van de forma incremental y de solo agregar:
+#       <remoto>/archivos/<uploads|privado>/<ruta>.age
+#     Se sube solo lo que aún no está en el remoto y nunca se borra nada allí. Es seguro porque los
+#     archivos subidos son inmutables (siempre con nombre nuevo). Orden: base local → archivos → base
+#     remota, así toda base remota apunta solo a archivos que ya están en el remoto.
+# En el servidor solo está la llave PÚBLICA: puede cifrar, no descifrar. La privada la entrega el
+# operador al restaurar. Retención remota: reglas de bloqueo y de ciclo de vida del bucket (DEPLOY.md §7).
 #
 # Los logs del pipeline son públicos: nada de lo que se imprime aquí puede llevar datos personales.
 set -euo pipefail
+umask 077
 
-DIR_RESPALDOS=/opt/enercheck/respaldos
+BASE=${ENERCHECK_DIR:-/opt/enercheck}
+DIR_RESPALDOS=$BASE/respaldos
+LLAVE_PUBLICA=$BASE/respaldos.age.pub
+export RCLONE_CONFIG=$BASE/rclone.conf
+REMOTO=${ENERCHECK_REMOTO:-r2:efficomunidad-respaldos}
 CONSERVAR_PREDEPLOY=10
 CONSERVAR_DIARIO=14
 ESPERA_MAXIMA=180   # segundos
+APP_UID=10001       # usuario app de backend/Dockerfile.prod, dueño de los archivos subidos
+TMP=
 
 uso() {
-    echo "Uso: enercheck-ci respaldar <sha|diario> | esperar-sano <sha>" >&2
+    echo "Uso: enercheck-ci respaldar <sha|diario> | esperar-sano <sha> | listar [r2|local]" >&2
+    echo "     enercheck-ci restaurar <ultimo|nombre> [--desde r2|local] [--llave <archivo>|-] --confirmar" >&2
     exit 2
+}
+
+error() {
+    echo "$*" >&2
+    exit 1
 }
 
 validar_sha() {
@@ -31,12 +58,99 @@ corriendo() {
     [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null || true)" = true ]
 }
 
+existe() {
+    docker inspect "$1" >/dev/null 2>&1
+}
+
+rc() {
+    rclone -q "$@"
+}
+
+bloquear() {
+    mkdir -p "$DIR_RESPALDOS"
+    chmod 700 "$DIR_RESPALDOS"
+    exec 9>"$DIR_RESPALDOS/.lock"
+    flock -w 600 9 || error "Otro respaldo o restauración sigue en curso"
+}
+
+directorio_temporal() {
+    TMP=$(mktemp -d "$DIR_RESPALDOS/.tmp-XXXXXX")
+    trap 'rm -rf "$TMP"' EXIT
+}
+
+requiere_externo() {
+    local falta=
+    command -v age >/dev/null || falta="age"
+    command -v rclone >/dev/null || falta="$falta rclone"
+    [ -s "$LLAVE_PUBLICA" ] || falta="$falta $LLAVE_PUBLICA"
+    [ -s "$RCLONE_CONFIG" ] || falta="$falta $RCLONE_CONFIG"
+    [ -z "$falta" ] || error "Respaldo externo sin configurar (falta:$falta). Ejecuta infra/servidor/preparar-servidor.sh"
+}
+
+# Contenedor auxiliar con los volúmenes de archivos en /v/uploads y /v/privado. Usa la imagen de la
+# base, que ya está en el servidor: no descarga nada, no tiene red y no necesita al backend.
+#   aux <ro|rw> '<orden sh>'
+aux() {
+    local modo=$1 imagen
+    imagen=$(docker inspect -f '{{.Config.Image}}' enercheck_db)
+    docker run --rm -i --network none --entrypoint sh \
+        -v "enercheck_uploads:/v/uploads:$modo" -v "enercheck_privado:/v/privado:$modo" \
+        "$imagen" -c "$2"
+}
+
+archivos_locales() {
+    aux ro 'cd /v && find uploads privado -type f' | LC_ALL=C sort
+}
+
+archivos_remotos() {
+    rc lsf -R --files-only "$REMOTO/archivos" | sed -n 's/\.age$//p' | LC_ALL=C sort
+}
+
 # Borra los conjuntos más antiguos de un tipo, dejando los $2 más recientes (un conjunto = un prefijo).
 podar() {
     local tipo=$1 conservar=$2
     find "$DIR_RESPALDOS" -maxdepth 1 -name "$tipo-*.dump" -printf '%f\n' | sort -r \
         | tail -n +"$((conservar + 1))" | sed 's/\.dump$//' \
         | while read -r prefijo; do rm -f "$DIR_RESPALDOS/$prefijo".*; done
+}
+
+# Sube cifrados los archivos de los volúmenes que todavía no están en el remoto. Solo agrega.
+# Se llama dentro de un `if`, donde bash no aplica set -e: cada paso que puede fallar retorna explícito.
+subir_archivos() {
+    local n
+    archivos_locales > "$TMP/locales" || return 1
+    archivos_remotos > "$TMP/remotos" || return 1
+    LC_ALL=C comm -23 "$TMP/locales" "$TMP/remotos" > "$TMP/faltan" || return 1
+    n=$(wc -l < "$TMP/faltan")
+    if [ "$n" -eq 0 ]; then
+        echo "Archivos: nada nuevo ($(wc -l < "$TMP/locales") en total)"
+        return 0
+    fi
+    mkdir "$TMP/claro" "$TMP/cifrado" || return 1
+    aux ro 'cat > /tmp/lista && cd /v && tar -cf - -T /tmp/lista' < "$TMP/faltan"         | tar -C "$TMP/claro" -xf - || return 1
+    while IFS= read -r f; do
+        mkdir -p "$TMP/cifrado/$(dirname "$f")" || return 1
+        age -R "$LLAVE_PUBLICA" -o "$TMP/cifrado/$f.age" "$TMP/claro/$f" || return 1
+    done < "$TMP/faltan"
+    rm -rf "$TMP/claro"
+    # --immutable: si un archivo ya estuviera en el remoto con otro contenido, falla en vez de pisarlo.
+    rc copy --immutable "$TMP/cifrado" "$REMOTO/archivos" || return 1
+    echo "Archivos: $n nuevos subidos ($(du -sh "$TMP/cifrado" | cut -f1)), $(wc -l < "$TMP/locales") en total"
+    rm -rf "$TMP/cifrado"
+}
+
+# Cifra y sube las partes de un conjunto local; el .sha256 va al final y marca el conjunto como completo.
+subir_conjunto() {
+    local prefijo=$1 tipo=$2 nombre parte
+    nombre=$(basename "$prefijo")
+    mkdir "$TMP/conjunto" || return 1
+    for parte in "$prefijo".*; do
+        age -R "$LLAVE_PUBLICA" -o "$TMP/conjunto/$(basename "$parte").age" "$parte" || return 1
+    done
+    (cd "$TMP/conjunto" && sha256sum -- *.age > "$nombre.sha256") || return 1
+    rc copy --immutable --exclude '*.sha256' "$TMP/conjunto" "$REMOTO/$tipo" || return 1
+    rc copyto "$TMP/conjunto/$nombre.sha256" "$REMOTO/$tipo/$nombre.sha256" || return 1
+    echo "Externo: $tipo/$nombre subido"
 }
 
 respaldar() {
@@ -54,71 +168,216 @@ respaldar() {
         echo "enercheck_db no está corriendo (¿primer despliegue?): se continúa sin respaldo"
         return 0
     fi
+    requiere_externo
+    bloquear
+    directorio_temporal
 
-    umask 077
-    mkdir -p "$DIR_RESPALDOS"
-    chmod 700 "$DIR_RESPALDOS"
-    exec 9>"$DIR_RESPALDOS/.lock"
-    flock -w 600 9 || { echo "Otro respaldo sigue en curso" >&2; exit 1; }
-
+    # 1. Base local (define el punto en el tiempo del respaldo)
     if ! docker exec enercheck_db pg_dump -U enercheck -d enercheck -Fc > "$prefijo.dump" || [ ! -s "$prefijo.dump" ]; then
         rm -f "$prefijo".*
-        echo "Falló el respaldo de la base" >&2
-        exit 1
+        error "Falló el respaldo de la base"
     fi
     echo "Base: $(basename "$prefijo").dump ($(du -h "$prefijo.dump" | cut -f1))"
 
-    if corriendo enercheck_backend; then
-        if ! docker exec enercheck_backend tar -C /app -czf - uploads privado > "$prefijo.archivos.tar.gz" \
-            || [ ! -s "$prefijo.archivos.tar.gz" ]; then
-            rm -f "$prefijo".*
-            echo "Falló el respaldo de los archivos" >&2
-            exit 1
-        fi
-        echo "Archivos: $(basename "$prefijo").archivos.tar.gz ($(du -h "$prefijo.archivos.tar.gz" | cut -f1))"
-
-        # Compose vigente (el que generó Dokploy) e imagen en ejecución: lo necesario para volver atrás.
+    # Compose vigente (el que generó Dokploy) e imagen en ejecución: lo necesario para volver atrás.
+    if existe enercheck_backend; then
         local compose
         compose=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' enercheck_backend)
         [ -f "$compose" ] && cp "$compose" "$prefijo.compose.yml"
         docker inspect -f '{{.Config.Image}}' enercheck_backend > "$prefijo.imagen.txt"
-    else
-        echo "AVISO: enercheck_backend no está corriendo; el respaldo no incluye los archivos"
     fi
-
     podar "$tipo" "$conservar"
+
+    # 2. Archivos nuevos y 3. conjunto de la base, al almacenamiento externo. Si falla, la copia local
+    # se conserva y se sale con error: antes de un deploy, eso detiene el deploy.
+    if ! subir_archivos; then
+        error "Falló la subida de los archivos al almacenamiento externo (la copia local de la base se conserva)"
+    fi
+    if ! subir_conjunto "$prefijo" "$tipo"; then
+        error "Falló la subida del respaldo al almacenamiento externo (la copia local se conserva)"
+    fi
 }
 
 esperar_sano() {
     local sha=$1 imagen estado transcurrido=0
-    validar_sha "$sha"
+    [ -z "$sha" ] || validar_sha "$sha"
     while [ "$transcurrido" -lt "$ESPERA_MAXIMA" ]; do
         imagen=$(docker inspect -f '{{.Config.Image}}' enercheck_backend 2>/dev/null || echo ausente)
         estado=$(docker inspect -f '{{.State.Health.Status}}' enercheck_backend 2>/dev/null || echo ausente)
-        if [ "${imagen##*:}" = "$sha" ] && [ "$estado" = healthy ]; then
-            echo "enercheck_backend sano con la imagen del commit ${sha:0:12}"
+        if { [ -z "$sha" ] || [ "${imagen##*:}" = "$sha" ]; } && [ "$estado" = healthy ]; then
+            echo "enercheck_backend sano con la imagen ${imagen##*:}"
             docker ps --filter name=enercheck_ --format '{{.Names}}\t{{.Status}}'
             return 0
         fi
         sleep 5
         transcurrido=$((transcurrido + 5))
     done
-    echo "enercheck_backend no quedó sano con la imagen ${sha:0:12} (imagen: ${imagen##*:}, estado: $estado)" >&2
+    echo "enercheck_backend no quedó sano (imagen: ${imagen##*:}, estado: $estado)" >&2
     # Solo el arranque (migraciones, validación del .env): sin las líneas de acceso, que traen IPs.
     docker logs --tail 200 enercheck_backend 2>&1 | grep -v '" [0-9]\{3\}' | tail -n 60 >&2 || true
     exit 1
 }
 
-# Por SSH la orden llega en SSH_ORIGINAL_COMMAND; desde el cron o la consola, como argumentos.
+# Conjuntos disponibles, del más reciente al más antiguo: "<tipo> <nombre>".
+# Un conjunto remoto cuenta solo si tiene su .sha256 (se sube al final).
+conjuntos() {
+    local desde=$1 tipo
+    if [ "$desde" = r2 ]; then
+        for tipo in diario predeploy; do
+            rc lsf --files-only --include '*.sha256' "$REMOTO/$tipo" | sed -n "s/\.sha256$//p" | sed "s/^/$tipo /"
+        done
+    else
+        find "$DIR_RESPALDOS" -maxdepth 1 -name '*.dump' -printf '%f\n' | sed 's/\.dump$//' \
+            | sed -E 's/^(diario|predeploy)-/\1 &/'
+    fi | awk '{ split($2, p, "-"); print p[2] p[3], $0 }' | sort -r | cut -d' ' -f2-
+}
+
+listar() {
+    local desde=${1:-r2}
+    [ "$desde" = r2 ] || [ "$desde" = local ] || uso
+    [ "$desde" = local ] || requiere_externo
+    echo "Respaldos en $desde (el primero es «ultimo»):"
+    conjuntos "$desde" | awk '{ print "  " $2 }'
+}
+
+psql_admin() {
+    docker exec -e PGOPTIONS="-c client_min_messages=warning" enercheck_db \
+        psql -U enercheck -d postgres -v ON_ERROR_STOP=1 -q "$@"
+}
+
+restaurar() {
+    local cual=$1 desde=$2 llave=$3 confirmar=$4 elegido tipo nombre dump n_archivos=0
+    [ "$desde" = r2 ] || [ "$desde" = local ] || uso
+    [ "$cual" = ultimo ] || [[ "$cual" =~ ^(diario|predeploy)-[0-9]{8}-[0-9]{6}(-[0-9a-f]{12})?$ ]] \
+        || error "Nombre de respaldo inválido: usa «ultimo» o uno de «enercheck-ci listar $desde»"
+    if ! existe enercheck_db || ! existe enercheck_backend; then
+        error "Faltan enercheck_db o enercheck_backend: despliega la aplicación antes de restaurar"
+    fi
+    corriendo enercheck_db || error "enercheck_db no está corriendo"
+    if [ "$desde" = r2 ]; then
+        requiere_externo
+        [ -n "$llave" ] || error "Para restaurar desde r2 indica la llave privada: --llave <archivo> o --llave - (stdin)"
+    fi
+
+    if [ "$cual" = ultimo ]; then
+        elegido=$(conjuntos "$desde" | head -n 1)
+    else
+        elegido=$(conjuntos "$desde" | awk -v n="$cual" '$2 == n' | head -n 1)
+    fi
+    [ -n "$elegido" ] || error "No se encontró el respaldo «$cual» en $desde"
+    tipo=${elegido%% *}
+    nombre=${elegido#* }
+
+    if [ "$confirmar" != si ]; then
+        echo "Se restauraría la base de $tipo/$nombre desde $desde."
+        [ "$desde" = local ] || echo "Además se repondrían los archivos que falten en el servidor."
+        echo "Reemplaza los datos vigentes. Para hacerlo, repite la orden con --confirmar"
+        exit 2
+    fi
+
+    bloquear
+    directorio_temporal
+    echo "Restaurando $tipo/$nombre desde $desde"
+
+    # 1. Obtener y validar todo ANTES de tocar nada
+    if [ "$desde" = r2 ]; then
+        if [ "$llave" = - ]; then
+            cat > "$TMP/llave"
+            llave="$TMP/llave"
+        fi
+        [ -s "$llave" ] || error "La llave privada está vacía o no existe"
+        rc copy --include "$nombre.*" "$REMOTO/$tipo" "$TMP/conjunto"
+        (cd "$TMP/conjunto" && sha256sum --quiet -c "$nombre.sha256") \
+            || error "El respaldo remoto está dañado o incompleto (no coincide su .sha256): no se modificó nada"
+        dump="$TMP/base.dump"
+        age -d -i "$llave" -o "$dump" "$TMP/conjunto/$nombre.dump.age" \
+            || error "No se pudo descifrar el respaldo (¿llave incorrecta?): no se modificó nada"
+
+        archivos_locales > "$TMP/locales"
+        archivos_remotos > "$TMP/remotos"
+        LC_ALL=C comm -13 "$TMP/locales" "$TMP/remotos" > "$TMP/faltan"
+        n_archivos=$(wc -l < "$TMP/faltan")
+        if [ "$n_archivos" -gt 0 ]; then
+            sed 's/$/.age/' "$TMP/faltan" > "$TMP/faltan.age"
+            rc copy --files-from "$TMP/faltan.age" "$REMOTO/archivos" "$TMP/cifrado"
+            mkdir "$TMP/claro"
+            while IFS= read -r f; do
+                mkdir -p "$TMP/claro/$(dirname "$f")"
+                age -d -i "$llave" -o "$TMP/claro/$f" "$TMP/cifrado/$f.age" \
+                    || error "No se pudo descifrar un archivo: no se modificó nada"
+            done < "$TMP/faltan"
+            rm -rf "$TMP/cifrado"
+        fi
+        echo "Descargado y descifrado: base y $n_archivos archivos que faltan en el servidor"
+    else
+        dump="$DIR_RESPALDOS/$nombre.dump"
+    fi
+
+    # 2. Cargar el respaldo en una base aparte, con la aplicación todavía en servicio. Si el dump está
+    # dañado, falla aquí y la base vigente no se toca.
+    psql_admin -c 'DROP DATABASE IF EXISTS enercheck_restaurando' -c 'CREATE DATABASE enercheck_restaurando'
+    if ! docker exec -i enercheck_db pg_restore -U enercheck -d enercheck_restaurando \
+            --no-owner --single-transaction --exit-on-error < "$dump"; then
+        psql_admin -c 'DROP DATABASE IF EXISTS enercheck_restaurando' || true
+        error "El respaldo no se pudo cargar (dump dañado o incompatible): no se modificó nada"
+    fi
+    echo "Respaldo cargado en una base aparte"
+
+    # 3. Punto de no retorno: detener la API e intercambiar las bases. La vigente queda como
+    # enercheck_previa (reemplaza a la de una restauración anterior) para poder volver atrás.
+    docker stop enercheck_backend >/dev/null
+    psql_admin -c 'DROP DATABASE IF EXISTS enercheck_previa'
+    psql_admin -c 'ALTER DATABASE enercheck RENAME TO enercheck_previa'
+    if ! psql_admin -c 'ALTER DATABASE enercheck_restaurando RENAME TO enercheck'; then
+        psql_admin -c 'ALTER DATABASE enercheck_previa RENAME TO enercheck' || true
+        docker start enercheck_backend >/dev/null
+        error "No se pudo activar la base restaurada: se volvió a la anterior"
+    fi
+    echo "Base restaurada (la anterior quedó como enercheck_previa)"
+
+    # 4. Archivos que faltaban: se agregan sin pisar ni borrar los existentes (solo viajan los que
+    # faltan), con el dueño y los permisos que usa la API.
+    if [ "$n_archivos" -gt 0 ]; then
+        (cd "$TMP/claro" && tar --owner="$APP_UID" --group="$APP_UID" --numeric-owner --mode='u=rwX,go=rX'             -cf - -- *) | aux rw 'tar -xf - -C /v'
+        echo "Archivos repuestos: $n_archivos"
+    fi
+
+    docker start enercheck_backend >/dev/null
+    esperar_sano ""
+    echo "Restauración terminada. Si algo no cuadra, la base anterior sigue en enercheck_previa."
+}
+
+# Por SSH (llave del CI) la orden llega en SSH_ORIGINAL_COMMAND y solo se aceptan respaldar y
+# esperar-sano; desde el cron o la consola, como argumentos.
 if [ -n "${SSH_ORIGINAL_COMMAND:-}" ]; then
     read -r -a args <<< "$SSH_ORIGINAL_COMMAND"
-else
-    args=("$@")
+    [ "${#args[@]}" -eq 2 ] || uso
+    case "${args[0]}" in
+        respaldar)    respaldar "${args[1]}" ;;
+        esperar-sano) esperar_sano "${args[1]}" ;;
+        *)            uso ;;
+    esac
+    exit 0
 fi
-[ "${#args[@]}" -eq 2 ] || uso
 
-case "${args[0]}" in
-    respaldar)    respaldar "${args[1]}" ;;
-    esperar-sano) esperar_sano "${args[1]}" ;;
-    *)            uso ;;
+[ "$#" -ge 1 ] || uso
+case "$1" in
+    respaldar)    [ "$#" -eq 2 ] || uso; respaldar "$2" ;;
+    esperar-sano) [ "$#" -eq 2 ] || uso; esperar_sano "$2" ;;
+    listar)       [ "$#" -le 2 ] || uso; listar "${2:-r2}" ;;
+    restaurar)
+        [ "$#" -ge 2 ] || uso
+        cual=$2; desde=r2; llave=; confirmar=no
+        shift 2
+        while [ "$#" -gt 0 ]; do
+            case "$1" in
+                --desde)     [ "$#" -ge 2 ] || uso; desde=$2; shift 2 ;;
+                --llave)     [ "$#" -ge 2 ] || uso; llave=$2; shift 2 ;;
+                --confirmar) confirmar=si; shift ;;
+                *)           uso ;;
+            esac
+        done
+        restaurar "$cual" "$desde" "$llave" "$confirmar"
+        ;;
+    *) uso ;;
 esac

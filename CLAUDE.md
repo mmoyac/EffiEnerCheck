@@ -142,7 +142,7 @@ EnerCheck/
 ├── docker-compose.prod.yml              # Producción: compose "raw" de Dokploy, imágenes fijadas al commit (ver DEPLOY.md)
 ├── .env.prod.example                    # Plantilla del Environment de Dokploy (los secretos nunca van al repo)
 ├── .github/workflows/deploy.yml         # CI/CD: checks en develop/PR; main → aprobación → Docker Hub → Dokploy
-├── infra/servidor/                      # enercheck-ci (respaldos y espera-sano, comando forzado del CI) + instalar.sh
+├── infra/servidor/                      # enercheck-ci (respaldos cifrados a R2, restaurar, espera-sano) + preparar-servidor.sh (VPS nuevo) + pruebas/
 ├── security/                            # Excepciones de pip-audit y Trivy (documentadas)
 ├── DEPLOY.md                            # Pasos manuales de producción, respaldos, rollback
 ├── openspec/
@@ -367,6 +367,9 @@ select(BoletaMaestra).options(selectinload(BoletaMaestra.items_detalle))
 
 ### Helper `_get_X_o_404`
 Cada endpoint usa un helper privado que levanta 404 si no encuentra el registro. Convención: `_get_boleta_o_404(id, db)`.
+
+### Archivos subidos: inmutables
+Todo archivo que se guarda en `/app/uploads` o `/app/privado` lleva un nombre nuevo (uuid) y **nunca se reescribe**: reemplazar = archivo nuevo + borrar el anterior. El respaldo externo (`infra/servidor/enercheck-ci`) sube solo los archivos que aún no están en R2, comparando por ruta; un archivo reescrito en el mismo lugar **no se volvería a respaldar**.
 
 ### Auditoría
 Toda mutación importante llama a `await registrar_auditoria(db, usuario_id, condominio_id, accion, detalles)`. Las acciones son strings en SCREAMING_SNAKE_CASE.
