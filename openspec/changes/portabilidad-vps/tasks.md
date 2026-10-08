@@ -34,7 +34,7 @@
 
 ## 7. Runbook
 
-- [ ] 7.1 Escribir en DEPLOY.md la sección «Migrar o recuperar el VPS» con dos variantes (migración planificada con mantenimiento según D11, y servidor perdido), marcas [PC]/[VPS]/[Dokploy]/[GitHub]/[Cloudflare], tiempos estimados, la lista de secretos de GitHub a actualizar, la verificación final y la mención de n8n como pendiente aparte. Verificar leyéndolo de corrido contra los scripts: cada orden existe con esos argumentos.
+- [x] 7.1 Escribir en DEPLOY.md la sección «Migrar o recuperar el VPS» con dos variantes (migración planificada con mantenimiento según D11, y servidor perdido), marcas [PC]/[VPS]/[Dokploy]/[GitHub]/[Cloudflare], tiempos estimados, la lista de secretos de GitHub a actualizar, la verificación final y la mención de n8n como pendiente aparte. Verificar leyéndolo de corrido contra los scripts: cada orden existe con esos argumentos.
 
 ## 8. Simulacro (integración)
 

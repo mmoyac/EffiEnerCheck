@@ -14,7 +14,8 @@
 #   cerrar-panel   después de crear el administrador y el dominio del panel en Dokploy: cierra :3000
 #   aplicacion     enercheck-ci, cron del respaldo diario, llave pública age, token de R2 (pedido por
 #                  teclado, nunca como argumento) y llave del CI con comando forzado
-#                  opciones: --llave-ci "ssh-ed25519 AAAA... enercheck-ci@github-actions"
+#                  opciones: --llave-ci "ssh-ed25519 AAAA... enercheck-ci@github-actions" (por
+#                            defecto, la de llave-ci.pub, junto a este script)
 #                            --reemplazar-token   (vuelve a pedir el token de R2)
 set -euo pipefail
 
@@ -280,6 +281,11 @@ fase_aplicacion() {
             *)                  uso ;;
         esac
     done
+    # Por defecto, la parte pública de la llave del CI versionada junto a este script (su privada está
+    # en el secreto VPS_SSH_KEY de GitHub): un servidor nuevo no obliga a generar otra.
+    if [ -z "$llave_ci" ] && [ -s "$ORIGEN/llave-ci.pub" ]; then
+        llave_ci=$(head -n 1 "$ORIGEN/llave-ci.pub")
+    fi
     if ! command -v age >/dev/null || ! command -v rclone >/dev/null; then
         echo "Faltan age o rclone: ejecuta antes la fase sistema" >&2
         exit 1

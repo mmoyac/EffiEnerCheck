@@ -7,6 +7,8 @@ Producción corre en un VPS dedicado administrado con **Dokploy**:
 
 Las marcas **[PC]**, **[VPS]**, **[Dokploy]**, **[GitHub]** y **[Cloudflare]** indican dónde se ejecuta cada paso.
 
+> **¿Se cayó el servidor o te cambias de proveedor?** Ve directo al [§12. Migrar o recuperar el VPS](#12-migrar-o-recuperar-el-vps).
+
 ```
 visitante ─HTTPS─▶ Traefik (Dokploy: TLS Let's Encrypt, dominio → contenedor)
                      ├─ comunidadsantalaura.cl, www.  ─▶ enercheck_landing  (nginx: solo GET /api/v1/sitio y /uploads/condominios/)
@@ -60,7 +62,7 @@ Todo lo del servidor lo hace `infra/servidor/preparar-servidor.sh`, en fases ide
 
 ```powershell
 ssh comunidad "mkdir -p /tmp/enercheck-instalar"
-scp infra/servidor/preparar-servidor.sh infra/servidor/enercheck-ci infra/servidor/respaldos.age.pub comunidad:/tmp/enercheck-instalar/
+scp infra/servidor/preparar-servidor.sh infra/servidor/enercheck-ci infra/servidor/respaldos.age.pub infra/servidor/llave-ci.pub comunidad:/tmp/enercheck-instalar/
 ```
 
 **2.1 Sistema** [PC]: paquetes (`age`, `rclone`, `ufw`, `fail2ban`), SSH solo con llaves, `ufw` (22 limitado, 80, 443), fail2ban, hora `America/Santiago` y actualizaciones de seguridad automáticas.
@@ -88,25 +90,18 @@ ssh comunidad "bash /tmp/enercheck-instalar/preparar-servidor.sh cerrar-panel"
 
 **2.3 Aplicación**: `enercheck-ci`, el cron del respaldo diario (03:30), la llave pública de respaldos, el **token de R2** y la **llave del pipeline**.
 
-Llave del pipeline [PC], de uso exclusivo del CI (si ya la tienes de antes, usa su parte pública):
+[PC] Con `-t`, porque el script te pide el token de R2 por teclado (el ID, la clave secreta sin mostrarla y el endpoint; están en tu archivo privado «EnerCheck – token R2 servidor»). Nunca va como argumento ni por el chat. Cada dato se vuelve a pedir si no tiene el formato esperado:
 
 ```powershell
-ssh-keygen -t ed25519 -N '""' -C enercheck-ci@github-actions -f enercheck_ci
-```
-
-[PC] Con `-t`, porque el script te pide el token de R2 por teclado (el ID, la clave secreta sin mostrarla y el endpoint; están en tu archivo privado «EnerCheck – token R2 servidor»). Nunca va como argumento ni por el chat:
-
-```powershell
-ssh -t comunidad "bash /tmp/enercheck-instalar/preparar-servidor.sh aplicacion --llave-ci '$(Get-Content enercheck_ci.pub)'; rm -rf /tmp/enercheck-instalar"
+ssh -t comunidad "bash /tmp/enercheck-instalar/preparar-servidor.sh aplicacion; rm -rf /tmp/enercheck-instalar"
 ```
 
 - Verifica el token listando el bucket `efficomunidad-respaldos` antes de guardarlo (`/opt/enercheck/rclone.conf`, 600). Para cambiarlo después: `--reemplazar-token`.
-- Agrega la llave del CI a `/root/.ssh/authorized_keys` con **comando forzado** (`command="/opt/enercheck/bin/enercheck-ci",restrict`): esa llave solo puede respaldar y esperar el deploy, no abre una shell.
+- Agrega la **llave del pipeline** a `/root/.ssh/authorized_keys` con **comando forzado** (`command="/opt/enercheck/bin/enercheck-ci",restrict`): esa llave solo puede respaldar y esperar el deploy, no abre una shell. Su parte pública está versionada en `infra/servidor/llave-ci.pub` y la privada es el secreto `VPS_SSH_KEY` de GitHub, así que un servidor nuevo no obliga a cambiarla.
+- Para **cambiar** la llave del pipeline (si se filtra): genera otra en el PC (`ssh-keygen -t ed25519 -N '""' -C enercheck-ci@github-actions -f enercheck_ci`), reemplaza `llave-ci.pub` con su parte pública, ejecuta esta fase con `--llave-ci "$(Get-Content enercheck_ci.pub)"`, quita la línea vieja de `authorized_keys`, carga la privada en `VPS_SSH_KEY` y bórrala del PC.
 - Para actualizar `enercheck-ci` tras un cambio en el repo, repite la copia y esta fase: lo ya configurado no se toca.
 
-Comprueba [PC]:
-- `ssh -i enercheck_ci root@<IP>` debe responder con el uso de `enercheck-ci`, no con una shell;
-- `ssh -i enercheck_ci root@<IP> "respaldar diario"` debe funcionar, aunque la base todavía no exista.
+Comprueba [VPS]: `grep -c 'command="/opt/enercheck/bin/enercheck-ci",restrict' /root/.ssh/authorized_keys` debe dar `1`. La prueba de punta a punta de la llave es el próximo deploy (respaldo previo y espera por SSH).
 
 ## 3. Dokploy (una vez)
 
@@ -352,3 +347,103 @@ Agregar un condominio **no requiere cambios en el repo**:
 2. [Dokploy] Agrega los dominios en *Domains*: el de la landing va al servicio `landing` y el del portal a `frontend`, con HTTPS.
 3. [Portal, super admin] En Condominios, define los módulos, `portal_url`, los dominios de la landing, el color y el logo.
 4. Si contrata la landing, crea su contenido en `backend/app/sitio/contenido/<slug>.json` (ver [docs/sitio-publico.md](docs/sitio-publico.md)) y despliega.
+
+## 12. Migrar o recuperar el VPS
+
+Dos casos con la misma receta: **migración planificada** (el servidor viejo sigue vivo: no se pierde nada) y **servidor perdido** (se pierde lo escrito después del último respaldo en R2, como mucho un día). Meta: producción de vuelta en **alrededor de una hora**.
+
+**Lo que necesitas a mano** (nada de esto está en el servidor):
+- tu **llave privada de respaldos** (`$HOME\.secretos\enercheck-respaldos.key` o su copia fuera del PC);
+- el **token de R2** («EnerCheck – token R2 servidor»);
+- acceso a Cloudflare, GitHub, Docker Hub y al panel del proveedor nuevo;
+- `age` y `rclone` en el PC (`winget install FiloSottile.age Rclone.Rclone`).
+
+| Paso | Dónde | Planificada | Perdido | Tiempo |
+|---|---|---|---|---|
+| 0. Bajar el TTL de los registros A a 60 s | Cloudflare | Un día antes | — | — |
+| 1. Crear el VPS y el alias SSH | Proveedor, PC | ✔ | ✔ | 10 min |
+| 2. Preparar el servidor | PC | ✔ | ✔ | 15 min |
+| 3. Configurar Dokploy y desplegar la versión vigente | Dokploy | ✔ | ✔ | 15 min |
+| 4. Mantenimiento y último respaldo en el viejo | VPS viejo | ✔ | — | 2 min |
+| 5. Restaurar | PC → VPS nuevo | ✔ | ✔ | 5 min |
+| 6. DNS y certificados | Cloudflare | ✔ | ✔ | 5–10 min |
+| 7. GitHub y verificación | GitHub, navegador | ✔ | ✔ | 10 min |
+
+En una migración planificada, los pasos 1 a 3 se hacen con calma y con el sitio en servicio; el corte va solo del paso 4 al 6.
+
+### 12.1 Crear el VPS
+
+1. [Proveedor] Ubuntu **24.04**, con tu llave SSH pública (`~/.ssh/comunidad_vps.pub`) autorizada para `root` al crearlo. Mínimo 2 vCPU y 4 GB de RAM.
+2. [PC] En `~/.ssh/config`, cambia el `HostName` del alias `comunidad` a la IP nueva (o crea `comunidad-nuevo` si el viejo sigue vivo y usa ese nombre en lo que sigue). Borra la huella vieja: `ssh-keygen -R <IP nueva>`.
+3. [PC] `ssh comunidad "hostname"` debe responder.
+
+### 12.2 Preparar el servidor
+
+Las fases del §2, en orden: `sistema` → `dokploy` → (administrador y dominio del panel) → `cerrar-panel` → `aplicacion` (pide el token de R2; la llave del pipeline va sola).
+
+- En una **migración planificada**, el dominio del panel sigue apuntando al servidor viejo: trabaja en `http://<IP nueva>:3000` (abierto solo a tu IP) y deja `cerrar-panel` para después del paso 6, cuando `dokploy.<dominio>` ya apunte al nuevo.
+- La fase `dokploy` debe terminar con `dokploy-network: 10.0.1.0/24 ✔`.
+
+### 12.3 Configurar Dokploy y desplegar la versión vigente
+
+1. **Los secretos** [PC], desde el último respaldo (con las credenciales de R2 cargadas como en el §7, «Bajar y descifrar a mano»):
+
+   ```powershell
+   mkdir $HOME\migracion; cd $HOME\migracion
+   rclone lsf r2:efficomunidad-respaldos/diario/ --include "*.sha256"        # el último es el más reciente
+   rclone copy r2:efficomunidad-respaldos/diario/ . --include "diario-<fecha>.env.age" --include "diario-<fecha>.imagen.txt.age"
+   age -d -i "$HOME\.secretos\enercheck-respaldos.key" -o produccion.env diario-<fecha>.env.age
+   age -d -i "$HOME\.secretos\enercheck-respaldos.key" diario-<fecha>.imagen.txt.age   # …/enercheck-backend:<SHA>
+   ```
+
+   Anota el **nombre del respaldo** (`diario-<fecha>`) y el **SHA** de la imagen: es la versión que estaba corriendo.
+
+2. [Dokploy] Los pasos del §3 (registro, proyecto `enercheck`, servicio Compose **Raw**, API key):
+   - **Compose:** pega `docker-compose.prod.yml` **del repo** (rama `main`). **No** uses el `.compose.yml` del respaldo: Dokploy le agrega etiquetas de Traefik con nombres internos de la instalación vieja.
+   - **Environment:** pega `produccion.env` **quitando** las líneas `APP_NAME=`, `COMPOSE_PROJECT_NAME=` y `DOCKER_CONFIG=` (las agrega Dokploy), y pon `TAG=<SHA>`.
+   - **Domains:** los del §3, paso 4.
+3. [Dokploy] **Deploy**. [PC] `ssh comunidad "enercheck-ci esperar-sano <SHA>"` debe terminar con `enercheck_backend sano`. La base está vacía: el arranque crea las tablas y el super admin de `SUPERADMIN_*`; el paso 5 la reemplaza entera.
+4. Borra lo descifrado: `cd $HOME; Remove-Item -Recurse -Force $HOME\migracion` (tiene todos los secretos).
+
+### 12.4 Mantenimiento y último respaldo (solo planificada)
+
+[VPS viejo] Sin el portal nadie escribe; la app del lector sigue capturando sin conexión y sincroniza cuando vuelva:
+
+```sh
+docker stop enercheck_frontend enercheck_landing
+enercheck-ci respaldar diario        # debe terminar con «Externo: diario/<nombre> subido»
+```
+
+Anota ese `<nombre>`: es el que se restaura en el paso siguiente.
+
+### 12.5 Restaurar
+
+[PC] La llave privada viaja al servidor solo durante la restauración y se borra al terminar:
+
+```powershell
+scp "$HOME\.secretos\enercheck-respaldos.key" comunidad:/root/.llave-restaurar
+ssh comunidad "enercheck-ci restaurar <nombre> --llave /root/.llave-restaurar --confirmar; shred -u /root/.llave-restaurar"
+```
+
+> ⚠️ Usa el **nombre** anotado (§12.4 en una planificada, §12.3 si el servidor se perdió), **no** `ultimo`: si el servidor nuevo ya pasó por las 03:30, su cron subió a R2 un respaldo de su base **vacía**, y ese sería el «último». `enercheck-ci listar` muestra los disponibles.
+
+Debe terminar con «Restauración terminada». Repone la base y **todos** los archivos (boletas, logos, vouchers, fotos de medidores) desde R2.
+
+### 12.6 DNS y certificados
+
+[Cloudflare] Registros A de `comunidadsantalaura.cl`, `www`, `portal`, `dokploy` (y `n8n` si corresponde) → **IP nueva**, Solo DNS. Traefik pide los certificados de Let's Encrypt en cuanto el DNS apunta al nuevo: puede tardar unos minutos. Si después de 10 minutos el navegador sigue mostrando un certificado inválido, [VPS] `docker restart dokploy-traefik` para que lo vuelva a pedir. En una migración planificada, ahora corresponde `cerrar-panel` (§12.2).
+
+### 12.7 GitHub y verificación
+
+1. [GitHub] Environment `production`: actualiza `VPS_HOST`, `VPS_KNOWN_HOSTS` (`ssh-keyscan -t ed25519 <IP nueva>`), `DOKPLOY_API_KEY` y `DOKPLOY_COMPOSE_ID`. `DOKPLOY_URL` y `VPS_SSH_KEY` no cambian.
+2. [Navegador] Comprueba:
+   - `https://portal.<dominio>`: inicia sesión con una cuenta real (las claves de siempre);
+   - una boleta con su imagen, un voucher de rifa y una foto de medidor;
+   - `https://<dominio>`: la landing con su logo.
+3. [VPS nuevo] `enercheck-ci respaldar diario` termina subiendo a R2 (los archivos dirán «nada nuevo»).
+4. El próximo push a `main` despliega en el servidor nuevo: confirma que el respaldo previo y `esperar-sano` pasan.
+5. **Planificada:** deja el servidor viejo **apagado** (no destruido) una semana y luego elimínalo en el proveedor. Vuelve a subir el TTL en Cloudflare.
+
+> **n8n** (`n8n.<dominio>`) vive en el mismo servidor con sus datos propios y **no** está cubierto por estos respaldos: en una migración planificada, expórtalo antes desde su panel; si el servidor se perdió, hay que reconfigurarlo.
+
+> Este procedimiento se ensaya en un VPS desechable (simulacro, tarea 8.1 de `portabilidad-vps`). Anota aquí la fecha y el tiempo total de cada ensayo: _pendiente_.
