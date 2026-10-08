@@ -6,7 +6,7 @@ Carga el padrón de un condominio desde la planilla de residentes (MATRIZ RESIDE
 Crea, si no existen:
   - el condominio (por nombre; --rut solo se usa al crearlo),
   - una parcela por cada "Unidad" (propietario = primer "Dueño" de la unidad),
-  - un usuario parcelero por cada "Correo", con su "Teléfono" normalizado, asignado a su unidad.
+  - un usuario comunero por cada "Correo", con su "Teléfono" normalizado, asignado a su unidad.
 
 Los residentes nuevos quedan como cuentas pendientes, sin clave: cada uno crea la suya con su
 invitación (spec acceso-por-enlace). Es idempotente: no toca las cuentas que ya existen, solo
@@ -173,7 +173,7 @@ async def cargar(
     await db.flush()
 
     # ---- Usuarios y asignaciones --------------------------------------------------------------------
-    rol_parcelero = (await db.execute(select(Rol).where(Rol.nombre == "parcelero"))).scalar_one()
+    rol_comunero = (await db.execute(select(Rol).where(Rol.nombre == "comunero"))).scalar_one()
     for r in residentes:
         usuario = (await db.execute(
             select(Usuario).options(selectinload(Usuario.rol)).where(Usuario.email == r.email)
@@ -184,14 +184,14 @@ async def cargar(
                 nombre=r.nombre,
                 email=r.email,
                 password_hash=None,   # pendiente: crea su clave con la invitación
-                rol_id=rol_parcelero.id,
+                rol_id=rol_comunero.id,
                 condominio_id=condominio.id,
                 telefono=r.telefono,
             )
             db.add(usuario)
             await db.flush()
             resumen.usuarios_creados += 1
-        elif usuario.rol.nombre != "parcelero" or usuario.condominio_id != condominio.id:
+        elif usuario.rol.nombre != "comunero" or usuario.condominio_id != condominio.id:
             resumen.avisos.append(
                 f"fila {r.fila} ({r.email}): el correo ya es de una cuenta {usuario.rol.nombre} "
                 "de otro condominio o rol; no se asigna la parcela"

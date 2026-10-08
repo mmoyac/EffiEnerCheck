@@ -4,7 +4,7 @@ from app.schemas.boleta import (
     BoletaItemDetalleCreate,
     BoletaItemDetalleResponse,
     BoletaMaestraCreate,
-    BoletaMaestraParceleroResponse,
+    BoletaMaestraComuneroResponse,
     BoletaMaestraResponse,
     BoletaMaestraUpdate,
 )
@@ -19,7 +19,7 @@ __all__ = [
     "LoginRequest", "TokenPayload", "TokenResponse",
     "AuditoriaLogResponse",
     "BoletaItemDetalleCreate", "BoletaItemDetalleResponse",
-    "BoletaMaestraCreate", "BoletaMaestraUpdate", "BoletaMaestraResponse", "BoletaMaestraParceleroResponse",
+    "BoletaMaestraCreate", "BoletaMaestraUpdate", "BoletaMaestraResponse", "BoletaMaestraComuneroResponse",
     "CondominioCreate", "CondominioUpdate", "CondominioResponse",
     "LecturaParcelaCreate", "LecturaParcelaUpdate", "LecturaParcelaResponse",
     "LiquidacionParcelaResponse", "MarcarPagadoRequest",

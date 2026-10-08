@@ -55,7 +55,7 @@ export default function Rifas() {
       {isLoading ? (
         <div className="flex h-64 items-center justify-center"><Spinner size="lg" className="text-primary-500" /></div>
       ) : rifas.length === 0 ? (
-        <Alert variant="info">Aún no hay rifas. Crea una para que los parceleros puedan comprar números desde su portal.</Alert>
+        <Alert variant="info">Aún no hay rifas. Crea una para que los comuneros puedan comprar números desde su portal.</Alert>
       ) : (
         <Card padding={false}>
           <div className="overflow-x-auto">

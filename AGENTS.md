@@ -26,7 +26,7 @@ Un condominio puede tener solo la landing, solo la administración (enlazada des
 - **Iconos:** Lucide React
 - **Data fetching:** React Query (TanStack Query v5)
 - **Routing:** React Router v6
-- **Diseño:** Mobile-first. La interfaz del **lector** está optimizada para uso en campo con móvil de 5". Admin y parcelero priorizan escritorio.
+- **Diseño:** Mobile-first. La interfaz del **lector** está optimizada para uso en campo con móvil de 5". Admin y comunero priorizan escritorio.
 
 ### Infraestructura
 - **Docker & Docker Compose:** orquesta Backend (FastAPI), Frontend (Nginx), y Base de Datos (PostgreSQL) como servicios independientes
@@ -56,7 +56,7 @@ EnerCheck/
   frontend/
     src/
       components/      # Componentes reutilizables (UI atómica)
-      pages/           # Vistas por rol (admin/, lector/, parcelero/)
+      pages/           # Vistas por rol (admin/, lector/, comunero/)
       hooks/           # Custom hooks (useAuth, useQueryX…)
       api/             # Clientes React Query por recurso
       types/           # Tipos TypeScript generados o manuales
@@ -77,7 +77,7 @@ EnerCheck/
 | `super_admin` | Gestión de condominios, usuarios globales |
 | `admin_condominio` | Dashboard, boletas (+ carga con IA), lecturas, liquidaciones, usuarios del condominio |
 | `lector` | Vista móvil optimizada: lista de parcelas pendientes → captura de lectura → confirmación |
-| `parcelero` | Mi liquidación del período, historial, estado de pago |
+| `comunero` | Mi liquidación del período, historial, estado de pago |
 
 ## 6. Carga de Boleta con IA (Gemini Vision)
 Al crear una boleta maestra, el sistema copia automáticamente los ítems del período anterior dejándolos en $0. Luego, el admin puede subir una imagen y el OCR de Gemini:
@@ -90,7 +90,7 @@ Variable de entorno requerida: `GEMINI_API_KEY=xxxx`
 ## 7. Integración con el Esquema de Base de Datos (schema.dbml)
 - El archivo `schema.dbml` es la **fuente única de verdad** para estructura de tablas, campos y relaciones.
 - Multitenancy mediante `condominio_id` en todas las tablas operativas.
-- Roles: `super_admin`, `admin_condominio`, `lector`, `parcelero`.
+- Roles: `super_admin`, `admin_condominio`, `lector`, `comunero`.
 - M2M usuario ↔ parcelas via tabla `usuario_parcelas`.
 
 ## 8. Motor de Cálculo EnerCheck
@@ -114,9 +114,9 @@ El motor es idempotente: elimina liquidaciones previas antes de recalcular.
 4. Admin calcula liquidaciones (`POST /liquidaciones/calcular/{boleta_id}`).
 5. Admin revisa y cierra período → `liquidaciones_cerradas = true`.
 6. Admin publica boleta → `boleta_visible_usuarios = true`.
-7. Parcelero puede ver su liquidación (Vista de lista navegable a detalle en móvil).
+7. Comunero puede ver su liquidación (Vista de lista navegable a detalle en móvil).
 
 ## 10. Seguridad y Auditoría
-- `boleta_visible_usuarios`: condiciona acceso del parcelero a la imagen original.
+- `boleta_visible_usuarios`: condiciona acceso del comunero a la imagen original.
 - Toda inserción/modificación en boletas, lecturas y liquidaciones registra entrada en `auditoria_logs` (`usuario_id` + acción).
 - JWT almacenado en `localStorage`; React Query adjunta el token en cada request.

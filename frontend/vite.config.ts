@@ -23,16 +23,22 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         // La API y los archivos subidos nunca salen de la caché del service worker
-        navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
+        // La capacitación es un sitio estático aparte: el SW no debe responder con el portal
+        navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//, /^\/capacitacion\//],
       },
       // El manifiesto lo genera la API según el dominio (nombre y color del condominio): /manifest.webmanifest
       manifest: false,
     }),
   ],
+  // Desarrollo: `npm run dev` con recarga en caliente (el backend del docker-compose recarga solo).
+  // Para probar desde el celular en la misma red: `npm run dev -- --host`.
   server: {
+    port: 3000,
     proxy: {
       '/api':     { target: 'http://localhost:8000', changeOrigin: true },
       '/uploads': { target: 'http://localhost:8000', changeOrigin: true },
+      // El manifiesto lo arma la API según el dominio (igual que nginx en el contenedor)
+      '/manifest.webmanifest': { target: 'http://localhost:8000', rewrite: () => '/api/v1/portal/manifest' },
     },
   },
 })

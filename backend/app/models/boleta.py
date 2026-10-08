@@ -25,8 +25,11 @@ class BoletaMaestra(Base):
     boleta_visible_usuarios: Mapped[bool] = mapped_column(Boolean, default=False)
     # borrador  → recién creada, o devuelta tras cambiar las cifras. No se puede calcular.
     # validada  → el admin corroboró qué ítems entran al reparto. Habilita el cálculo.
-    # publicada → visible para los parceleros. Punto sin retorno.
+    # publicada → visible para los comuneros. Punto sin retorno.
     estado: Mapped[str] = mapped_column(String, nullable=False, default="borrador")
+    # regular         → período facturado por la compañía (boleta, ítems, liquidaciones).
+    # lectura_inicial → solo registra la lectura de partida de cada medidor; no se liquida ni se publica.
+    tipo: Mapped[str] = mapped_column(String(20), nullable=False, default="regular", server_default="regular")
     # Candados de cierre de período
     lecturas_cerradas: Mapped[bool] = mapped_column(Boolean, default=False)
     liquidaciones_cerradas: Mapped[bool] = mapped_column(Boolean, default=False)

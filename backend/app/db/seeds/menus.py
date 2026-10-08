@@ -17,7 +17,7 @@ MENUS = [
     {"id": 9, "label": "Rifas",         "path": "/rifas",         "icon": "ticket",      "orden": 9, "modulo": "rifas"},
 ]
 
-# rol_id: 1=super_admin | 2=admin_condominio | 3=lector | 4=parcelero
+# rol_id: 1=super_admin | 2=admin_condominio | 3=lector | 4=comunero
 MENU_ROLES = [
     # Dashboard — todos los roles
     {"menu_id": 1, "rol_id": 1}, {"menu_id": 1, "rol_id": 2},
@@ -26,7 +26,7 @@ MENU_ROLES = [
     {"menu_id": 2, "rol_id": 1},
     # Usuarios — super_admin y admin_condominio
     {"menu_id": 3, "rol_id": 1}, {"menu_id": 3, "rol_id": 2},
-    # Parcelas — super_admin, admin_condominio, lector, parcelero
+    # Parcelas — super_admin, admin_condominio, lector, comunero
     {"menu_id": 4, "rol_id": 1}, {"menu_id": 4, "rol_id": 2},
     {"menu_id": 4, "rol_id": 3}, {"menu_id": 4, "rol_id": 4},
     # Boletas — todos los roles
@@ -35,12 +35,12 @@ MENU_ROLES = [
     # Lecturas — super_admin, admin_condominio, lector
     {"menu_id": 6, "rol_id": 1}, {"menu_id": 6, "rol_id": 2},
     {"menu_id": 6, "rol_id": 3},
-    # Liquidaciones — super_admin, admin_condominio, parcelero
+    # Liquidaciones — super_admin, admin_condominio, comunero
     {"menu_id": 7, "rol_id": 1}, {"menu_id": 7, "rol_id": 2},
     {"menu_id": 7, "rol_id": 4},
     # Auditoría — solo super_admin
     {"menu_id": 8, "rol_id": 1},
-    # Rifas — super_admin y admin_condominio (el parcelero entra desde su portal)
+    # Rifas — super_admin y admin_condominio (el comunero entra desde su portal)
     {"menu_id": 9, "rol_id": 1}, {"menu_id": 9, "rol_id": 2},
 ]
 

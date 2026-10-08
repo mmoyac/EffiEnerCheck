@@ -20,9 +20,9 @@ export function useIsLector() {
   return role === 'lector'
 }
 
-export function useIsParcelero() {
+export function useIsComunero() {
   const role = useRole()
-  return role === 'parcelero'
+  return role === 'comunero'
 }
 
 /** Módulos habilitados del condominio del usuario (el super_admin los tiene todos) */

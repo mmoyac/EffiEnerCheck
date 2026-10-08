@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Capacitación EFFIComunidad</title>
+  <meta name="description" content="Centro de capacitación de EFFIComunidad: recorridos animados, paso a paso, por módulo y por rol.">
+  <meta name="theme-color" content="#16a34a">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <header class="sitio-cab">
+    <div class="sitio-cab-in">
+      <a class="marca" href="#/">
+        <span class="marca-logo"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 21a8 8 0 0 0-16 0"/><circle cx="10" cy="8" r="5"/><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3"/></svg></span>
+        <span>EFFIComunidad<small>Centro de capacitación</small></span>
+      </a>
+      <button type="button" class="tema" id="tema" aria-label="Cambiar entre tema claro y oscuro">Tema</button>
+    </div>
+  </header>
+
+  <main id="app" tabindex="-1">
+    <noscript><p>Esta capacitación necesita JavaScript para mostrar los recorridos animados.</p></noscript>
+  </main>
+
+  <footer class="sitio-pie">
+    Las pantallas son de ejemplo: los nombres, parcelas, montos y teléfonos son ficticios.
+    · <a href="/">Ir al portal</a>
+  </footer>
+
+  <!-- Orden: piezas del portal simulado → contenidos por módulo → motor -->
+  <script src="pantallas.js"></script>
+  <script src="recorridos/plataforma.js"></script>
+  <script src="recorridos/rifas.js"></script>
+  <script src="motor.js"></script>
+</body>
+</html>

@@ -180,7 +180,7 @@ Comprueba:
 
 ## 6. Carga inicial (una vez): Santa Laura desde desarrollo
 
-Solo pasan a producción la configuración del condominio, sus parcelas y sus parceleros con sus asignaciones. **No** pasan boletas, lecturas, liquidaciones, rifas, auditoría, otros condominios ni las cuentas del seed. Los parceleros quedan como **cuentas pendientes, sin clave**: nadie puede entrar como ellos hasta que cada uno cree la suya con su invitación (`app/db/copiar_desde_desarrollo.py`).
+Solo pasan a producción la configuración del condominio, sus parcelas y sus comuneros con sus asignaciones. **No** pasan boletas, lecturas, liquidaciones, rifas, auditoría, otros condominios ni las cuentas del seed. Los comuneros quedan como **cuentas pendientes, sin clave**: nadie puede entrar como ellos hasta que cada uno cree la suya con su invitación (`app/db/copiar_desde_desarrollo.py`).
 
 > **El JSON tiene datos personales.** `*.carga.json` está en `.gitignore`. Se borra apenas termina la carga.
 
@@ -208,7 +208,7 @@ shred -u /root/santa-laura.carga.json
 ```
 
 - La carga es idempotente.
-- Con los datos de desarrollo actuales crea **53 parcelas y 69 parceleros**, todos pendientes.
+- Con los datos de desarrollo actuales crea **53 parcelas y 69 comuneros**, todos pendientes.
 - `www.` no hace falta como dominio aparte: se guarda sin `www`, y la landing redirige `www` al dominio sin él.
 
 **Después de la carga**, desde el portal con el super admin:
@@ -289,6 +289,8 @@ Cada imagen está publicada con el SHA de su commit: **un rollback no reconstruy
 > ⚠️ **Cuentas pendientes:** desde `acceso-por-invitacion`, `usuarios.password_hash` admite NULL. Una imagen anterior a ese cambio no arranca con cuentas pendientes en la base, y su migración no se puede bajar mientras existan. Si hay que volver atrás, restaura el respaldo previo.
 
 > ⚠️ **Las migraciones no se revierten solas.** Si la versión nueva migró la base, primero restaura el respaldo `predeploy-…-<sha_nuevo>` (§7) y después levanta la imagen anterior. Se pierde lo escrito en producción entre ese deploy y la restauración.
+
+> ⚠️ **Rol `comunero`:** la migración `c7f1a2e93d40` renombra el rol 4 de `parcelero` a `comunero`. Una imagen anterior busca `parcelero`: sus comuneros quedarían sin acceso y la carga de residentes fallaría. Para volver a una imagen anterior a ese cambio sin restaurar el respaldo, primero baja solo esa migración [VPS]: `docker exec enercheck_backend alembic downgrade b4e2c7d91f30`. Después levanta la imagen anterior.
 
 Si el deploy nuevo también cambió el compose, `predeploy-…-<sha_nuevo>.compose.yml` tiene el anterior. Pégalo en el compose Raw de Dokploy antes de presionar Deploy.
 

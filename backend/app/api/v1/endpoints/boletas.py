@@ -1,6 +1,6 @@
 from typing import Annotated, Union
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -11,11 +11,15 @@ from app.models.boleta import BoletaItemDetalle, BoletaMaestra
 from app.models.usuario import Usuario
 from app.schemas.boleta import (
     BoletaMaestraCreate,
-    BoletaMaestraParceleroResponse,
+    BoletaMaestraComuneroResponse,
     BoletaMaestraResponse,
     BoletaMaestraUpdate,
     BoletaMaestraDetallesUpdate,
+    LecturaInicialCreate,
 )
+from app.services import fotos_lectura
+from app.services import lecturas_iniciales
+from app.services.periodos import LECTURA_INICIAL, es_lectura_inicial, exigir_periodo_regular
 
 router = APIRouter(prefix="/boletas", tags=["boletas"])
 
@@ -81,6 +85,11 @@ async def _get_boleta_o_404(boleta_id: int, db: AsyncSession) -> BoletaMaestra:
     return boleta
 
 
+def _orden_natural(numero_parcela: str) -> tuple[int, str]:
+    digitos = "".join(c for c in numero_parcela if c.isdigit())
+    return (int(digitos) if digitos else 0, numero_parcela)
+
+
 def _validar_tenant(boleta: BoletaMaestra, tenant_id: int | None) -> None:
     if tenant_id is not None and boleta.condominio_id != tenant_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin acceso a esta boleta")
@@ -95,7 +104,7 @@ async def list_boletas(
     stmt = _boleta_query()
     if tenant_id is not None:
         stmt = stmt.where(BoletaMaestra.condominio_id == tenant_id)
-    if current_user.rol.nombre == "parcelero":
+    if current_user.rol.nombre == "comunero":
         stmt = stmt.where(BoletaMaestra.estado == "publicada")
     
     stmt = stmt.order_by(BoletaMaestra.periodo_mes.desc())
@@ -116,11 +125,13 @@ async def crear_boleta(
     if not effective_cid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="super_admin debe especificar condominio_id")
 
-    # Validar que no exista una boleta sin cerrar en el mismo condominio
+    # Validar que no exista una boleta sin cerrar en el mismo condominio. La lectura inicial no tiene
+    # liquidaciones: cuenta como cerrada apenas se cierran sus lecturas.
     resultado_abierta = await db.execute(
         select(BoletaMaestra)
         .where(BoletaMaestra.condominio_id == effective_cid)
         .where(BoletaMaestra.liquidaciones_cerradas == False)  # noqa: E712
+        .where(~((BoletaMaestra.tipo == LECTURA_INICIAL) & (BoletaMaestra.lecturas_cerradas == True)))  # noqa: E712
         .order_by(BoletaMaestra.periodo_mes.desc())
         .limit(1)
     )
@@ -128,10 +139,40 @@ async def crear_boleta(
     if boleta_abierta:
         from app.utils.format import periodo_label
         label = periodo_label(boleta_abierta.periodo_mes)
+        if es_lectura_inicial(boleta_abierta):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"La lectura inicial ({label}) aún tiene las lecturas abiertas. Ciérralas antes de cargar la primera boleta.",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"El período {label} aún no está cerrado. Cierra las liquidaciones antes de cargar una nueva boleta.",
         )
+
+    # Sin ceros silenciosos: una parcela activa sin ninguna lectura previa partiría con lectura anterior 0
+    if not data.aceptar_sin_lectura_anterior:
+        from app.models.lectura import LecturaParcela
+        from app.models.parcela import Parcela
+        con_historial = (
+            select(LecturaParcela.parcela_id)
+            .join(BoletaMaestra, LecturaParcela.boleta_id == BoletaMaestra.id)
+            .where(BoletaMaestra.condominio_id == effective_cid)
+        )
+        sin_historial = (await db.execute(
+            select(Parcela)
+            .where(Parcela.condominio_id == effective_cid, Parcela.activa == True)  # noqa: E712
+            .where(Parcela.id.not_in(con_historial))
+        )).scalars().all()
+        if sin_historial:
+            sin_historial = sorted(sin_historial, key=lambda p: _orden_natural(p.numero_parcela))
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "codigo": "sin_lectura_anterior",
+                    "mensaje": f"{len(sin_historial)} parcela(s) no tienen lectura anterior y partirían en 0",
+                    "parcelas": [{"id": p.id, "numero_parcela": p.numero_parcela} for p in sin_historial],
+                },
+            )
 
     # Buscar última boleta para calcular mes siguiente
     from sqlalchemy.orm import selectinload
@@ -224,7 +265,152 @@ async def crear_boleta(
     return await _get_boleta_o_404(boleta.id, db)
 
 
-@router.get("/{boleta_id}", response_model=Union[BoletaMaestraResponse, BoletaMaestraParceleroResponse])
+@router.post("/lectura-inicial", response_model=BoletaMaestraResponse, status_code=status.HTTP_201_CREATED)
+async def crear_lectura_inicial(
+    data: LecturaInicialCreate,
+    request: Request,
+    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    tenant_id: TenantId,
+    db: DB,
+):
+    """
+    Abre el período de lectura inicial: una lectura en blanco por parcela (anterior 0) para registrar la
+    lectura de partida de cada medidor. Solo en un condominio sin boletas. No se liquida ni se publica.
+    """
+    effective_cid = tenant_id if tenant_id is not None else data.condominio_id
+    if not effective_cid:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="super_admin debe especificar condominio_id")
+
+    existe = (await db.execute(
+        select(BoletaMaestra.id).where(BoletaMaestra.condominio_id == effective_cid).limit(1)
+    )).scalar_one_or_none()
+    if existe:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El condominio ya tiene períodos: la lectura inicial solo se abre antes de la primera boleta",
+        )
+
+    from app.models.lectura import LecturaParcela
+    from app.models.parcela import Parcela
+    boleta = BoletaMaestra(condominio_id=effective_cid, periodo_mes=data.periodo_mes, tipo=LECTURA_INICIAL,
+                           creado_por=current_user.id)
+    db.add(boleta)
+    await db.flush()
+    parcelas = (await db.execute(select(Parcela).where(Parcela.condominio_id == effective_cid))).scalars().all()
+    for p in parcelas:
+        db.add(LecturaParcela(parcela_id=p.id, boleta_id=boleta.id, lectura_anterior=0.0, lectura_actual=0.0,
+                              kwh_consumidos=0.0, lector_id=current_user.id))
+
+    await registrar_auditoria(
+        db, usuario_id=current_user.id, condominio_id=effective_cid, accion="CREATE_LECTURA_INICIAL",
+        detalles={"boleta_id": boleta.id, "periodo_mes": str(data.periodo_mes), "parcelas": len(parcelas)},
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.commit()
+    return await _get_boleta_o_404(boleta.id, db)
+
+
+async def _lectura_inicial_abierta(boleta_id: int, tenant_id: int | None, db: AsyncSession) -> BoletaMaestra:
+    boleta = await _get_boleta_o_404(boleta_id, db)
+    _validar_tenant(boleta, tenant_id)
+    if not es_lectura_inicial(boleta):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="La carga desde Excel solo está disponible en la lectura inicial")
+    return boleta
+
+
+async def _lecturas_con_parcela(boleta_id: int, db: AsyncSession):
+    from app.models.lectura import LecturaParcela
+    from app.models.parcela import Parcela
+    filas = (await db.execute(
+        select(LecturaParcela, Parcela).join(Parcela, LecturaParcela.parcela_id == Parcela.id)
+        .where(LecturaParcela.boleta_id == boleta_id)
+    )).all()
+    return sorted(filas, key=lambda f: _orden_natural(f[1].numero_parcela))
+
+
+@router.get("/{boleta_id}/lecturas-iniciales/plantilla")
+async def plantilla_lecturas_iniciales(
+    boleta_id: int,
+    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    tenant_id: TenantId,
+    db: DB,
+):
+    """Plantilla Excel de la lectura inicial: una fila por parcela, con la lectura ya tomada si la hay."""
+    boleta = await _lectura_inicial_abierta(boleta_id, tenant_id, db)
+    filas = [(p.numero_parcela, p.propietario_nombre, l.lectura_actual if l.fecha_toma else None)
+             for l, p in await _lecturas_con_parcela(boleta.id, db)]
+    contenido = lecturas_iniciales.plantilla(filas, f"Lectura inicial {boleta.periodo_mes:%Y-%m}")
+    return Response(
+        content=contenido,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="lecturas-iniciales-{boleta.periodo_mes:%Y-%m}.xlsx"',
+                 "Cache-Control": "private, no-store"},
+    )
+
+
+@router.post("/{boleta_id}/lecturas-iniciales/importar")
+async def importar_lecturas_iniciales(
+    boleta_id: int,
+    request: Request,
+    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    tenant_id: TenantId,
+    db: DB,
+    aplicar: bool = False,
+    archivo: UploadFile = File(...),
+):
+    """
+    Carga masiva de lecturas iniciales desde Excel. Con `aplicar=false` solo muestra la vista previa.
+    Con `aplicar=true` aplica todo o nada: si la planilla tiene errores, no se aplica ninguna lectura.
+    """
+    boleta = await _lectura_inicial_abierta(boleta_id, tenant_id, db)
+    if boleta.lecturas_cerradas:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="Las lecturas de este período están cerradas y no se pueden modificar")
+
+    contenido = await archivo.read(lecturas_iniciales.MAX_BYTES + 1)
+    filas = await _lecturas_con_parcela(boleta.id, db)
+    try:
+        resultado = lecturas_iniciales.leer_planilla(
+            contenido, [(l.id, p.id, p.numero_parcela, l.lectura_actual, l.fecha_toma is not None) for l, p in filas])
+    except lecturas_iniciales.PlanillaInvalida as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+    cuerpo = {
+        "a_aplicar": [vars(f) for f in resultado.a_aplicar],
+        "sin_cambio": resultado.sin_cambio,
+        "vacias": resultado.vacias,
+        "errores": resultado.errores,
+        "aplicadas": 0,
+    }
+    if not aplicar:
+        return cuerpo
+    if resultado.errores:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail={
+            "mensaje": f"La planilla tiene {len(resultado.errores)} error(es): corrígelos antes de aplicar", **cuerpo})
+
+    from datetime import datetime, timezone
+    ahora = datetime.now(timezone.utc)
+    lecturas = {l.id: l for l, _ in filas}
+    cambios = []
+    for f in resultado.a_aplicar:
+        lectura = lecturas[f.lectura_id]
+        cambios.append({"parcela_id": f.parcela_id, "antes": f.valor_actual, "despues": f.valor})
+        lectura.lectura_actual = f.valor
+        lectura.kwh_consumidos = f.valor - lectura.lectura_anterior
+        lectura.fecha_toma = ahora
+        lectura.lector_id = current_user.id
+    await registrar_auditoria(
+        db, usuario_id=current_user.id, condominio_id=boleta.condominio_id, accion="IMPORTAR_LECTURAS_INICIALES",
+        detalles={"boleta_id": boleta.id, "aplicadas": len(cambios), "cambios": cambios},
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.commit()
+    cuerpo["aplicadas"] = len(cambios)
+    return cuerpo
+
+
+@router.get("/{boleta_id}", response_model=Union[BoletaMaestraResponse, BoletaMaestraComuneroResponse])
 async def get_boleta(
     boleta_id: int,
     current_user: Annotated[Usuario, Depends(AnyRoleRequired)],
@@ -234,10 +420,10 @@ async def get_boleta(
     boleta = await _get_boleta_o_404(boleta_id, db)
     _validar_tenant(boleta, tenant_id)
 
-    if current_user.rol.nombre == "parcelero":
+    if current_user.rol.nombre == "comunero":
         if boleta.estado != "publicada":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Boleta no disponible")
-        return BoletaMaestraParceleroResponse(
+        return BoletaMaestraComuneroResponse(
             id=boleta.id,
             condominio_id=boleta.condominio_id,
             periodo_mes=boleta.periodo_mes,
@@ -257,6 +443,7 @@ async def actualizar_boleta(
 ):
     boleta = await _get_boleta_o_404(boleta_id, db)
     _validar_tenant(boleta, tenant_id)
+    exigir_periodo_regular(boleta)
 
     cambios_solicitados = data.model_dump(exclude_unset=True)
     solo_publicacion = set(cambios_solicitados.keys()) <= {"boleta_visible_usuarios"}
@@ -291,6 +478,7 @@ async def upload_imagen_boleta(
     """Sube o reemplaza la imagen de la boleta. Permitido incluso en períodos cerrados."""
     boleta = await _get_boleta_o_404(boleta_id, db)
     _validar_tenant(boleta, tenant_id)
+    exigir_periodo_regular(boleta)
 
     if file.content_type not in ALLOWED_MIME:
         raise HTTPException(
@@ -328,6 +516,7 @@ async def procesar_ocr_boleta(
     """Procesa la imagen subida de la boleta con Gemini y extrae los datos."""
     boleta = await _get_boleta_o_404(boleta_id, db)
     _validar_tenant(boleta, tenant_id)
+    exigir_periodo_regular(boleta)
 
     if not boleta.url_imagen_boleta:
         raise HTTPException(
@@ -466,6 +655,7 @@ async def actualizar_detalles_boleta(
     """Actualiza manualmente los totales y los ítems de la boleta."""
     boleta = await _get_boleta_o_404(boleta_id, db)
     _validar_tenant(boleta, tenant_id)
+    exigir_periodo_regular(boleta)
 
     if boleta.liquidaciones_cerradas:
         raise HTTPException(
@@ -519,6 +709,7 @@ async def validar_items_boleta(
     """
     boleta = await _get_boleta_o_404(boleta_id, db)
     _validar_tenant(boleta, tenant_id)
+    exigir_periodo_regular(boleta)
 
     if boleta.liquidaciones_cerradas:
         raise HTTPException(
@@ -627,6 +818,17 @@ async def reabrir_lecturas(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El período ya está cerrado y no se puede reabrir")
     if not boleta.lecturas_cerradas:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Las lecturas ya están abiertas")
+    if es_lectura_inicial(boleta):
+        posterior = (await db.execute(
+            select(BoletaMaestra.id)
+            .where(BoletaMaestra.condominio_id == boleta.condominio_id, BoletaMaestra.periodo_mes > boleta.periodo_mes)
+            .limit(1)
+        )).scalar_one_or_none()
+        if posterior:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="La lectura inicial ya es la base de un período posterior y no se puede reabrir",
+            )
 
     boleta.lecturas_cerradas = False
     await registrar_auditoria(
@@ -644,9 +846,10 @@ async def cerrar_liquidaciones(
     tenant_id: TenantId,
     db: DB,
 ):
-    """Admin cierra el período. Las liquidaciones quedan bloqueadas para el parcelero y no se pueden modificar."""
+    """Admin cierra el período. Las liquidaciones quedan bloqueadas para el comunero y no se pueden modificar."""
     boleta = await _get_boleta_o_404(boleta_id, db)
     _validar_tenant(boleta, tenant_id)
+    exigir_periodo_regular(boleta)
 
     if not boleta.lecturas_cerradas:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Debes cerrar las lecturas antes de cerrar las liquidaciones")
@@ -689,7 +892,7 @@ async def reabrir_liquidaciones(
     if boleta.boleta_visible_usuarios:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="La boleta ya fue publicada a los parceleros y no se puede reabrir",
+            detail="La boleta ya fue publicada a los comuneros y no se puede reabrir",
         )
 
     boleta.liquidaciones_cerradas = False
@@ -723,6 +926,12 @@ async def eliminar_boleta_borrador(
     from app.models.liquidacion import LiquidacionParcela
     from sqlalchemy import delete
     
+    # Fotos del medidor: se anotan antes del DELETE y se borran del disco después del commit
+    fotos = (await db.execute(
+        select(LecturaParcela.foto_archivo)
+        .where(LecturaParcela.boleta_id == boleta_id, LecturaParcela.foto_archivo.is_not(None))
+    )).scalars().all()
+
     await db.execute(delete(LiquidacionParcela).where(LiquidacionParcela.boleta_id == boleta_id))
     await db.execute(delete(LecturaParcela).where(LecturaParcela.boleta_id == boleta_id))
     
@@ -734,4 +943,6 @@ async def eliminar_boleta_borrador(
         accion="DELETE_BOLETA", detalles={"boleta_id": boleta_id, "periodo_mes": str(boleta.periodo_mes)},
     )
     await db.commit()
+    for nombre in fotos:
+        fotos_lectura.borrar(nombre)
 

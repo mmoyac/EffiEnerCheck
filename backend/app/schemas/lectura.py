@@ -41,6 +41,12 @@ class LecturaParcelaResponse(BaseModel):
     kwh_consumidos: float
     lector_id: int
     fecha_toma: datetime | None
+    # Foto del medidor: si existe y de qué toma es. Nunca la ruta del archivo.
+    tiene_foto: bool = False
+    foto_fecha_toma: datetime | None = None
+    # La lectura anterior solo se ingresa si la parcela no tiene historial (cambio lectura-inicial).
+    # Lo informa el listado por período; en las demás respuestas va en falso.
+    lectura_anterior_editable: bool = False
 
 
 # ---- Sincronización de lecturas tomadas sin conexión (cambio lecturas-sin-conexion) ----------------------

@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy import Boolean, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -21,6 +21,8 @@ class Parcela(Base):
     numero_parcela: Mapped[str] = mapped_column(String, nullable=False)
     propietario_nombre: Mapped[Optional[str]] = mapped_column(String)
     activa: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Posición en el recorrido del lector (1, 2, 3…). NULL = sin posición (cambio orden-recorrido)
+    orden_recorrido: Mapped[Optional[int]] = mapped_column(Integer)
 
     condominio: Mapped["Condominio"] = relationship("Condominio", back_populates="parcelas")
     usuarios: Mapped[List["Usuario"]] = relationship(

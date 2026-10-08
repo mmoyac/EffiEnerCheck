@@ -15,7 +15,7 @@ from app.models.usuario import Usuario
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
 # Jerarquía de roles definida en AGENTS.md
-ROLES = ("super_admin", "admin_condominio", "lector", "parcelero", "porteria")
+ROLES = ("super_admin", "admin_condominio", "lector", "comunero", "porteria")
 
 
 SIN_PORTAL = "Tu condominio no tiene contratado el portal de administración"
@@ -124,9 +124,9 @@ AdminRequired = require_roles("super_admin", "admin_condominio")
 LectorRequired = require_roles("super_admin", "admin_condominio", "lector")
 
 # Cualquier usuario autenticado, EXCEPTO porteria. Es explícito a propósito: varios endpoints
-# AnyRoleRequired solo restringen por parcela cuando el rol es parcelero, así que un rol nuevo
+# AnyRoleRequired solo restringen por parcela cuando el rol es comunero, así que un rol nuevo
 # agregado aquí heredaría acceso a todo el condominio.
-AnyRoleRequired = require_roles("super_admin", "admin_condominio", "lector", "parcelero")
+AnyRoleRequired = require_roles("super_admin", "admin_condominio", "lector", "comunero")
 
 # Venta de rifas: administración y portería
 PorteriaRequired = require_roles("super_admin", "admin_condominio", "porteria")

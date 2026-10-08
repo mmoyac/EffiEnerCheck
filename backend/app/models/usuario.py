@@ -37,7 +37,7 @@ class Usuario(Base):
     condominio: Mapped[Optional["Condominio"]] = relationship(
         "Condominio", back_populates="usuarios", foreign_keys=[condominio_id]
     )
-    # M2M: un parcelero puede tener una o más parcelas
+    # M2M: un comunero puede tener una o más parcelas
     parcelas: Mapped[List["Parcela"]] = relationship(
         "Parcela", secondary=usuario_parcelas, back_populates="usuarios"
     )

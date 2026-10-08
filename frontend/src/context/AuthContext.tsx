@@ -21,7 +21,12 @@ function guardarSesion(s: Sesion) {
   try { localStorage.setItem(CLAVE_SESION, JSON.stringify(s)) } catch { /* sin almacenamiento: no es crítico */ }
 }
 function sesionGuardada(): Sesion | null {
-  try { return JSON.parse(localStorage.getItem(CLAVE_SESION) ?? 'null') } catch { return null }
+  try {
+    const s: Sesion | null = JSON.parse(localStorage.getItem(CLAVE_SESION) ?? 'null')
+    // Transitorio: sesiones guardadas antes de que el rol `parcelero` pasara a llamarse `comunero`
+    if (s?.rol?.nombre === 'parcelero') s.rol.nombre = 'comunero'
+    return s
+  } catch { return null }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

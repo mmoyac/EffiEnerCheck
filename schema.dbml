@@ -60,11 +60,11 @@ Table enlaces_acceso {
 
 Table roles {
   id integer [primary key]
-  nombre varchar // 'super_admin', 'admin_condominio', 'lector', 'parcelero'
+  nombre varchar // 'super_admin', 'admin_condominio', 'lector', 'comunero'
   descripcion text
 }
 
-// 3. ASIGNACIÓN PARCELERO ↔ PARCELAS (M2M)
+// 3. ASIGNACIÓN COMUNERO ↔ PARCELAS (M2M)
 Table usuario_parcelas {
   usuario_id integer [ref: > usuarios.id]
   parcela_id integer [ref: > parcelas.id]
@@ -81,6 +81,7 @@ Table parcelas {
   numero_parcela varchar
   propietario_nombre varchar
   activa boolean [default: true]
+  orden_recorrido integer [note: 'Posición en el recorrido del lector; NULL = sin posición']
 }
 
 // 4. GESTIÓN ELÉCTRICA (MAESTRA)
@@ -93,6 +94,7 @@ Table boletas_maestras {
   // Control de transparencia y flujo
   boleta_visible_usuarios boolean [default: false]
   estado varchar [note: 'borrador, validada, publicada']
+  tipo varchar [default: 'regular', note: 'regular | lectura_inicial (lectura de partida; no se liquida)']
   
   // Control de flujo de cierre de período
   lecturas_cerradas boolean [default: false, note: 'Lector certifica que todas las lecturas están ingresadas']
@@ -124,6 +126,10 @@ Table lecturas_parcelas {
   kwh_consumidos float
   lector_id integer [ref: > usuarios.id]
   fecha_toma timestamp
+  foto_archivo varchar [note: 'Nombre en /app/privado/lecturas (nunca estático)']
+  foto_sha256 varchar
+  foto_fecha_toma timestamp [note: 'Toma que documenta la foto']
+  foto_subida_en timestamp
 }
 
 // 6. LIQUIDACIONES FINALES

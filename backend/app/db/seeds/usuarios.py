@@ -40,7 +40,7 @@ USUARIOS = [
         # Alias Gmail: llega a mmoyainfo@gmail.com pero es técnicamente distinto
         "email": "mmoyainfo+parcela@gmail.com",
         "password_hash": _PWD,
-        "rol_id": 4,        # parcelero
+        "rol_id": 4,        # comunero
         "condominio_id": 1,
     },
     {
@@ -48,7 +48,7 @@ USUARIOS = [
         "nombre": "German Chacon",
         "email": "gchacon@santalaura.cl",
         "password_hash": _PWD,
-        "rol_id": 4,        # parcelero
+        "rol_id": 4,        # comunero
         "condominio_id": 1,
     },
 ]

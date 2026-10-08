@@ -6,7 +6,7 @@ Carga inicial de producción copiada desde la base de desarrollo, sin datos de p
                          --portal-url https://portal.comunidadsantalaura.cl --dominio comunidadsantalaura.cl [--simular]
 
 El JSON lleva solo la configuración del condominio (módulos, color, dirección, plan), sus parcelas y sus
-parceleros con teléfono y parcelas asignadas. Nunca claves: en producción todos quedan como cuentas
+comuneros con teléfono y parcelas asignadas. Nunca claves: en producción todos quedan como cuentas
 pendientes y cada uno crea su clave con su invitación (spec acceso-por-enlace). Quedan fuera los datos operativos (boletas, lecturas, liquidaciones,
 rifas, auditoría), los otros condominios y las cuentas del seed (app/db/seeds/usuarios.py).
 
@@ -62,9 +62,9 @@ async def exportar(db: AsyncSession, condominio_nombre: str) -> dict:
     numero_por_id = {p.id: p.numero_parcela for p in parcelas}
 
     excluidos = emails_del_seed()
-    parceleros = (await db.execute(
+    comuneros = (await db.execute(
         select(Usuario).options(selectinload(Usuario.parcelas)).join(Rol)
-        .where(Usuario.condominio_id == condominio.id, Rol.nombre == "parcelero")
+        .where(Usuario.condominio_id == condominio.id, Rol.nombre == "comunero")
         .order_by(Usuario.email)
     )).scalars().all()
 
@@ -90,7 +90,7 @@ async def exportar(db: AsyncSession, condominio_nombre: str) -> dict:
                 "parcelas": sorted((numero_por_id[p.id] for p in u.parcelas if p.id in numero_por_id),
                                    key=_orden_natural),
             }
-            for u in parceleros if u.email.lower() not in excluidos
+            for u in comuneros if u.email.lower() not in excluidos
         ],
     }
 
@@ -189,9 +189,9 @@ async def importar(
         resumen.parcelas_creadas += 1
     await db.flush()
 
-    # ---- Parceleros y asignaciones -------------------------------------------------------------------
+    # ---- Comuneros y asignaciones -------------------------------------------------------------------
     excluidos = emails_del_seed()
-    rol_parcelero = (await db.execute(select(Rol).where(Rol.nombre == "parcelero"))).scalar_one()
+    rol_comunero = (await db.execute(select(Rol).where(Rol.nombre == "comunero"))).scalar_one()
     for r in datos["residentes"]:
         email = r["email"].lower()
         if email in excluidos:
@@ -205,14 +205,14 @@ async def importar(
                 nombre=r["nombre"],
                 email=email,
                 password_hash=None,   # pendiente: crea su clave con la invitación
-                rol_id=rol_parcelero.id,
+                rol_id=rol_comunero.id,
                 condominio_id=condominio.id,
                 telefono=r["telefono"],
             )
             db.add(usuario)
             await db.flush()
             resumen.usuarios_creados += 1
-        elif usuario.rol.nombre != "parcelero" or usuario.condominio_id != condominio.id:
+        elif usuario.rol.nombre != "comunero" or usuario.condominio_id != condominio.id:
             resumen.avisos.append(f"{email}: ya es una cuenta {usuario.rol.nombre} de otro condominio o rol; "
                                   "no se asignan parcelas")
             continue
@@ -260,14 +260,14 @@ async def main_exportar(args: argparse.Namespace) -> None:
     salida = Path(args.salida)
     salida.write_text(json.dumps(datos, ensure_ascii=False, indent=2), encoding="utf-8")
     salida.chmod(0o600)
-    print(f"Exportado {salida}: {len(datos['parcelas'])} parcelas, {len(datos['residentes'])} parceleros, "
+    print(f"Exportado {salida}: {len(datos['parcelas'])} parcelas, {len(datos['residentes'])} comuneros, "
           f"módulos {', '.join(datos['condominio']['modulos'])}. Tiene datos personales: bórralo al terminar.")
 
 
 async def main_importar(args: argparse.Namespace) -> None:
     datos = json.loads(Path(args.archivo).read_text(encoding="utf-8"))
     print(f"Archivo: {datos['condominio']['nombre']}, {len(datos['parcelas'])} parcelas, "
-          f"{len(datos['residentes'])} parceleros")
+          f"{len(datos['residentes'])} comuneros")
     async with AsyncSessionLocal() as db:
         resumen = await importar(db, datos, portal_url=args.portal_url, dominios=args.dominio)
         if args.simular:

@@ -7,7 +7,7 @@ ROLES = [
     {"id": 1, "nombre": "super_admin",        "descripcion": "Llena las tablas maestras"},
     {"id": 2, "nombre": "admin_condominio",   "descripcion": "Carga boletas y realiza los cálculos"},
     {"id": 3, "nombre": "lector",             "descripcion": "Toma lecturas de remarcadores por parcela"},
-    {"id": 4, "nombre": "parcelero",          "descripcion": "Visualiza sus liquidaciones"},
+    {"id": 4, "nombre": "comunero",           "descripcion": "Vecino de una parcela: consulta sus liquidaciones y compra rifas"},
     {"id": 5, "nombre": "porteria",           "descripcion": "Vende números de rifas solidarias"},
 ]
 

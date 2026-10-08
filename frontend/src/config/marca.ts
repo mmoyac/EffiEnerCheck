@@ -11,6 +11,8 @@ export const PLATAFORMA = {
     energia: 'EnerCheck',
     rifas: 'Rifas solidarias',
   },
+  /** Centro de capacitación: sitio estático y público en frontend/public/capacitacion/ */
+  capacitacion: '/capacitacion/',
   /** Color por defecto (el verde histórico del portal): se usa sin condominio o sin color definido. */
   colorPorDefecto: '#22C55E',
 } as const

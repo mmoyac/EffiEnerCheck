@@ -42,6 +42,8 @@ El descuento aterriza íntegro en la cuota fija, que es donde corresponde, y el
 total sigue cuadrando con la emisión.
 """
 
+import math
+
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -51,6 +53,22 @@ from app.models.lectura import LecturaParcela
 from app.models.liquidacion import LiquidacionParcela
 from app.models.parcela import Parcela
 from app.models.usuario import Usuario
+
+
+def repartir_al_peso(montos: list[float], total: int) -> list[int]:
+    """
+    Reparto por mayor resto: redondea cada monto hacia abajo y entrega los pesos que faltan para llegar a
+    `total` a los de mayor fracción. La suma del resultado es exactamente `total` y ningún monto se aleja
+    más de un peso de su valor exacto (si `total` es el redondeo de la suma exacta). Funciona con negativos.
+    """
+    if not montos:
+        return []
+    pisos = [math.floor(m) for m in montos]
+    faltan = total - sum(pisos)
+    orden = sorted(range(len(montos)), key=lambda i: montos[i] - pisos[i], reverse=True)
+    for k in range(faltan):
+        pisos[orden[k % len(montos)]] += 1
+    return pisos
 
 
 class EnerCheckError(ValueError):
@@ -94,6 +112,9 @@ async def calcular_liquidaciones_boleta(
         raise EnerCheckError("La boleta no tiene 'total_kwh_compania' definido")
     if not boleta.monto_neto_electricidad_consumida:
         raise EnerCheckError("La boleta no tiene 'monto_neto_electricidad_consumida' definido")
+    # monto_total_emision es lo que se reparte (valor_kwh se despeja desde él): sin él no hay cálculo posible
+    if not boleta.monto_total_emision:
+        raise EnerCheckError("La boleta no tiene 'monto_total_emision' definido")
 
     # ------------------------------------------------------------------ #
     # 2. Lecturas del período (indexadas por parcela_id para O(1) lookup)
@@ -164,23 +185,45 @@ async def calcular_liquidaciones_boleta(
     )
 
     # ------------------------------------------------------------------ #
-    # 6. Calcular y persistir una liquidación por parcela activa
+    # 6. Montos por parcela cuadrados al peso (cambio cuadre-al-peso)
+    # ------------------------------------------------------------------ #
+    # Exactos (sin redondear) por parcela activa
+    kwh = [
+        (lecturas_por_parcela[p.id].kwh_consumidos if p.id in lecturas_por_parcela else 0.0)
+        for p in parcelas_activas
+    ]
+    energia_exacta = [valor_kwh * k for k in kwh]
+    variable_exacta = [
+        suma_items_variable * (k / suma_kwh_remarcadores) if suma_kwh_remarcadores > 0 else 0.0
+        for k in kwh
+    ]
+    total_exacto = sum(energia_exacta) + sum(variable_exacta) + cuota_fija_por_parcela * total_parcelas_activas
+
+    # La suma de las liquidaciones es el total exacto redondeado UNA vez (= la emisión si todo el consumo
+    # es de parcelas activas). Fija igual para todas; variable por mayor resto; la energía completa el cuadre.
+    monto_fijo = round(cuota_fija_por_parcela)
+    variables = repartir_al_peso(variable_exacta, round(sum(variable_exacta)))
+    energia_total = round(total_exacto) - monto_fijo * total_parcelas_activas - sum(variables)
+    con_consumo = [i for i, k in enumerate(kwh) if k > 0]
+    energias = [0] * total_parcelas_activas
+    if con_consumo:
+        suma_energia = sum(energia_exacta[i] for i in con_consumo)
+        base = ([energia_exacta[i] * energia_total / suma_energia for i in con_consumo] if suma_energia
+                else [energia_total / len(con_consumo)] * len(con_consumo))
+        for i, monto in zip(con_consumo, repartir_al_peso(base, energia_total)):
+            energias[i] = monto
+    elif energia_total:
+        # Nadie consumió: el residuo del redondeo de la cuota fija se reparte entre todas
+        energias = repartir_al_peso([energia_total / total_parcelas_activas] * total_parcelas_activas, energia_total)
+
+    # ------------------------------------------------------------------ #
+    # 7. Persistir una liquidación por parcela activa
     # ------------------------------------------------------------------ #
     liquidaciones: list[LiquidacionParcela] = []
 
-    for parcela in parcelas_activas:
-        lectura = lecturas_por_parcela.get(parcela.id)
-        kwh_parcela: float = lectura.kwh_consumidos if lectura else 0.0
-
-        monto_energia = round(valor_kwh * kwh_parcela)
-
-        if suma_kwh_remarcadores > 0:
-            porcentaje_consumo = kwh_parcela / suma_kwh_remarcadores
-        else:
-            porcentaje_consumo = 0.0
-        monto_variable = round(suma_items_variable * porcentaje_consumo)
-
-        monto_fijo = round(cuota_fija_por_parcela)
+    for i, parcela in enumerate(parcelas_activas):
+        monto_energia = energias[i]
+        monto_variable = variables[i]
 
         liq = LiquidacionParcela(
             parcela_id=parcela.id,

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MapPin, Plus, Pencil, X, Check } from 'lucide-react'
+import { MapPin, Plus, Pencil, X, Check, Route } from 'lucide-react'
 import { parcelasApi } from '../../api/parcelas'
 import { condominiosApi } from '../../api/condominios'
 import { Card } from '../../components/ui/Card'
@@ -11,6 +11,7 @@ import { Alert } from '../../components/ui/Alert'
 import { Spinner } from '../../components/ui/Spinner'
 import { useRole, useAuth } from '../../hooks/useAuth'
 import type { Parcela } from '../../types'
+import { OrdenRecorridoModal } from './OrdenRecorridoModal'
 
 interface ParcelaForm {
   numero_parcela: string
@@ -107,6 +108,7 @@ export default function Parcelas() {
   const [addingNew, setAddingNew] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
   const [error, setError] = useState('')
+  const [recorridoOpen, setRecorridoOpen] = useState(false)
 
   const { data: parcelas = [], isLoading } = useQuery({ queryKey: ['parcelas'], queryFn: parcelasApi.list })
   const { data: condominios = [] } = useQuery({ queryKey: ['condominios'], queryFn: condominiosApi.list, enabled: isSuperAdmin })
@@ -171,6 +173,18 @@ export default function Parcelas() {
               ))}
             </select>
           )}
+          <Button size="sm" variant="secondary" disabled={isSuperAdmin && !filtroCondominio}
+                  title={isSuperAdmin && !filtroCondominio ? 'Elige primero un condominio' : 'Orden en que el lector camina las parcelas'}
+                  onClick={() => setRecorridoOpen(true)}>
+            <Route className="h-4 w-4" /> Orden del recorrido
+          </Button>
+          <OrdenRecorridoModal
+            open={recorridoOpen}
+            condominioId={isSuperAdmin ? Number(filtroCondominio) || null : null}
+            parcelas={isSuperAdmin ? parcelas.filter((p) => p.condominio_id === Number(filtroCondominio)) : parcelas}
+            onClose={() => setRecorridoOpen(false)}
+            onGuardado={() => qc.invalidateQueries({ queryKey: ['parcelas'] })}
+          />
           {!addingNew && (
             <Button size="sm" onClick={() => { setAddingNew(true); setError('') }}>
               <Plus className="h-4 w-4" /> Nueva parcela

@@ -2,7 +2,7 @@ from sqlalchemy import Column, ForeignKey, Integer, Table
 
 from .base import Base
 
-# Tabla puente: un parcelero puede tener una o más parcelas asignadas
+# Tabla puente: un comunero puede tener una o más parcelas asignadas
 usuario_parcelas = Table(
     "usuario_parcelas",
     Base.metadata,

@@ -12,9 +12,18 @@ type ModalEditDetallesProps = {
   onSave: (data: any) => void
   isPending: boolean
   error: string
+  /** Ítems para partir cuando la boleta no tiene ninguno (p. ej. los conceptos sugeridos de la primera boleta) */
+  itemsIniciales?: { descripcion: string; monto_neto_clp: number; tipo_calculo: string }[]
 }
 
-export default function ModalEditDetalles({ boleta, open, onClose, onSave, isPending, error }: ModalEditDetallesProps) {
+/** Conceptos típicos para la primera boleta (no hay un mes anterior del cual copiarlos). Se ajustan a gusto. */
+export const CONCEPTOS_SUGERIDOS = [
+  { descripcion: 'Cargo fijo', monto_neto_clp: 0, tipo_calculo: 'fijo' },
+  { descripcion: 'Transporte de electricidad', monto_neto_clp: 0, tipo_calculo: 'variable' },
+  { descripcion: 'Interés / saldo anterior', monto_neto_clp: 0, tipo_calculo: 'informativo' },
+]
+
+export default function ModalEditDetalles({ boleta, open, onClose, onSave, isPending, error, itemsIniciales }: ModalEditDetallesProps) {
   const [form, setForm] = useState({
     total_kwh_compania: '',
     monto_neto_electricidad_consumida: '',
@@ -30,10 +39,10 @@ export default function ModalEditDetalles({ boleta, open, onClose, onSave, isPen
         monto_neto_electricidad_consumida: boleta.monto_neto_electricidad_consumida ?? '',
         monto_total_emision: boleta.monto_total_emision ?? '',
         monto_saldo_anterior: boleta.monto_saldo_anterior ?? '',
-        items_detalle: (boleta.items_detalle || []).map((i: any) => ({ ...i }))
+        items_detalle: (boleta.items_detalle?.length ? boleta.items_detalle : (itemsIniciales ?? [])).map((i: any) => ({ ...i }))
       })
     }
-  }, [open, boleta])
+  }, [open, boleta, itemsIniciales])
 
   const handleSave = () => {
     onSave({

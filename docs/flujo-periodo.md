@@ -1,6 +1,6 @@
 # Flujo del período mensual
 
-Desde que llega la boleta de la compañía hasta que el parcelero ve su liquidación.
+Desde que llega la boleta de la compañía hasta que el comunero ve su liquidación.
 
 Dos frentes avanzan en paralelo — el administrador arma el desglose, el lector recorre los remarcadores — y convergen en el cálculo.
 
@@ -24,7 +24,7 @@ flowchart TD
     L7 --> C8
     C8 --> C9["9 · Cerrar período"]
     C9 --> C10["10 · Publicar"]
-    C10 --> P11["11 · Parcelero consulta"]
+    C10 --> P11["11 · Comunero consulta"]
 
     A5:::nuevo
     A3:::cambia
@@ -45,7 +45,7 @@ Morado sólido = paso nuevo. Borde punteado = paso existente que cambia.
 |--------|-------------|
 | `borrador` | Recién creada, o devuelta tras un cambio en las cifras. No se puede calcular. |
 | `validada` | **Nuevo.** El administrador corroboró qué entra al reparto. Habilita el cálculo. |
-| `publicada` | Visible para los parceleros. Punto sin retorno. |
+| `publicada` | Visible para los comuneros. Punto sin retorno. |
 
 Los tres candados del período son ortogonales al estado y avanzan en su propio orden:
 
@@ -65,6 +65,28 @@ stateDiagram-v2
 
 ---
 
+## Antes del primer período — la lectura inicial
+
+### 0. Lectura inicial de los medidores
+
+```
+POST /api/v1/boletas/lectura-inicial      {periodo_mes: "2026-03-01"}
+```
+
+Solo en un condominio **sin boletas**. Abre un período especial (`tipo = lectura_inicial`), sin boleta de la compañía, con una lectura en blanco por parcela: su único fin es registrar la **lectura de partida** de cada medidor. Sin ella, la primera boleta cobraría a cada comunero el número completo de su medidor.
+
+- El lector la toma con la app, igual que una lectura mensual (sin señal, con foto). Conviene hacerlo **el mismo día en que la compañía lee el medidor general**: desde ahí corre el primer período.
+- La administración puede ingresarla o corregirla en la pestaña *Lecturas*, una a una o **de forma masiva desde Excel**: **Descargar plantilla** (Parcela, Propietario, Lectura inicial), completarla y **Cargar desde Excel**. Se ve una vista previa (a aplicar, reemplazos, vacías y errores por fila) y solo se aplica si no hay errores (`GET /boletas/{id}/lecturas-iniciales/plantilla`, `POST /boletas/{id}/lecturas-iniciales/importar?aplicar=`, auditoría `IMPORTAR_LECTURAS_INICIALES`).
+- Se cierra con **Cerrar lecturas**. Cerrada, deja crear la primera boleta, que toma el mes siguiente y parte de estos valores como lectura anterior.
+- No se liquida ni se publica: calcular, corroborar, subir imagen, OCR, editar ítems, cerrar liquidaciones o publicar responden `409` «El período de lectura inicial no se liquida».
+- No se puede reabrir si ya existe un período posterior (que tomó sus lecturas como base).
+
+| Código | Motivo |
+|--------|--------|
+| `409` | El condominio ya tiene períodos. |
+
+Auditoría: `CREATE_LECTURA_INICIAL`
+
 ## Administrador — el desglose
 
 ### 1. Crear la boleta del período
@@ -77,9 +99,12 @@ Nace en `borrador`. El sistema genera una lectura en blanco por cada parcela arr
 
 Esa clasificación heredada es una **propuesta**, no una decisión tomada: el administrador la corrobora o la cambia cada mes.
 
+**Sin ceros silenciosos:** si alguna parcela activa no tiene ninguna lectura previa, responde `409` con `{codigo: "sin_lectura_anterior", parcelas: [...]}` y no crea nada. Solo se crea si se envía `aceptar_sin_lectura_anterior: true`; esas parcelas parten en 0 y su lectura anterior se puede ingresar luego en la pestaña *Lecturas* (es la única lectura anterior editable: la de una parcela con historial viene del período anterior y `PATCH /lecturas/{id}` la rechaza con `409`).
+
 | Código | Motivo |
 |--------|--------|
-| `409` | Ya existe otro período del condominio sin cerrar. |
+| `409` | Ya existe otro período del condominio sin cerrar (o la lectura inicial tiene las lecturas abiertas). |
+| `409` | Hay parcelas activas sin lectura anterior y no se aceptó explícitamente. |
 
 Auditoría: `UPLOAD_BOLETA`
 
@@ -167,16 +192,21 @@ Arranca en paralelo desde el paso 1.
 ```
 POST  /api/v1/lecturas/
 PATCH /api/v1/lecturas/{id}
+POST  /api/v1/lecturas/sincronizar      (lecturas tomadas sin señal)
+PUT   /api/v1/lecturas/{id}/foto        (foto del medidor)
+GET   /api/v1/lecturas/{id}/foto
 ```
 
-Vista móvil con las parcelas activas pendientes y una barra de avance. El consumo se calcula como la diferencia con la lectura anterior. Una parcela cuenta como leída cuando su lectura tiene `fecha_toma`.
+Vista móvil con las parcelas activas pendientes y una barra de avance. El consumo se calcula como la diferencia con la lectura anterior. Una parcela cuenta como leída cuando su lectura tiene `fecha_toma`. Funciona sin señal: ver [lecturas-sin-conexion.md](lecturas-sin-conexion.md).
+
+El lector puede tomar una **foto del medidor** (opcional) junto a cada lectura; queda amarrada a esa toma y la administración la ve en la pestaña *Lecturas* del período. Corregir después el valor no borra la foto: es la evidencia de la corrección. El comunero ve la foto de su medidor cuando el período se publica.
 
 | Código | Motivo |
 |--------|--------|
 | `422` | La lectura actual no puede ser menor que la anterior. |
 | `409` | Las lecturas del período ya están cerradas. |
 
-Auditoría: `CREATE_LECTURA` / `UPDATE_LECTURA`
+Auditoría: `CREATE_LECTURA` / `UPDATE_LECTURA` / `SUBIR_FOTO_LECTURA`
 
 ### 7. Cerrar las lecturas
 
@@ -244,7 +274,7 @@ Auditoría: `TOGGLE_VISIBILITY`
 
 ---
 
-## Parcelero — la consulta
+## Comunero — la consulta
 
 ### 11. Ver su liquidación
 
@@ -253,9 +283,11 @@ GET /api/v1/boletas/
 GET /api/v1/liquidaciones/?boleta_id={id}
 ```
 
-Desglose de los tres componentes, estado de pago, totales de la boleta de la compañía y acceso a la imagen original.
+Desglose de los tres componentes, estado de pago, totales de la boleta de la compañía, acceso a la imagen original y la foto de su medidor. Solo sus parcelas y **solo períodos publicados**: cerrar el período no basta (antes de publicar aún puede reabrirse), y la API responde `403` «La liquidación aún no está publicada».
 
-Es donde se materializa la transparencia frente a la comunidad: el parcelero puede contrastar su cuota con la boleta real.
+El proceso completo, de la lectura inicial a esta consulta, está en la spec [`proceso-energia`](../openspec/changes/proceso-energia/specs/proceso-energia/spec.md) y lo verifica de punta a punta `backend/tests/test_proceso_energia.py`.
+
+Es donde se materializa la transparencia frente a la comunidad: el comunero puede contrastar su cuota con la boleta real.
 
 ---
 
@@ -266,7 +298,7 @@ Es donde se materializa la transparencia frente a la comunidad: el parcelero pue
 | `validada` → `borrador` | **Nuevo.** Automático al reprocesar el OCR o al editar los detalles. |
 | `POST /boletas/{id}/reabrir-lecturas` | Solo mientras las liquidaciones no estén cerradas. |
 | `POST /boletas/{id}/reabrir-liquidaciones` | Solo mientras la boleta no haya sido publicada. |
-| `DELETE /boletas/{id}` | Solo mientras las lecturas no estén cerradas. Borra lecturas, liquidaciones e ítems. |
+| `DELETE /boletas/{id}` | Solo mientras las lecturas no estén cerradas. Borra lecturas, liquidaciones, ítems y las fotos del medidor (del disco, después del commit). |
 
 La reversa automática existe para que el juicio del administrador nunca sobreviva a un cambio de las cifras que lo sustentan.
 
@@ -287,7 +319,9 @@ Un ítem de monto **negativo** —descuento, nota de crédito, abono— se repar
 
 ## La invariante que nunca puede romperse
 
-> **La suma de todas las liquidaciones es exactamente el total de emisión.**
+> **La suma de todas las liquidaciones es exactamente el total de emisión, al peso.**
+
+El residuo del redondeo a pesos se reparte por mayor resto: la cuota fija es igual para todas, el prorrateo variable suma exactamente los cargos variables y la energía completa el cuadre (entre las parcelas con consumo).
 
 El valor del kWh se despeja a la inversa desde `monto_total_emision`, descontando los cargos que se reparten aparte:
 

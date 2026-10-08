@@ -41,7 +41,7 @@ El `super_admin` define por condominio qué productos y módulos tiene, sus domi
 | `super_admin` | Gestión global de condominios y usuarios |
 | `admin_condominio` | Operación completa: boletas, lecturas, liquidaciones, usuarios del condominio |
 | `lector` | Captura de lecturas de remarcadores (interfaz móvil optimizada) |
-| `parcelero` | Consulta de su propia liquidación y estado de pago |
+| `comunero` | Consulta de su propia liquidación y estado de pago |
 
 ---
 
@@ -60,7 +60,7 @@ El `super_admin` define por condominio qué productos y módulos tiene, sus domi
         ↓
 6. Admin publica  [boleta_visible_usuarios = true]
         ↓
-7. Parcelero consulta su liquidación desde el móvil
+7. Comunero consulta su liquidación desde el móvil
 ```
 
 **Correcciones:** si se detecta un error en una lectura antes de publicar, el admin puede reabrir el período, editar la lectura y el sistema recalcula automáticamente.
@@ -148,7 +148,7 @@ docker exec enercheck-backend-1 python -m app.db.seeds.seeder
 | `super@enercheck.cl` | `admin123` | Super Admin |
 | `henry@santalauracl` | `admin123` | Admin Condominio |
 | `claudio@santalauracl` | `lector123` | Lector |
-| `parcela2@santalauracl` | `parcelero123` | Parcelero |
+| `parcela2@santalauracl` | `comunero123` | Comunero |
 
 ---
 
@@ -169,7 +169,7 @@ EnerCheck/
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/              # admin/ · lector/ · parcelero/
+│   │   ├── pages/              # admin/ · lector/ · comunero/
 │   │   ├── components/         # UI atómica reutilizable
 │   │   ├── api/                # Clientes por recurso (React Query)
 │   │   └── hooks/              # useAuth, useRole, useModulo
@@ -193,7 +193,7 @@ EnerCheck/
 | `POST` | `/api/v1/liquidaciones/calcular/{id}` | Ejecutar Motor EnerCheck |
 | `POST` | `/api/v1/boletas/{id}/cerrar-liquidaciones` | Cerrar período |
 | `POST` | `/api/v1/boletas/{id}/reabrir-liquidaciones` | Reabrir período (antes de publicar) |
-| `PATCH` | `/api/v1/boletas/{id}` | Publicar boleta a parceleros |
+| `PATCH` | `/api/v1/boletas/{id}` | Publicar boleta a comuneros |
 
 Documentación interactiva completa en `/docs` (Swagger UI).
 

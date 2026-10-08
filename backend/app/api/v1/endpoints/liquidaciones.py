@@ -11,6 +11,7 @@ from app.models.liquidacion import LiquidacionParcela
 from app.models.parcela import Parcela
 from app.models.usuario import Usuario
 from app.schemas.liquidacion import LiquidacionParcelaResponse, MarcarPagadoRequest
+from app.services.periodos import exigir_periodo_regular
 
 router = APIRouter(prefix="/liquidaciones", tags=["liquidaciones"])
 
@@ -38,12 +39,13 @@ async def list_liquidaciones(
     if boleta_id:
         stmt = stmt.where(LiquidacionParcela.boleta_id == boleta_id)
 
-    # Parcelero: solo ve sus liquidaciones Y solo cuando el período está cerrado
-    if current_user.rol.nombre == "parcelero":
+    # Comunero: solo ve sus liquidaciones Y solo cuando el período está publicado (cerrar no basta:
+    # antes de publicar las liquidaciones aún pueden reabrirse y cambiar)
+    if current_user.rol.nombre == "comunero":
         ids = [p.id for p in current_user.parcelas]
         stmt = stmt.where(LiquidacionParcela.parcela_id.in_(ids))
         stmt = stmt.join(BoletaMaestra, LiquidacionParcela.boleta_id == BoletaMaestra.id)
-        stmt = stmt.where(BoletaMaestra.liquidaciones_cerradas == True)  # noqa: E712
+        stmt = stmt.where(BoletaMaestra.boleta_visible_usuarios == True)  # noqa: E712
 
     result = await db.execute(stmt)
     return result.scalars().all()
@@ -70,14 +72,14 @@ async def get_liquidacion(
     if tenant_id is not None and parcela.condominio_id != tenant_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin acceso a esta liquidación")
 
-    if current_user.rol.nombre == "parcelero":
+    if current_user.rol.nombre == "comunero":
         if liq.parcela_id not in [p.id for p in current_user.parcelas]:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin acceso a esta liquidación")
         boleta = await _get_boleta(liq.boleta_id, db)
-        if not boleta.liquidaciones_cerradas:
+        if not boleta.boleta_visible_usuarios:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="La liquidación aún no está disponible. El administrador debe cerrar el período primero.",
+                detail="La liquidación aún no está publicada.",
             )
 
     return liq
@@ -130,6 +132,7 @@ async def calcular_liquidaciones(
 ):
     """Dispara el Motor EnerCheck. Las lecturas pueden estar abiertas (permite recalcular tras correcciones)."""
     boleta = await _get_boleta(boleta_id, db)
+    exigir_periodo_regular(boleta)
 
     if boleta.liquidaciones_cerradas:
         raise HTTPException(

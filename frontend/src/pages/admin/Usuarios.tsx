@@ -23,7 +23,7 @@ const ROLE_COLOR: Record<string, 'purple' | 'blue' | 'yellow' | 'green'> = {
   super_admin:      'purple',
   admin_condominio: 'blue',
   lector:           'yellow',
-  parcelero:        'green',
+  comunero:         'green',
   porteria:         'yellow',
 }
 
@@ -31,11 +31,11 @@ const ROLES = [
   { id: 1, nombre: 'super_admin' },
   { id: 2, nombre: 'admin_condominio' },
   { id: 3, nombre: 'lector' },
-  { id: 4, nombre: 'parcelero' },
+  { id: 4, nombre: 'comunero' },
   { id: 5, nombre: 'porteria' },
 ]
 
-// Roles que pueden ser vecinos de una parcela: parcelero (4) y admin del condominio (2)
+// Roles que pueden ser vecinos de una parcela: comunero (4) y admin del condominio (2)
 const ROLES_CON_PARCELA = ['2', '4']
 
 interface FormState {
@@ -112,7 +112,7 @@ function UsuarioForm({
           <label className="text-sm font-medium text-slate-300">Rol</label>
           <select
             value={form.rol_id}
-            // Cambiar entre roles con parcela (parcelero, admin del condominio) conserva las parcelas;
+            // Cambiar entre roles con parcela (comunero, admin del condominio) conserva las parcelas;
             // a un rol sin parcelas (lector, portería, super admin) se le quitan
             onChange={(e) => onChange({
               rol_id: e.target.value,

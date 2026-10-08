@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Eye, Lock, Calculator, Globe, ScanLine, Camera, Trash2 } from 'lucide-react'
+import { Plus, Eye, Lock, Calculator, Globe, Trash2, Gauge, FileSpreadsheet } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { boletasApi } from '../../api/boletas'
 import { liquidacionesApi } from '../../api/liquidaciones'
@@ -14,9 +14,15 @@ import { Input } from '../../components/ui/Input'
 import { Alert } from '../../components/ui/Alert'
 import { Spinner } from '../../components/ui/Spinner'
 import { clp, kwh, periodoCorto } from '../../utils/format'
-import type { BoletaMaestra } from '../../types'
+import type { BoletaMaestra, SinLecturaAnterior } from '../../types'
+import { ImportarLecturasIniciales } from './ImportarLecturasIniciales'
+
+const esLecturaInicial = (b: BoletaMaestra) => b.tipo === 'lectura_inicial'
 
 function EstadoBadge({ b }: { b: BoletaMaestra }) {
+  if (esLecturaInicial(b)) {
+    return b.lecturas_cerradas ? <Badge color="blue" dot>Cerrada</Badge> : <Badge color="yellow" dot>En toma</Badge>
+  }
   if (b.boleta_visible_usuarios) return <Badge color="green" dot>Publicada</Badge>
   if (b.liquidaciones_cerradas)  return <Badge color="blue" dot>Período cerrado</Badge>
   if (b.lecturas_cerradas)       return <Badge color="yellow" dot>Lect. cerradas</Badge>
@@ -48,6 +54,13 @@ export default function Boletas() {
   const [form, setForm] = useState({
     condominio_id: '',
   })
+  // 409 de la creación: parcelas activas sin lectura anterior (cambio lectura-inicial)
+  const [sinLectura, setSinLectura] = useState<SinLecturaAnterior | null>(null)
+  // Modal de la lectura inicial: mes de la toma (YYYY-MM)
+  const [inicialOpen, setInicialOpen] = useState(false)
+  const [mesInicial, setMesInicial] = useState(() => new Date().toISOString().slice(0, 7))
+  // Carga desde Excel de la lectura inicial, directo desde la fila
+  const [importarDe, setImportarDe] = useState<number | null>(null)
 
   const { data: boletas = [], isLoading } = useQuery({
     queryKey: ['boletas'],
@@ -67,16 +80,45 @@ export default function Boletas() {
     ? boletas.filter((b) => b.condominio_id === Number(filtroCondominio))
     : boletas
 
+  // La lectura inicial solo se abre en un condominio sin boletas
+  const condominioDelForm = form.condominio_id ? Number(form.condominio_id) : me?.condominio_id
+  const sinBoletas = (condominioId: number | null | undefined) =>
+    !!condominioId && !boletas.some((b) => b.condominio_id === condominioId)
+  const puedeLecturaInicial = isSuperAdmin ? sinBoletas(Number(filtroCondominio) || null) : boletas.length === 0
+
   const createMut = useMutation({
     mutationFn: boletasApi.create,
     onSuccess: (data) => { 
       qc.invalidateQueries({ queryKey: ['boletas'] }); 
       setModalOpen(false); 
       setForm({ condominio_id: '' });
+      setSinLectura(null);
       navigate(`/boletas/${data.id}?tab=boleta`);
     },
-    onError: (e: unknown) => setError(getErrMsg(e, 'Error al crear boleta')),
+    onError: (e: unknown) => {
+      const detail = (e as any)?.response?.data?.detail
+      if (detail?.codigo === 'sin_lectura_anterior') setSinLectura(detail as SinLecturaAnterior)
+      else setError(getErrMsg(e, 'Error al crear boleta'))
+    },
   })
+
+  const lecturaInicialMut = useMutation({
+    mutationFn: boletasApi.crearLecturaInicial,
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['boletas'] })
+      setInicialOpen(false)
+      setModalOpen(false)
+      setSinLectura(null)
+      navigate(`/boletas/${data.id}?tab=lecturas`)
+    },
+    onError: (e: unknown) => setError(getErrMsg(e, 'Error al abrir la lectura inicial')),
+  })
+
+  const abrirLecturaInicial = (condominioId?: number | null) => {
+    setError('')
+    if (condominioId) setForm({ condominio_id: String(condominioId) })
+    setInicialOpen(true)
+  }
 
   const cerrarLecturasMut = useMutation({
     mutationFn: boletasApi.cerrarLecturas,
@@ -101,10 +143,11 @@ export default function Boletas() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['boletas'] }),
   })
 
-  const handleCreate = () => {
+  const handleCreate = (aceptar_sin_lectura_anterior = false) => {
     setError('')
     createMut.mutate({
       condominio_id: form.condominio_id ? Number(form.condominio_id) : (me?.condominio_id ?? undefined),
+      aceptar_sin_lectura_anterior,
     } as any) // as any porque hicimos los campos opcionales en el backend pero quizas los types.ts todavia piden periodo_mes
   }
 
@@ -134,8 +177,15 @@ export default function Boletas() {
               ))}
             </select>
           )}
+          {puedeLecturaInicial && (
+            <Button variant="secondary" onClick={() => abrirLecturaInicial(Number(filtroCondominio) || me?.condominio_id)}>
+              <Gauge className="h-4 w-4" /> Comenzar con lectura inicial
+            </Button>
+          )}
           <Button onClick={() => {
             setForm({ condominio_id: filtroCondominio || (me?.condominio_id ? String(me.condominio_id) : '') })
+            setError('')
+            setSinLectura(null)
             setModalOpen(true)
           }}>
             <Plus className="h-4 w-4" /> Generar período
@@ -144,6 +194,13 @@ export default function Boletas() {
       </div>
 
       {actionError && <Alert variant="error">{actionError}</Alert>}
+
+      {puedeLecturaInicial && (
+        <Alert variant="info">
+          Antes de la primera boleta, registra la <strong>lectura inicial</strong> de cada medidor: es el punto de partida
+          del primer consumo. Lo ideal es tomarla el mismo día en que la compañía lee el medidor general.
+        </Alert>
+      )}
 
       <Card padding={false}>
         <div className="overflow-x-auto">
@@ -162,17 +219,30 @@ export default function Boletas() {
             <tbody>
               {boletasFiltradas.map((b) => (
                 <tr key={b.id} className="border-b border-slate-700/50 hover:bg-slate-700/20">
-                  <td className="px-5 py-3 font-medium text-slate-200">{periodoCorto(b.periodo_mes)}</td>
+                  <td className="px-5 py-3 font-medium text-slate-200">
+                    {esLecturaInicial(b) ? <>Lectura inicial · {periodoCorto(b.periodo_mes)}</> : periodoCorto(b.periodo_mes)}
+                  </td>
                   <td className="px-5 py-3"><EstadoBadge b={b} /></td>
                   {isSuperAdmin && <td className="px-5 py-3 text-sm text-slate-400">{condominioNombre(b.condominio_id)}</td>}
-                  <td className="px-5 py-3 text-right font-mono text-slate-300">{kwh(b.total_kwh_compania)}</td>
-                  <td className="px-5 py-3 text-right font-mono text-slate-300">{clp(b.monto_neto_electricidad_consumida)}</td>
-                  <td className="px-5 py-3 text-right font-mono text-slate-300">{clp(b.monto_total_emision)}</td>
+                  {esLecturaInicial(b) ? (
+                    <td colSpan={3} className="px-5 py-3 text-right text-xs text-slate-500">Sin boleta: solo lecturas de partida</td>
+                  ) : (
+                    <>
+                      <td className="px-5 py-3 text-right font-mono text-slate-300">{kwh(b.total_kwh_compania)}</td>
+                      <td className="px-5 py-3 text-right font-mono text-slate-300">{clp(b.monto_neto_electricidad_consumida)}</td>
+                      <td className="px-5 py-3 text-right font-mono text-slate-300">{clp(b.monto_total_emision)}</td>
+                    </>
+                  )}
                   <td className="px-5 py-3">
                     <div className="flex items-center justify-end gap-1">
                       <Link to={`/boletas/${b.id}`}>
                         <Button variant="ghost" size="sm" title="Ver detalle"><Eye className="h-4 w-4" /></Button>
                       </Link>
+                      {esLecturaInicial(b) && !b.lecturas_cerradas && (
+                        <Button variant="ghost" size="sm" title="Cargar lecturas iniciales desde Excel" onClick={() => setImportarDe(b.id)}>
+                          <FileSpreadsheet className="h-4 w-4 text-primary-400" />
+                        </Button>
+                      )}
                       {!b.lecturas_cerradas && (
                         <>
                           <Button variant="ghost" size="sm" title="Eliminar boleta"
@@ -187,14 +257,14 @@ export default function Boletas() {
                           </Button>
                         </>
                       )}
-                      {b.lecturas_cerradas && !b.liquidaciones_cerradas && (
+                      {!esLecturaInicial(b) && b.lecturas_cerradas && !b.liquidaciones_cerradas && (
                         <Button variant="ghost" size="sm" title="Calcular liquidaciones"
                           loading={calcularMut.isPending}
                           onClick={() => { setActionError(''); calcularMut.mutate(b.id) }}>
                           <Calculator className="h-4 w-4 text-blue-400" />
                         </Button>
                       )}
-                      {b.liquidaciones_cerradas && !b.boleta_visible_usuarios && (
+                      {!esLecturaInicial(b) && b.liquidaciones_cerradas && !b.boleta_visible_usuarios && (
                         <Button variant="ghost" size="sm" title="Publicar"
                           loading={publicarMut.isPending}
                           onClick={() => publicarMut.mutate(b.id)}>
@@ -236,9 +306,78 @@ export default function Boletas() {
             </div>
           )}
 
+          {sinLectura ? (
+            <div className="space-y-3">
+              <Alert variant="warning">
+                <strong>{sinLectura.mensaje}.</strong> Su consumo del primer mes sería el número completo del medidor.
+              </Alert>
+              <p className="text-sm text-slate-400">
+                Parcelas: {sinLectura.parcelas.map((p) => p.numero_parcela).join(', ')}
+              </p>
+              <div className="flex flex-wrap justify-end gap-2 pt-2">
+                <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancelar</Button>
+                {sinBoletas(condominioDelForm) && (
+                  <Button variant="secondary" onClick={() => abrirLecturaInicial(condominioDelForm)}>
+                    <Gauge className="h-4 w-4" /> Comenzar con lectura inicial
+                  </Button>
+                )}
+                <Button variant="danger" loading={createMut.isPending} onClick={() => handleCreate(true)}>
+                  Crear igual: ingresaré su lectura anterior
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancelar</Button>
+              <Button onClick={() => handleCreate()} loading={createMut.isPending}>Generar</Button>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {importarDe != null && (
+        <ImportarLecturasIniciales open boletaId={importarDe} onClose={() => setImportarDe(null)}
+          onAplicada={() => { qc.invalidateQueries({ queryKey: ['boletas'] }); qc.invalidateQueries({ queryKey: ['lecturas', importarDe] }) }} />
+      )}
+
+      <Modal open={inicialOpen} onClose={() => setInicialOpen(false)} title="Lectura inicial de los medidores" size="md">
+        <div className="space-y-4">
+          {error && <Alert variant="error">{error}</Alert>}
+          <p className="text-sm text-slate-300">
+            Se abre un período especial, sin boleta de la compañía, para registrar la lectura de partida de cada medidor.
+            El lector la toma con la app (funciona sin señal y con foto); también puedes ingresarla en la pestaña Lecturas.
+            Al cerrar sus lecturas, la primera boleta parte de estos valores.
+          </p>
+          {isSuperAdmin && (
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-slate-300">Condominio</label>
+              <select
+                value={form.condominio_id}
+                onChange={(e) => setForm((f) => ({ ...f, condominio_id: e.target.value }))}
+                className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:border-primary-500 focus:outline-none"
+              >
+                <option value="">— Seleccionar —</option>
+                {condominios.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <Input label="Mes en que se toman las lecturas" type="month" value={mesInicial}
+                 onChange={(e) => setMesInicial(e.target.value)} />
+          <p className="text-xs text-slate-500">La primera boleta quedará en el mes siguiente.</p>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCreate} loading={createMut.isPending}>Generar</Button>
+            <Button variant="secondary" onClick={() => setInicialOpen(false)}>Cancelar</Button>
+            <Button loading={lecturaInicialMut.isPending} disabled={!mesInicial || (isSuperAdmin && !form.condominio_id)}
+                    onClick={() => {
+                      setError('')
+                      lecturaInicialMut.mutate({
+                        condominio_id: form.condominio_id ? Number(form.condominio_id) : (me?.condominio_id ?? undefined),
+                        periodo_mes: `${mesInicial}-01`,
+                      })
+                    }}>
+              Abrir lectura inicial
+            </Button>
           </div>
         </div>
       </Modal>

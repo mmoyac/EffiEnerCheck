@@ -47,7 +47,7 @@ async def _cabecera(c, email, clave=CLAVE_SEED):
 
 async def _pendiente(session, email="vecina@ejemplo.cl", condominio_id=None, telefono=None) -> Usuario:
     admin = (await session.execute(select(Usuario).where(Usuario.email == EMAIL_ADMIN))).scalar_one()
-    rol = (await session.execute(select(Rol.id).where(Rol.nombre == "parcelero"))).scalar_one()
+    rol = (await session.execute(select(Rol.id).where(Rol.nombre == "comunero"))).scalar_one()
     u = Usuario(nombre="Vecina Prueba", email=email, password_hash=None, rol_id=rol, telefono=telefono,
                 condominio_id=condominio_id or admin.condominio_id)
     session.add(u)

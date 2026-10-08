@@ -15,9 +15,9 @@ import Parcelas from './pages/admin/Parcelas'
 import Condominios from './pages/admin/Condominios'
 import LectorDashboard from './pages/lector/LectorDashboard'
 import CapturarLectura from './pages/lector/CapturarLectura'
-import MiLiquidacion from './pages/parcelero/MiLiquidacion'
+import MiLiquidacion from './pages/comunero/MiLiquidacion'
 import EstablecerClave from './pages/EstablecerClave'
-import MisRifas from './pages/parcelero/Rifas'
+import MisRifas from './pages/comunero/Rifas'
 import Rifas from './pages/admin/Rifas'
 import RifaDetalle from './pages/admin/RifaDetalle'
 import VentaRifa from './pages/porteria/VentaRifa'
@@ -71,7 +71,7 @@ export default function App() {
         </Route>
       </Route>
 
-      {/* Admin / Parcelero con AppLayout */}
+      {/* Admin / Comunero con AppLayout */}
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<RoleHome />} />

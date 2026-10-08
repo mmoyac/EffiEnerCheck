@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { CircleHelp } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { Input } from '../components/ui/Input'
 import { InputClave } from '../components/ui/InputClave'
@@ -93,6 +94,14 @@ export default function Login() {
             ¿Olvidaste tu clave? ¿Primera vez?
           </button>
         </div>
+        <a
+          href={PLATAFORMA.capacitacion}
+          target="_blank"
+          rel="noopener"
+          className="mt-4 flex items-center justify-center gap-1.5 text-sm font-medium text-primary-500 transition-colors hover:text-primary-400"
+        >
+          <CircleHelp className="h-4 w-4" /> ¿Cómo funciona el portal? Mira la capacitación
+        </a>
         <RecuperarClaveModal open={recuperar} onClose={() => setRecuperar(false)} emailInicial={email} />
 
         <p className="mt-4 text-center text-xs text-slate-600">

@@ -16,7 +16,7 @@ class UsuarioCreate(BaseModel):
     password: str | None = None
     rol_id: int
     condominio_id: int | None = None
-    parcela_ids: list[int] = []  # IDs de parcelas asignadas (uno o más para parceleros)
+    parcela_ids: list[int] = []  # IDs de parcelas asignadas (uno o más para comuneros)
     telefono: str | None = None
 
     @field_validator("telefono", mode="before")

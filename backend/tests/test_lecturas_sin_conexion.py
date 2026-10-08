@@ -124,7 +124,7 @@ async def test_lote_demasiado_grande(tx):
     assert r.status_code == 422
 
 
-async def test_parcelero_no_puede_sincronizar(tx):
+async def test_comunero_no_puede_sincronizar(tx):
     c, session = tx
     lectura = await _lectura(session)
     r = await c.post(URL, headers=await _cabecera(c, "gchacon@santalaura.cl"),

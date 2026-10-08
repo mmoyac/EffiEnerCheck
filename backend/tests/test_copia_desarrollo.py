@@ -14,7 +14,7 @@ from app.models.usuario_parcela import usuario_parcelas
 
 
 async def _condominio_de_desarrollo(db) -> None:
-    """Condominio ficticio con un parcelero real, uno del seed y un lector."""
+    """Condominio ficticio con un comunero real, uno del seed y un lector."""
     c = Condominio(nombre="Copia Origen", rut_comunidad="77777777-7", direccion="Camino 1",
                    plan_suscripcion="premium", color_primario="#22C55E", activo=True,
                    modulos=[CondominioModulo(modulo="portal"), CondominioModulo(modulo="rifas")])
@@ -26,9 +26,9 @@ async def _condominio_de_desarrollo(db) -> None:
     await db.flush()
     roles = {r.nombre: r.id for r in (await db.execute(select(Rol))).scalars()}
     eva = Usuario(nombre="Eva Luna", email="Eva@Ejemplo.cl", password_hash="hash-dev", telefono="56911112222",
-                  rol_id=roles["parcelero"], condominio_id=c.id)
+                  rol_id=roles["comunero"], condominio_id=c.id)
     seed = Usuario(nombre="Seed", email="gchacon@santalaura.cl.copia", password_hash="hash-dev",
-                   rol_id=roles["parcelero"], condominio_id=c.id)
+                   rol_id=roles["comunero"], condominio_id=c.id)
     lector = Usuario(nombre="Lector", email="lector@ejemplo.cl", password_hash="hash-dev",
                      rol_id=roles["lector"], condominio_id=c.id)
     db.add_all([eva, seed, lector])

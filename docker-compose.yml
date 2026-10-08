@@ -34,7 +34,11 @@ services:
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   # Portal de administración
+  # En desarrollo el portal corre con `npm run dev` (frontend/, puerto 3000, recarga en caliente).
+  # Este contenedor (build + nginx, como producción) solo se levanta a pedido:
+  #   docker-compose --profile contenedor up --build -d frontend
   frontend:
+    profiles: ["contenedor"]
     build: ./frontend
     ports:
       - "3000:80"

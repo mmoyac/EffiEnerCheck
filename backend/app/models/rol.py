@@ -13,7 +13,7 @@ class Rol(Base):
     __tablename__ = "roles"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    nombre: Mapped[str] = mapped_column(String, nullable=False)  # super_admin, admin_condominio, lector, parcelero
+    nombre: Mapped[str] = mapped_column(String, nullable=False)  # super_admin, admin_condominio, lector, comunero
     descripcion: Mapped[Optional[str]] = mapped_column(Text)
 
     usuarios: Mapped[List["Usuario"]] = relationship("Usuario", back_populates="rol")

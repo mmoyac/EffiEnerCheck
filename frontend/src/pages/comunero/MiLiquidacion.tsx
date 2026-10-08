@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { CheckCircle2, Clock, Zap, TrendingUp, DollarSign, FileText, ImageIcon, ChevronRight, ChevronLeft, Ticket } from 'lucide-react'
+import { CheckCircle2, Clock, Zap, TrendingUp, DollarSign, FileText, ImageIcon, ChevronRight, ChevronLeft, Ticket, Camera } from 'lucide-react'
 import { boletasApi } from '../../api/boletas'
+import { lecturasApi } from '../../api/lecturas'
 import { liquidacionesApi } from '../../api/liquidaciones'
 import { rifasApi } from '../../api/rifas'
 import { Card } from '../../components/ui/Card'
@@ -13,12 +14,15 @@ import { Modal } from '../../components/ui/Modal'
 import { clp, kwh, periodoCorto, fecha } from '../../utils/format'
 import { useAuth, useModulo } from '../../hooks/useAuth'
 import { Header } from '../../components/layout/Header'
+import { FotoMedidorModal } from '../../components/FotoMedidorModal'
+import type { LecturaParcela } from '../../types'
 
 export default function MiLiquidacion() {
   const { user } = useAuth()
   const misParcelas = user?.parcelas ?? []
   const [imagenOpen, setImagenOpen] = useState(false)
   const [selectedBoletaId, setSelectedBoletaId] = useState<number | null>(null)
+  const [fotoDe, setFotoDe] = useState<LecturaParcela | null>(null)
 
   const { data: boletas = [], isLoading: loadingBoletas } = useQuery({
     queryKey: ['boletas'],
@@ -32,6 +36,13 @@ export default function MiLiquidacion() {
   const { data: liquidaciones = [], isLoading: loadingLiq } = useQuery({
     queryKey: ['liquidaciones', boletaActiva?.id],
     queryFn: () => liquidacionesApi.list(boletaActiva!.id),
+    enabled: !!boletaActiva,
+  })
+
+  // Lecturas de mis parcelas en el período (la API ya filtra por las parcelas del comunero): foto del medidor
+  const { data: lecturas = [] } = useQuery({
+    queryKey: ['lecturas', boletaActiva?.id],
+    queryFn: () => lecturasApi.list(boletaActiva!.id),
     enabled: !!boletaActiva,
   })
 
@@ -103,6 +114,8 @@ export default function MiLiquidacion() {
           </>
         )}
 
+        <FotoMedidorModal lectura={fotoDe} onClose={() => setFotoDe(null)} titulo="Foto de tu medidor" />
+
         {/* VISTA DE DETALLE */}
         {selectedBoletaId && boletaActiva && (
           <>
@@ -125,6 +138,7 @@ export default function MiLiquidacion() {
             ) : (
               misLiquidaciones.map((liq) => {
                 const parcela = misParcelas.find((p) => p.id === liq.parcela_id)
+                const lectura = lecturas.find((l) => l.parcela_id === liq.parcela_id)
                 return (
                   <Card key={liq.id}>
                     {/* Header de la card */}
@@ -175,6 +189,13 @@ export default function MiLiquidacion() {
                         <Clock className="h-4 w-4" />
                         Pago pendiente — contacta a la administración
                       </div>
+                    )}
+
+                    {lectura?.tiene_foto && (
+                      <button onClick={() => setFotoDe(lectura)}
+                              className="mt-3 flex items-center gap-2 text-sm font-medium text-primary-400 hover:text-primary-300">
+                        <Camera className="h-4 w-4" /> Ver foto del medidor
+                      </button>
                     )}
                   </Card>
                 )

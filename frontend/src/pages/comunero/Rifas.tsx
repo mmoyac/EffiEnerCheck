@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { CheckCircle2, ChevronLeft, ChevronRight, Clock, HeartHandshake, Trophy } from 'lucide-react'
@@ -7,10 +8,12 @@ import { Badge } from '../../components/ui/Badge'
 import { Spinner } from '../../components/ui/Spinner'
 import { Alert } from '../../components/ui/Alert'
 import { Header } from '../../components/layout/Header'
+import { AgradecimientoCompra } from '../../components/rifas/AgradecimientoCompra'
 import { CompraPanel } from '../../components/rifas/CompraPanel'
 import { ComprasLista } from '../../components/rifas/ComprasLista'
 import { clp, fecha } from '../../utils/format'
 import { useAuth } from '../../hooks/useAuth'
+import type { CompraRifa } from '../../types'
 
 function Cargando() {
   return (
@@ -67,6 +70,9 @@ function ListaRifas() {
 
 function DetalleRifa({ rifaId }: { rifaId: number }) {
   const { user } = useAuth()
+  const navigate = useNavigate()
+  // Compra recién confirmada por el servidor: mientras exista, se muestra el agradecimiento
+  const [compraReciente, setCompraReciente] = useState<CompraRifa | null>(null)
   const misParcelas = user?.parcelas ?? []
   const { data: rifa, isLoading, error } = useQuery({ queryKey: ['rifa', rifaId], queryFn: () => rifasApi.get(rifaId) })
 
@@ -74,6 +80,17 @@ function DetalleRifa({ rifaId }: { rifaId: number }) {
   if (error || !rifa) return <Alert variant="error">No se pudo cargar la rifa.</Alert>
 
   const abierta = rifa.estado === 'abierta'
+
+  if (compraReciente) {
+    return (
+      <AgradecimientoCompra
+        rifa={rifa}
+        compra={compraReciente}
+        onComprarMas={() => setCompraReciente(null)}
+        onVolver={() => navigate('/mis-rifas')}
+      />
+    )
+  }
 
   return (
     <>
@@ -140,7 +157,13 @@ function DetalleRifa({ rifaId }: { rifaId: number }) {
         ) : (
           <Card>
             <p className="mb-3 text-sm font-semibold text-slate-300">Elige tus números</p>
-            <CompraPanel rifa={rifa} modo="portal" parcelas={misParcelas} barraFija />
+            <CompraPanel
+              rifa={rifa}
+              modo="portal"
+              parcelas={misParcelas}
+              barraFija
+              onVendida={(compra) => { setCompraReciente(compra); window.scrollTo({ top: 0 }) }}
+            />
           </Card>
         )
       ) : (
@@ -161,7 +184,7 @@ export default function MisRifas() {
     <div className="min-h-screen bg-slate-900">
       <Header />
       <div className="mx-auto max-w-lg space-y-5 px-4 py-6 pb-28">
-        {id ? <DetalleRifa rifaId={Number(id)} /> : <ListaRifas />}
+        {id ? <DetalleRifa key={id} rifaId={Number(id)} /> : <ListaRifas />}
       </div>
     </div>
   )

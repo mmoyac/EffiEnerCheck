@@ -22,3 +22,10 @@ class ParcelaResponse(BaseModel):
     numero_parcela: str
     propietario_nombre: str | None
     activa: bool
+    orden_recorrido: int | None = None
+
+
+class OrdenRecorridoUpdate(BaseModel):
+    """Recorrido del lector: parcelas en el orden en que se caminan. Lista vacía = sin recorrido."""
+    condominio_id: int | None = None   # super_admin
+    parcela_ids: list[int]

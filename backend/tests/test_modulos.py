@@ -125,9 +125,9 @@ async def test_auth_me_informa_modulos_y_marca(tx):
     client, session = tx
     c = await _condominio(session, ["portal", "energia", "rifas"])
     c.color_primario = "#1E5AA8"
-    parcelero = _auth(await _usuario(session, "parcelero", c.id), "parcelero")
+    comunero = _auth(await _usuario(session, "comunero", c.id), "comunero")
 
-    me = (await client.get("/api/v1/auth/me", headers=parcelero)).json()
+    me = (await client.get("/api/v1/auth/me", headers=comunero)).json()
     assert me["modulos"] == ["portal", "energia", "rifas"]
     assert me["condominio"] == {"id": c.id, "nombre": c.nombre, "logo_url": None, "color_primario": "#1E5AA8"}
 

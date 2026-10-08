@@ -54,7 +54,7 @@ async def test_carga_de_residentes_es_idempotente(db, tmp_path):
         select(Usuario).options(selectinload(Usuario.rol), selectinload(Usuario.parcelas))
         .where(Usuario.email == "beto@ejemplo.cl")
     )).scalar_one()
-    assert beto.rol.nombre == "parcelero"
+    assert beto.rol.nombre == "comunero"
     assert beto.password_hash is None   # pendiente: crea su clave con la invitación
     assert [p.id for p in beto.parcelas] == [parcela_2.id]
 

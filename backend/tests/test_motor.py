@@ -52,9 +52,10 @@ async def test_total_liquidado_cuadra_con_la_emision(db, items):
     liquidaciones = await calcular_liquidaciones_boleta(boleta.id, None, usuario, db)
 
     assert len(liquidaciones) == len(kwh)
-    total = sum(l.total_pagar_mes for l in liquidaciones)
-    # Cada componente se redondea a pesos por parcela: a lo más 1,5 pesos de diferencia por parcela
-    assert abs(total - boleta.monto_total_emision) <= 1.5 * len(kwh)
+    # Cuadre al peso (cambio cuadre-al-peso): igualdad exacta, sin tolerancia
+    assert sum(l.total_pagar_mes for l in liquidaciones) == boleta.monto_total_emision
+    for l in liquidaciones:
+        assert l.total_pagar_mes == l.monto_energia_kwh + l.monto_prorrateo_variable + l.monto_cuota_fija
 
 
 async def test_recalcular_no_duplica(db):
@@ -62,3 +63,29 @@ async def test_recalcular_no_duplica(db):
     await calcular_liquidaciones_boleta(boleta.id, None, usuario, db)
     segunda = await calcular_liquidaciones_boleta(boleta.id, None, usuario, db)
     assert len(segunda) == 2
+
+
+@pytest.mark.parametrize("kwh, items, emision", [
+    # Tres parcelas iguales: un tercio nunca da pesos enteros
+    ([100.0, 100.0, 100.0], [("Administración", 10_000.0, "fijo"), ("Transporte", 1_000.0, "variable")], 100_000),
+    # Consumos con decimales y una emisión "fea"
+    ([123.4, 56.7, 89.1, 10.9, 0.3], [("Transporte", 7_777.0, "variable")], 99_999),
+    # Descuento que deja los fijos en negativo
+    ([300.0, 200.0, 100.0], [("Cargo fijo", 1_000.0, "fijo"), ("Nota de crédito", -5_000.5, "fijo")], 50_001),
+])
+async def test_cuadre_al_peso_con_fracciones_adversas(db, kwh, items, emision):
+    boleta, usuario = await _escenario(db, items, kwh, emision=emision, kwh_compania=sum(kwh) + 33.3)
+    liquidaciones = await calcular_liquidaciones_boleta(boleta.id, None, usuario, db)
+    assert sum(l.total_pagar_mes for l in liquidaciones) == emision
+    # La cuota fija es idéntica para todas
+    assert len({l.monto_cuota_fija for l in liquidaciones}) == 1
+
+
+async def test_parcela_sin_consumo_solo_paga_cuota_fija(db):
+    boleta, usuario = await _escenario(db, [("Transporte", 12_345.0, "variable"), ("Adm.", 9_999.0, "fijo")],
+                                       [250.0, 0.0, 333.3], emision=200_001)
+    liquidaciones = await calcular_liquidaciones_boleta(boleta.id, None, usuario, db)
+    sin_consumo = liquidaciones[1]
+    assert sin_consumo.monto_energia_kwh == 0 and sin_consumo.monto_prorrateo_variable == 0
+    assert sin_consumo.total_pagar_mes == sin_consumo.monto_cuota_fija
+    assert sum(l.total_pagar_mes for l in liquidaciones) == 200_001

@@ -10,6 +10,9 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
   if (token) config.headers.Authorization = `Bearer ${token}`
+  // Archivos (fotos del medidor, planillas, vouchers): sin el Content-Type JSON por defecto, el navegador
+  // arma el multipart con su boundary. Con 'application/json' axios serializaría el FormData como JSON.
+  if (config.data instanceof FormData) config.headers.setContentType(null)
   return config
 })
 

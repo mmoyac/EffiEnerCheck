@@ -1,7 +1,9 @@
-from datetime import datetime
+import os
+from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,10 +17,23 @@ from app.schemas.lectura import (
     LecturaParcelaCreate, LecturaParcelaResponse, LecturaParcelaUpdate,
     ResultadoSincronizacion, SincronizarLecturasRequest, SincronizarLecturasResponse,
 )
+from app.services import fotos_lectura
+from app.services.periodos import es_lectura_inicial
 
 router = APIRouter(prefix="/lecturas", tags=["lecturas"])
 
 DB = Annotated[AsyncSession, Depends(get_db)]
+
+
+async def _parcelas_con_historial(boleta: BoletaMaestra, db: AsyncSession) -> set[int]:
+    """Parcelas con alguna lectura en un período anterior del mismo condominio."""
+    filas = await db.execute(
+        select(LecturaParcela.parcela_id)
+        .join(BoletaMaestra, LecturaParcela.boleta_id == BoletaMaestra.id)
+        .where(BoletaMaestra.condominio_id == boleta.condominio_id, BoletaMaestra.periodo_mes < boleta.periodo_mes)
+        .distinct()
+    )
+    return set(filas.scalars().all())
 
 
 async def _verificar_boleta_abierta(boleta_id: int, db: AsyncSession) -> BoletaMaestra:
@@ -47,12 +62,19 @@ async def list_lecturas(
         stmt = stmt.where(Parcela.condominio_id == tenant_id)
     if boleta_id:
         stmt = stmt.where(LecturaParcela.boleta_id == boleta_id)
-    if current_user.rol.nombre == "parcelero":
+    if current_user.rol.nombre == "comunero":
         ids = [p.id for p in current_user.parcelas]
         stmt = stmt.where(LecturaParcela.parcela_id.in_(ids))
 
-    result = await db.execute(stmt)
-    return result.scalars().all()
+    lecturas = (await db.execute(stmt)).scalars().all()
+    respuesta = [LecturaParcelaResponse.model_validate(l) for l in lecturas]
+    # Por período: la lectura anterior solo es editable en parcelas sin historial (cambio lectura-inicial)
+    boleta = await db.get(BoletaMaestra, boleta_id) if boleta_id else None
+    if boleta and not es_lectura_inicial(boleta):
+        con_historial = await _parcelas_con_historial(boleta, db)
+        for r in respuesta:
+            r.lectura_anterior_editable = r.parcela_id not in con_historial
+    return respuesta
 
 
 @router.post("/", response_model=LecturaParcelaResponse, status_code=status.HTTP_201_CREATED)
@@ -117,6 +139,16 @@ async def actualizar_lectura(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin acceso a esta lectura")
 
     cambios = data.model_dump(exclude_unset=True)
+    # La lectura anterior viene del período anterior: solo se ingresa en parcelas sin historial
+    if "lectura_anterior" in cambios and cambios["lectura_anterior"] != lectura.lectura_anterior:
+        boleta = await db.get(BoletaMaestra, lectura.boleta_id)
+        if es_lectura_inicial(boleta):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail="En la lectura inicial no hay lectura anterior")
+        if lectura.parcela_id in await _parcelas_con_historial(boleta, db):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                                detail="La lectura anterior viene del período anterior y no se modifica aquí")
+
     nueva_actual = cambios.get("lectura_actual", lectura.lectura_actual)
     nueva_anterior = cambios.get("lectura_anterior", lectura.lectura_anterior)
     if nueva_actual < nueva_anterior:
@@ -232,3 +264,101 @@ async def sincronizar_lecturas(
                                                   lectura=LecturaParcelaResponse.model_validate(lectura)))
     await db.commit()
     return SincronizarLecturasResponse(resultados=resultados)
+
+
+# ---- Foto del medidor (cambio foto-medidor) ---------------------------------------------------------------
+
+@router.put("/{lectura_id}/foto", response_model=LecturaParcelaResponse)
+async def subir_foto(
+    lectura_id: int,
+    current_user: Annotated[Usuario, Depends(LectorRequired)],
+    tenant_id: TenantId,
+    db: DB,
+    foto: UploadFile = File(...),
+    fecha_toma: datetime = Form(...),
+):
+    """
+    Sube (o reemplaza) la foto del medidor de una lectura. La foto queda amarrada a la toma que documenta:
+    solo se acepta si `fecha_toma` es la vigente de la lectura. Reenviar la misma foto no cambia nada.
+    """
+    lectura = await db.get(LecturaParcela, lectura_id)
+    if not lectura:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lectura no encontrada")
+    parcela = await db.get(Parcela, lectura.parcela_id)
+    if tenant_id is not None and parcela.condominio_id != tenant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin acceso a esta lectura")
+
+    contenido = await foto.read(fotos_lectura.FOTO_MAX_BYTES + 1)
+    if len(contenido) > fotos_lectura.FOTO_MAX_BYTES:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="La foto supera los 3 MB")
+    extension = fotos_lectura.tipo_por_bytes(contenido)
+    if extension is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="La foto debe ser una imagen JPEG o WEBP")
+    sha = fotos_lectura.sha256(contenido)
+
+    # Reintento: esta misma foto ya está guardada para esta misma toma
+    if lectura.foto_sha256 == sha and _mismo_instante(lectura.foto_fecha_toma, fecha_toma):
+        return lectura
+
+    boleta = await db.get(BoletaMaestra, lectura.boleta_id)
+    if boleta.lecturas_cerradas:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="Las lecturas del período ya están cerradas")
+    if not _mismo_instante(lectura.fecha_toma, fecha_toma):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="La foto es de una toma que ya no está vigente en el servidor")
+
+    anterior = lectura.foto_archivo
+    nuevo = fotos_lectura.guardar(contenido, extension)
+    try:
+        lectura.foto_archivo = nuevo
+        lectura.foto_sha256 = sha
+        lectura.foto_fecha_toma = lectura.fecha_toma
+        lectura.foto_subida_en = datetime.now(timezone.utc)
+        await registrar_auditoria(
+            db, usuario_id=current_user.id, condominio_id=parcela.condominio_id, accion="SUBIR_FOTO_LECTURA",
+            detalles={"lectura_id": lectura.id, "parcela_id": lectura.parcela_id, "sha256": sha,
+                      "bytes": len(contenido), "reemplaza": anterior is not None},
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        fotos_lectura.borrar(nuevo)
+        raise
+    fotos_lectura.borrar(anterior)
+    await db.refresh(lectura)
+    return lectura
+
+
+@router.get("/{lectura_id}/foto")
+async def ver_foto(
+    lectura_id: int,
+    current_user: Annotated[Usuario, Depends(AnyRoleRequired)],
+    tenant_id: TenantId,
+    db: DB,
+):
+    """
+    Entrega la foto del medidor. Staff y lector: las de su condominio. Comunero: solo las de sus parcelas y
+    con el período publicado. Portería queda fuera por la guarda. Cualquier denegación responde 404.
+    """
+    no_encontrada = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="La lectura no tiene foto")
+    lectura = await db.get(LecturaParcela, lectura_id)
+    if not lectura or not lectura.foto_archivo:
+        raise no_encontrada
+    parcela = await db.get(Parcela, lectura.parcela_id)
+    if tenant_id is not None and parcela.condominio_id != tenant_id:
+        raise no_encontrada
+    if current_user.rol.nombre == "comunero":
+        boleta = await db.get(BoletaMaestra, lectura.boleta_id)
+        if lectura.parcela_id not in [p.id for p in current_user.parcelas] or not boleta.boleta_visible_usuarios:
+            raise no_encontrada
+    ruta = fotos_lectura.ruta(lectura.foto_archivo)
+    if not os.path.isfile(ruta):
+        raise no_encontrada
+    return FileResponse(
+        ruta,
+        media_type="image/webp" if lectura.foto_archivo.endswith(".webp") else "image/jpeg",
+        content_disposition_type="inline",
+        headers={"Cache-Control": "private, no-store"},
+    )

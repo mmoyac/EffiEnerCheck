@@ -9,7 +9,7 @@ export function pantallaDeInicio(rol: string | null | undefined, modulos: readon
   switch (rol) {
     case 'lector':
       return tiene('energia') ? '/lecturas' : '/dashboard'
-    case 'parcelero':
+    case 'comunero':
       if (tiene('energia')) return '/liquidaciones'
       return tiene('rifas') ? '/mis-rifas' : '/dashboard'
     case 'porteria':

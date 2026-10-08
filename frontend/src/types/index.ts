@@ -9,6 +9,8 @@ export interface Parcela {
   numero_parcela: string
   propietario_nombre: string | null
   activa: boolean
+  /** Posición en el recorrido del lector (1, 2, 3…); null = sin posición */
+  orden_recorrido?: number | null
 }
 
 import type { Modulo } from '../config/modulos'
@@ -62,6 +64,8 @@ export interface BoletaItemDetalle {
   tipo_calculo: TipoCalculo
 }
 
+export type TipoPeriodo = 'regular' | 'lectura_inicial'
+
 export interface BoletaMaestra {
   id: number
   condominio_id: number
@@ -69,6 +73,8 @@ export interface BoletaMaestra {
   url_imagen_boleta: string | null
   boleta_visible_usuarios: boolean
   estado: 'borrador' | 'validada' | 'publicada'
+  /** lectura_inicial: solo registra la lectura de partida de cada medidor; no se liquida ni se publica */
+  tipo: TipoPeriodo
   lecturas_cerradas: boolean
   liquidaciones_cerradas: boolean
   total_kwh_compania: number | null
@@ -88,6 +94,11 @@ export interface LecturaParcela {
   kwh_consumidos: number
   lector_id: number
   fecha_toma: string | null
+  /** Foto del medidor: si existe y de qué toma es (puede diferir de fecha_toma tras una corrección) */
+  tiene_foto: boolean
+  foto_fecha_toma: string | null
+  /** Solo en el listado por período: la parcela no tiene historial y se puede ingresar su lectura anterior */
+  lectura_anterior_editable: boolean
 }
 
 export interface LiquidacionParcela {
@@ -131,6 +142,24 @@ export interface BoletaMaestraCreate {
   monto_total_emision?: number
   monto_saldo_anterior?: number
   items_detalle?: ItemDetalleCreate[]
+  /** Confirma crear la boleta aunque haya parcelas activas sin lectura previa (partirán en 0) */
+  aceptar_sin_lectura_anterior?: boolean
+}
+
+/** Vista previa / resultado de la carga masiva de lecturas iniciales desde Excel */
+export interface ImportacionLecturasIniciales {
+  a_aplicar: { lectura_id: number; parcela_id: number; numero_parcela: string; valor: number; valor_actual: number | null; reemplaza: boolean }[]
+  sin_cambio: number
+  vacias: number
+  errores: { fila: number; mensaje: string }[]
+  aplicadas: number
+}
+
+/** 409 de POST /boletas/ cuando hay parcelas sin lectura anterior */
+export interface SinLecturaAnterior {
+  codigo: 'sin_lectura_anterior'
+  mensaje: string
+  parcelas: { id: number; numero_parcela: string }[]
 }
 
 // --- Rifas solidarias (independientes de la boleta eléctrica) ---

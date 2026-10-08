@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { KeyRound, LogOut, Ticket, User } from 'lucide-react'
+import { CircleHelp, KeyRound, LogOut, Ticket, User } from 'lucide-react'
 import { useAuth, useModulo } from '../../hooks/useAuth'
 import { CambiarClaveModal } from '../CambiarClaveModal'
+import { PLATAFORMA } from '../../config/marca'
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin:      'Super Admin',
   admin_condominio: 'Administrador',
   lector:           'Lector',
-  parcelero:        'Parcelero',
+  comunero:         'Comunero',
   porteria:         'Portería',
 }
 
@@ -21,8 +22,8 @@ export function Header() {
     <header className="flex h-14 items-center justify-between border-b border-slate-700 bg-slate-900 px-5">
       <div />
       <div className="flex items-center gap-4">
-        {/* El parcelero no tiene sidebar: su acceso a las rifas vive en la cabecera */}
-        {user?.rol?.nombre === 'parcelero' && conRifas && (
+        {/* El comunero no tiene sidebar: su acceso a las rifas vive en la cabecera */}
+        {user?.rol?.nombre === 'comunero' && conRifas && (
           <Link
             to="/mis-rifas"
             className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-100"
@@ -40,6 +41,16 @@ export function Header() {
             <p className="text-xs text-slate-500">{ROLE_LABELS[user?.rol?.nombre ?? ''] ?? user?.rol?.nombre}</p>
           </div>
         </div>
+        <a
+          href={PLATAFORMA.capacitacion}
+          target="_blank"
+          rel="noopener"
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-400 hover:bg-slate-700 hover:text-slate-100 transition-colors"
+          title="Cómo usar el portal"
+        >
+          <CircleHelp className="h-4 w-4" />
+          <span className="hidden md:inline">Ayuda</span>
+        </a>
         <button
           onClick={() => setCambiarClave(true)}
           className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-400 hover:bg-slate-700 hover:text-slate-100 transition-colors"

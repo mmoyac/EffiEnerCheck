@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Lock, Calculator, Globe, Check, X, Pencil, Upload, ImageIcon, ScanLine, ClipboardCheck } from 'lucide-react'
+import { ArrowLeft, Lock, Calculator, Globe, Check, X, Pencil, Upload, ImageIcon, ScanLine, ClipboardCheck, Camera, CameraOff, Download, FileSpreadsheet } from 'lucide-react'
 import { boletasApi } from '../../api/boletas'
 import { lecturasApi } from '../../api/lecturas'
 import { liquidacionesApi } from '../../api/liquidaciones'
@@ -13,8 +13,10 @@ import { Badge } from '../../components/ui/Badge'
 import { Alert } from '../../components/ui/Alert'
 import { Spinner } from '../../components/ui/Spinner'
 import { clp, kwh, numero, periodoCorto, fecha, fechaHora } from '../../utils/format'
-import type { Parcela } from '../../types'
-import ModalEditDetalles from './ModalEditDetalles'
+import type { LecturaParcela, Parcela } from '../../types'
+import ModalEditDetalles, { CONCEPTOS_SUGERIDOS } from './ModalEditDetalles'
+import { FotoMedidorModal } from '../../components/FotoMedidorModal'
+import { ImportarLecturasIniciales } from './ImportarLecturasIniciales'
 
 type Tab = 'resumen' | 'lecturas' | 'liquidaciones' | 'boleta'
 
@@ -35,11 +37,21 @@ export default function BoletaDetalle() {
   const [editingLectura, setEditingLectura] = useState<number | null>(null)
   const [editValue, setEditValue] = useState('')
   const [editingDetalles, setEditingDetalles] = useState(false)
+  const [conSugeridos, setConSugeridos] = useState(false)
+  const [fotoDe, setFotoDe] = useState<LecturaParcela | null>(null)
+  // Lectura anterior de una parcela sin historial (cambio lectura-inicial)
+  const [editingAnterior, setEditingAnterior] = useState<number | null>(null)
+  const [anteriorValue, setAnteriorValue] = useState('')
+  const [importarOpen, setImportarOpen] = useState(false)
 
   const { data: boleta, isLoading } = useQuery({
     queryKey: ['boleta', boletaId],
     queryFn: () => boletasApi.get(boletaId),
   })
+
+  // La lectura inicial solo tiene la pestaña Lecturas
+  const inicial = boleta?.tipo === 'lectura_inicial'
+  useEffect(() => { if (inicial && tab !== 'lecturas') setTab('lecturas') }, [inicial, tab])
 
   const { data: lecturas = [] } = useQuery({
     queryKey: ['lecturas', boletaId],
@@ -97,10 +109,29 @@ export default function BoletaDetalle() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['lecturas', boletaId] })
       setEditingLectura(null)
-      calcularMut.mutate()
+      // La lectura inicial no se liquida; un período regular sin corroborar tampoco se puede calcular
+      if (!inicial && boleta?.estado === 'validada') calcularMut.mutate()
     },
     onError: (e: unknown) => setActionError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al guardar lectura'),
   })
+
+  const updateAnteriorMut = useMutation({
+    mutationFn: ({ lecturaId, valor }: { lecturaId: number; valor: number }) =>
+      lecturasApi.update(lecturaId, { lectura_anterior: valor }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lecturas', boletaId] })
+      setEditingAnterior(null)
+    },
+    onError: (e: unknown) => setActionError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al guardar la lectura anterior'),
+  })
+
+  const guardarAnterior = (l: LecturaParcela) => {
+    const v = Number(anteriorValue)
+    if (anteriorValue === '' || isNaN(v) || v < 0) { setActionError('Ingresa una lectura anterior válida'); return }
+    if (l.fecha_toma && v > l.lectura_actual) { setActionError(`La lectura anterior (${v}) no puede ser mayor que la actual (${l.lectura_actual})`); return }
+    setActionError('')
+    updateAnteriorMut.mutate({ lecturaId: l.id, valor: v })
+  }
 
   const calcularMut = useMutation({
     mutationFn: () => liquidacionesApi.calcular(boletaId),
@@ -187,7 +218,7 @@ export default function BoletaDetalle() {
         </Link>
         <div className="flex-1">
           <h1 className="text-xl font-bold text-slate-100">
-            Boleta {periodoCorto(boleta.periodo_mes)}
+            {inicial ? 'Lectura inicial' : 'Boleta'} {periodoCorto(boleta.periodo_mes)}
           </h1>
           <div className="mt-1 flex flex-wrap gap-2">
             {boleta.estado === 'validada' && <Badge color="purple">Desglose corroborado</Badge>}
@@ -210,7 +241,7 @@ export default function BoletaDetalle() {
               <Lock className="h-4 w-4 text-orange-400" /> Reabrir lecturas
             </Button>
           )}
-          {boleta.estado === 'borrador' && !boleta.liquidaciones_cerradas && (
+          {!inicial && boleta.estado === 'borrador' && !boleta.liquidaciones_cerradas && (
             <Button size="sm" loading={validarItemsMut.isPending}
               disabled={itemsPendientes > 0}
               title={itemsPendientes > 0 ? 'Clasifica primero los ítems pendientes' : undefined}
@@ -218,7 +249,7 @@ export default function BoletaDetalle() {
               <ClipboardCheck className="h-4 w-4" /> Corroborar desglose
             </Button>
           )}
-          {boleta.estado === 'validada' && !boleta.liquidaciones_cerradas && (
+          {!inicial && boleta.estado === 'validada' && !boleta.liquidaciones_cerradas && (
             <Button size="sm" loading={calcularMut.isPending}
               onClick={() => { setActionError(''); calcularMut.mutate() }}>
               <Calculator className="h-4 w-4" /> Calcular liquidaciones
@@ -247,7 +278,15 @@ export default function BoletaDetalle() {
 
       {actionError && <Alert variant="error">{actionError}</Alert>}
 
-      {itemsPendientes > 0 && (
+      {inicial && (
+        <Alert variant="info">
+          Período de <strong>lectura inicial</strong>: registra la lectura de partida de cada medidor. No tiene boleta
+          ni liquidaciones y no se publica. El lector la toma con la app; aquí puedes ingresarla o corregirla.
+          Al cerrar las lecturas, la primera boleta parte de estos valores.
+        </Alert>
+      )}
+
+      {!inicial && itemsPendientes > 0 && (
         <Alert variant="warning">
           <span className="font-semibold">
             {itemsPendientes} ítem{itemsPendientes > 1 ? 's' : ''} sin clasificar.
@@ -265,7 +304,7 @@ export default function BoletaDetalle() {
         </Alert>
       )}
 
-      {boleta.estado === 'borrador' && itemsPendientes === 0 && !boleta.liquidaciones_cerradas && (
+      {!inicial && boleta.estado === 'borrador' && itemsPendientes === 0 && !boleta.liquidaciones_cerradas && (
         <Alert variant="info">
           Revisa el desglose y corrobóralo para habilitar el cálculo. Cada período requiere que
           confirmes qué ítems entran al reparto, aunque vengan igual que el mes anterior.
@@ -273,7 +312,7 @@ export default function BoletaDetalle() {
       )}
 
       {/* KPI strip */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {!inicial && <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           { label: 'kWh compañía', value: kwh(boleta.total_kwh_compania) },
           { label: 'Monto neto', value: clp(boleta.monto_neto_electricidad_consumida) },
@@ -285,11 +324,11 @@ export default function BoletaDetalle() {
             <p className="mt-1 font-mono font-semibold text-slate-200">{value}</p>
           </Card>
         ))}
-      </div>
+      </div>}
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-slate-700">
-        {(['resumen', 'lecturas', 'liquidaciones', 'boleta'] as Tab[]).map((t) => (
+        {((inicial ? ['lecturas'] : ['resumen', 'lecturas', 'liquidaciones', 'boleta']) as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2.5 text-sm font-medium capitalize transition-colors ${
               tab === t ? 'border-b-2 border-primary-500 text-primary-400' : 'text-slate-400 hover:text-slate-100'
@@ -332,21 +371,66 @@ export default function BoletaDetalle() {
               ))}
             </tbody>
           </table>
+          {boleta.items_detalle.length === 0 && !boleta.liquidaciones_cerradas && (
+            <div className="space-y-3 px-5 py-8 text-center">
+              <p className="text-sm text-slate-300">
+                {boleta.total_kwh_compania == null
+                  ? 'Este período aún no tiene los datos de la boleta.'
+                  : 'Este período no tiene conceptos de detalle.'}
+              </p>
+              <p className="mx-auto max-w-xl text-xs text-slate-500">
+                Sube la boleta en la pestaña <strong>Boleta</strong> y procésala con IA, o ingrésala a mano. Lo mínimo para
+                liquidar son 3 totales: <strong>kWh compañía</strong>, <strong>monto neto</strong> y <strong>total emisión</strong>.
+                Los conceptos son opcionales y pueden cambiar mes a mes.
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button size="sm" variant="secondary" onClick={() => { setConSugeridos(false); setEditingDetalles(true) }}>
+                  <Pencil className="h-4 w-4" /> Ingresar a mano
+                </Button>
+                <Button size="sm" onClick={() => { setConSugeridos(true); setEditingDetalles(true) }}>
+                  <ClipboardCheck className="h-4 w-4" /> Usar conceptos sugeridos
+                </Button>
+              </div>
+            </div>
+          )}
         </Card>
       )}
 
       {/* Lecturas */}
       {tab === 'lecturas' && (
         <Card padding={false}>
+          {inicial && !boleta.lecturas_cerradas && (
+            <div className="flex flex-wrap items-center justify-end gap-2 border-b border-slate-700 px-5 py-3">
+              <Button size="sm" variant="secondary"
+                onClick={() => boletasApi.descargarPlantillaLecturasIniciales(boletaId, `lecturas-iniciales-${boleta.periodo_mes.slice(0, 7)}.xlsx`)
+                  .catch(() => setActionError('No se pudo descargar la plantilla'))}>
+                <Download className="h-4 w-4" /> Descargar plantilla
+              </Button>
+              <Button size="sm" onClick={() => setImportarOpen(true)}>
+                <FileSpreadsheet className="h-4 w-4" /> Cargar desde Excel
+              </Button>
+              <ImportarLecturasIniciales open={importarOpen} boletaId={boletaId} onClose={() => setImportarOpen(false)}
+                onAplicada={() => { qc.invalidateQueries({ queryKey: ['lecturas', boletaId] }); qc.invalidateQueries({ queryKey: ['boleta', boletaId] }) }} />
+            </div>
+          )}
+          {(() => {
+            const sinFoto = lecturas.filter((l) => l.fecha_toma && !l.tiene_foto).length
+            return sinFoto > 0 && (
+              <p className="flex items-center gap-2 border-b border-slate-700 px-5 py-3 text-xs text-slate-400">
+                <CameraOff className="h-4 w-4" /> {sinFoto} lectura{sinFoto === 1 ? '' : 's'} tomada{sinFoto === 1 ? '' : 's'} sin foto del medidor
+              </p>
+            )
+          })()}
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-700 text-left text-xs uppercase tracking-wide text-slate-500">
                 <th className="px-5 py-3">Parcela</th>
-                <th className="px-5 py-3 text-right">L. Anterior</th>
-                <th className="px-5 py-3 text-right">L. Actual</th>
-                <th className="px-5 py-3 text-right">kWh consumidos</th>
+                {!inicial && <th className="px-5 py-3 text-right">L. Anterior</th>}
+                <th className="px-5 py-3 text-right">{inicial ? 'Lectura inicial' : 'L. Actual'}</th>
+                {!inicial && <th className="px-5 py-3 text-right">kWh consumidos</th>}
                 <th className="px-5 py-3">Fecha y Hora</th>
                 <th className="px-5 py-3">Lector</th>
+                <th className="px-3 py-3">Foto</th>
                 {!boleta.lecturas_cerradas && !boleta.liquidaciones_cerradas && <th className="px-5 py-3" />}
               </tr>
             </thead>
@@ -356,7 +440,26 @@ export default function BoletaDetalle() {
                   <td className="px-5 py-3 font-medium text-slate-200">
                     {parcelaMap[l.parcela_id]?.numero_parcela ?? `#${l.parcela_id}`}
                   </td>
-                  <td className="px-5 py-3 text-right font-mono text-slate-400">{numero(l.lectura_anterior)}</td>
+                  {!inicial && (
+                    <td className="px-5 py-3 text-right font-mono text-slate-400">
+                      {editingAnterior === l.id ? (
+                        <span className="inline-flex items-center gap-1">
+                          <input type="number" value={anteriorValue} autoFocus
+                            onChange={(e) => setAnteriorValue(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') guardarAnterior(l); if (e.key === 'Escape') setEditingAnterior(null) }}
+                            className="w-28 rounded border border-primary-500 bg-slate-800 px-2 py-1 text-right font-mono text-slate-100 focus:outline-none" />
+                          <button onClick={() => guardarAnterior(l)} className="rounded p-1 text-green-400 hover:bg-green-500/20" title="Guardar"><Check className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => setEditingAnterior(null)} className="rounded p-1 text-slate-400 hover:bg-slate-700" title="Cancelar"><X className="h-3.5 w-3.5" /></button>
+                        </span>
+                      ) : l.lectura_anterior_editable && !boleta.lecturas_cerradas ? (
+                        <button onClick={() => { setEditingAnterior(l.id); setAnteriorValue(l.lectura_anterior ? String(l.lectura_anterior) : '') }}
+                                title="Parcela sin período anterior: ingresa su lectura anterior"
+                                className="inline-flex items-center gap-1 rounded px-1 text-yellow-300 hover:bg-slate-700">
+                          {numero(l.lectura_anterior)} <Pencil className="h-3 w-3" />
+                        </button>
+                      ) : numero(l.lectura_anterior)}
+                    </td>
+                  )}
                   <td className="px-5 py-3 text-right font-mono text-slate-300">
                     {editingLectura === l.id ? (
                       <input
@@ -378,9 +481,17 @@ export default function BoletaDetalle() {
                       numero(l.lectura_actual)
                     )}
                   </td>
-                  <td className="px-5 py-3 text-right font-mono font-medium text-primary-400">{numero(l.kwh_consumidos)}</td>
+                  {!inicial && <td className="px-5 py-3 text-right font-mono font-medium text-primary-400">{numero(l.kwh_consumidos)}</td>}
                   <td className="px-5 py-3 text-slate-400">{fechaHora(l.fecha_toma)}</td>
                   <td className="px-5 py-3 text-slate-400">{l.fecha_toma ? (usuarioMap[l.lector_id]?.nombre ?? 'Desconocido') : '—'}</td>
+                  <td className="px-3 py-3">
+                    {l.tiene_foto ? (
+                      <button onClick={() => setFotoDe(l)} title="Ver foto del medidor"
+                              className="rounded p-1 text-primary-400 hover:bg-slate-700 hover:text-primary-300">
+                        <Camera className="h-4 w-4" />
+                      </button>
+                    ) : <span className="text-slate-600">—</span>}
+                  </td>
                   {!boleta.lecturas_cerradas && !boleta.liquidaciones_cerradas && (
                     <td className="px-3 py-3">
                       {editingLectura === l.id ? (
@@ -412,10 +523,12 @@ export default function BoletaDetalle() {
                 </tr>
               ))}
               {lecturas.length === 0 && (
-                <tr><td colSpan={7} className="px-5 py-8 text-center text-slate-500">Sin lecturas registradas para este período</td></tr>
+                <tr><td colSpan={8} className="px-5 py-8 text-center text-slate-500">Sin lecturas registradas para este período</td></tr>
               )}
             </tbody>
           </table>
+          <FotoMedidorModal lectura={fotoDe} onClose={() => setFotoDe(null)}
+            titulo={`Medidor parcela ${fotoDe ? (parcelaMap[fotoDe.parcela_id]?.numero_parcela ?? fotoDe.parcela_id) : ''}`} />
         </Card>
       )}
 
@@ -546,8 +659,9 @@ export default function BoletaDetalle() {
       <ModalEditDetalles
         boleta={boleta}
         open={editingDetalles}
-        onClose={() => setEditingDetalles(false)}
+        onClose={() => { setEditingDetalles(false); setConSugeridos(false) }}
         onSave={(data) => updateDetallesMut.mutate(data)}
+        itemsIniciales={conSugeridos ? CONCEPTOS_SUGERIDOS : undefined}
         isPending={updateDetallesMut.isPending}
         error={(updateDetallesMut.error as any)?.response?.data?.detail ?? ''}
       />

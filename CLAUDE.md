@@ -13,7 +13,7 @@ EnerCheck distribuye el costo de una boleta eléctrica colectiva entre las parce
 ```
 Admin sube boleta (OCR) → Lector ingresa lecturas → Lector cierra lecturas
 → Admin calcula liquidaciones → Admin cierra período → Admin publica
-→ Parcelero consulta su liquidación
+→ Comunero consulta su liquidación
 ```
 
 ---
@@ -79,7 +79,7 @@ EnerCheck/
 │   │   ├── arranque.py                  # Arranque de producción: valida .env, migra, catálogos, super admin
 │   │   ├── db/
 │   │   │   ├── session.py               # AsyncSession factory
-│   │   │   ├── cargar_residentes.py     # Producción: parcelas y parceleros (pendientes) desde MATRIZ RESIDENTES.xlsx
+│   │   │   ├── cargar_residentes.py     # Producción: parcelas y comuneros (pendientes) desde MATRIZ RESIDENTES.xlsx
 │   │   │   ├── copiar_desde_desarrollo.py # Carga inicial: exporta un condominio de dev e importa en prod (sin datos de prueba)
 │   │   │   ├── cambiar_clave.py         # Producción: cambiar una clave desde la consola del servidor
 │   │   │   └── seeds/seeder.py          # Datos de prueba de DESARROLLO (roles, condominio, usuarios, boleta)
@@ -110,8 +110,8 @@ EnerCheck/
 │   │   │   ├── lector/
 │   │   │   │   ├── LectorDashboard.tsx  # Vista móvil SIN CONEXIÓN: recorrido en IndexedDB, avance, sincronizar, revisar
 │   │   │   │   └── CapturarLectura.tsx  # Captura: guarda en el celular y sincroniza si hay señal
-│   │   │   └── parcelero/
-│   │   │       ├── MiLiquidacion.tsx    # Vista del parcelero: lista de períodos → detalle (+ aviso de rifa abierta)
+│   │   │   └── comunero/
+│   │   │       ├── MiLiquidacion.tsx    # Vista del comunero: lista de períodos → detalle (+ aviso de rifa abierta)
 │   │   │       └── Rifas.tsx            # /mis-rifas: grilla de compra y compras de su parcela
 │   │   │   └── porteria/
 │   │   │       └── VentaRifa.tsx        # /porteria: venta rápida, comprobante, búsqueda y caja
@@ -133,6 +133,7 @@ EnerCheck/
 │   │   │   └── useAuth.ts               # useAuth(), useRole(), useModulos(), useModulo(m)
 │   │   ├── utils/color.ts               # Escala de tonos desde el color institucional (TemaCondominio la aplica)
 │   │   └── types/index.ts               # Interfaces TypeScript (BoletaMaestra, Lectura, Sesion, etc.)
+│   ├── public/capacitacion/             # CENTRO DE CAPACITACIÓN: HTML/CSS/JS estático y público en /capacitacion/
 │   └── Dockerfile
 ├── landing/                             # LANDING pública: app aparte (Vite+React+Tailwind), contenedor propio
 │   ├── src/                             # App.tsx, secciones/, types.ts (espejo de SitioPublico), color.ts, tema.ts
@@ -179,10 +180,11 @@ EnerCheck/
 | `lecturas-remarcadores` | Captura, contador no regresivo, `fecha_toma`, vista del lector |
 | `ciclo-periodo` | Los 3 candados, cerrar/reabrir, publicación, inmutabilidad |
 | `motor-liquidaciones` | Fórmulas, diferencial, idempotencia, consulta y pago |
-| `portal-parcelero` | Desglose, estado de pago, transparencia de la boleta |
+| `portal-comunero` | Desglose, estado de pago, transparencia de la boleta |
 | `consola-administrativa` | Dashboard, pestañas, filtros, manejo de errores |
 | `auditoria` | Vocabulario de acciones, before/after, exclusión de secretos |
 | `infraestructura-despliegue` | Docker, envs, volúmenes, Alembic, seeds |
+| `proceso-energia` | **El proceso de Energía de punta a punta**: lectura inicial → primera boleta → toma → desglose → cálculo al peso → cierre → publicación → consulta del comunero. Lo verifica `tests/test_proceso_energia.py` (en curso: cambio `proceso-energia`) |
 
 **Reglas de trabajo:**
 
@@ -211,14 +213,14 @@ Los guards se aplican como dependencias FastAPI en cada endpoint:
 |-------------|-----------------|
 | `AdminRequired` | `super_admin`, `admin_condominio` |
 | `LectorRequired` | `super_admin`, `admin_condominio`, `lector` |
-| `AnyRoleRequired` | `super_admin`, `admin_condominio`, `lector`, `parcelero` — **no** incluye `porteria` |
+| `AnyRoleRequired` | `super_admin`, `admin_condominio`, `lector`, `comunero` — **no** incluye `porteria` |
 | `PorteriaRequired` | `super_admin`, `admin_condominio`, `porteria` |
 | `RifaAccesoRequired` | los cinco roles; solo endpoints de consulta de rifas |
 | `TenantId` | extrae `condominio_id` del JWT; `super_admin` recibe `None` (acceso global) |
 
 En el frontend, las rutas están protegidas en `App.tsx` con `useRole()` y, las de un módulo, con `<ModuloRoute modulo="...">`. La pantalla de inicio por rol se define **una sola vez** en `config/inicio.ts` (`pantallaDeInicio(rol, modulos)`), con alternativas cuando la principal es de un módulo no contratado.
 
-> ⚠️ `porteria` (cuenta compartida de la portería, solo vende rifas) queda **fuera** de `AnyRoleRequired` a propósito: varios endpoints `AnyRoleRequired` solo filtran por parcela cuando el rol es `parcelero`, así que un rol nuevo agregado ahí vería todo el condominio. Al crear un rol nuevo, define sus guardas explícitamente y su entrada en `config/inicio.ts`.
+> ⚠️ `porteria` (cuenta compartida de la portería, solo vende rifas) queda **fuera** de `AnyRoleRequired` a propósito: varios endpoints `AnyRoleRequired` solo filtran por parcela cuando el rol es `comunero`, así que un rol nuevo agregado ahí vería todo el condominio. Al crear un rol nuevo, define sus guardas explícitamente y su entrada en `config/inicio.ts`.
 
 ---
 
@@ -263,6 +265,18 @@ Nadie conoce la clave de otro (spec `acceso-por-enlace`):
 
 ---
 
+## Centro de capacitación (`frontend/public/capacitacion/`)
+
+Página **pública** de EFFIComunidad (spec `capacitacion-plataforma`) con recorridos animados por módulo y por rol. Se abre en `/capacitacion/` sin sesión y se enlaza desde el Login, el ícono «Ayuda» de `Header` y la cabecera del lector (`PLATAFORMA.capacitacion`).
+
+- **Estático, sin build ni React:** `pantallas.js` (piezas del portal simulado), `recorridos/<modulo>.js` (contenido como datos), `motor.js` (navegación por hash y reproductor). Scripts clásicos: también abre como archivo local.
+- **Datos ficticios, sin `/api/` y sin recursos de terceros.** Nada de nombres o teléfonos reales.
+- **Regla:** un cambio que altera un flujo visible cubierto por un recorrido actualiza ese recorrido **en el mismo cambio**; un módulo nuevo agrega su sección (aunque sea «próximamente» en `recorridos/plataforma.js`).
+- El service worker la excluye del `navigateFallback` (`vite.config.ts`); si se quita, el portal instalado mostraría el login en lugar de la capacitación.
+- Un paso se puede enlazar directo: `/capacitacion/#/modulo/rifas/comunero/5`.
+
+---
+
 ## Lecturas sin conexión
 
 La app del lector (`/lecturas`) funciona sin señal (guía: [docs/lecturas-sin-conexion.md](docs/lecturas-sin-conexion.md)). Es la **única** parte del portal que lo hace.
@@ -270,6 +284,8 @@ La app del lector (`/lecturas`) funciona sin señal (guía: [docs/lecturas-sin-c
 - `frontend/src/offline/lecturas.ts` (IndexedDB con `idb`) + `useLecturasOffline`. La captura **siempre** guarda primero en el celular y luego intenta `POST /lecturas/sincronizar`.
 - Cada lectura viaja con la **base** descargada: el servidor no pisa una lectura que cambió después (responde `conflicto`). Una pendiente no se borra hasta que el servidor dice `aplicada`.
 - `AuthContext` usa la última sesión guardada cuando `/auth/me` falla **sin respuesta** (sin red); con 401 la cierra. No convertir eso en "usar la sesión guardada siempre".
+- **Orden del recorrido** (`parcelas.orden_recorrido`, `PUT /parcelas/orden-recorrido`, auditoría `UPDATE_ORDEN_RECORRIDO`): la app del lector ordena con `utils/recorrido.ts → ordenarRecorrido()` (con posición primero, el resto en orden natural; sin recorrido = orden numérico). El resto del sistema sigue en orden numérico.
+- **Foto del medidor** (opcional, spec `lecturas-remarcadores`): almacén `fotos` de IndexedDB (versión 2), amarrada a la `fecha_toma` de su toma. `sincronizar()` la sube **después** del lote, con `PUT /lecturas/{id}/foto`, solo si su lectura ya no está pendiente; el servidor la rechaza (409) si esa toma ya no es la vigente. Archivos en `/app/privado/lecturas` (`services/fotos_lectura.py`), **nunca** en `/app/uploads`; se entregan solo por `GET /lecturas/{id}/foto` (comunero: sus parcelas y período publicado; portería: nunca). Corregir el valor no borra la foto (`foto_fecha_toma`).
 
 ---
 
@@ -297,8 +313,10 @@ lecturas_cerradas = True   →  Admin puede calcular y cerrar liquidaciones
         ↓  cerrar-liquidaciones (requiere al menos 1 LiquidacionParcela)
 liquidaciones_cerradas = True  →  Período cerrado, sin modificaciones
         ↓  PATCH boleta_visible_usuarios=true
-boleta_visible_usuarios = True  →  Parceleros pueden ver su liquidación
+boleta_visible_usuarios = True  →  Comuneros pueden ver su liquidación
 ```
+
+**Lectura inicial** (`boletas_maestras.tipo = 'lectura_inicial'`, `services/periodos.py`): período sin boleta de la compañía que solo registra la lectura de partida de cada medidor, antes de la primera boleta (`POST /boletas/lectura-inicial`, solo en condominios sin boletas). Usa la misma app del lector (sin conexión, con foto). `exigir_periodo_regular()` responde 409 en calcular, validar-items, imagen, OCR, detalles, cerrar-liquidaciones y publicación; cuenta como cerrado al cerrar sus lecturas y no se reabre si hay un período posterior. La administración puede cargarla desde Excel (`services/lecturas_iniciales.py`: plantilla, vista previa y aplicar todo o nada; auditoría `IMPORTAR_LECTURAS_INICIALES`). Crear una boleta con parcelas activas sin lectura previa responde 409 `sin_lectura_anterior` salvo `aceptar_sin_lectura_anterior`; la lectura anterior solo se edita en parcelas sin historial (`lectura_anterior_editable`).
 
 **Reverso:**
 - `reabrir-lecturas`: requiere `!liquidaciones_cerradas`
@@ -327,6 +345,8 @@ prorrateo_var = Σ ítems_variable × (kwh_parcela / Σ kwh_remarcadores)
 monto_energia = valor_kwh × kwh_parcela
 total_pagar   = monto_energia + prorrateo_var + cuota_fija
 ```
+
+**Cuadre al peso:** cada componente no se redondea por separado. `repartir_al_peso()` (mayor resto) hace que Σ `total_pagar_mes` = total de emisión exacto: cuota fija igual para todas (redondeada), variable por mayor resto, y la energía completa el cuadre repartida por mayor resto solo entre parcelas con consumo (puede diferir en $1 de `round(valor_kwh × kWh)`). Los tests del motor exigen igualdad exacta, sin tolerancia.
 
 El motor es **idempotente**: hace `DELETE FROM liquidaciones WHERE boleta_id = X` antes de insertar. Se puede llamar múltiples veces sin duplicar datos.
 
@@ -422,9 +442,7 @@ Siempre invalidar la key correcta en `onSuccess` de mutations.
 5. Aplicar: `docker exec enercheck-backend-1 alembic upgrade head`
 6. Agregar el cliente en `frontend/src/api/nuevo.ts`
 7. Agregar los tipos en `frontend/src/types.ts`
-8. **Rebuild el container** tras cambios en código: `docker-compose up --build -d backend`
-
-> ⚠️ `docker-compose restart backend` NO recarga código nuevo. Siempre usar `--build`.
+8. El backend de desarrollo monta `./backend` y corre con `--reload`: los cambios de código se ven solos. Solo hay que reconstruir (`docker-compose up --build -d backend`) si cambian `requirements*.txt` o el `Dockerfile`; al recrearse el contenedor, hay que reinstalar `requirements-dev.txt` para los tests.
 
 ---
 
@@ -484,10 +502,17 @@ VITE_API_URL=http://localhost:8000/api/v1
 ## Comandos frecuentes
 
 ```bash
-# Levantar todo
-docker-compose up --build -d
+# Levantar base, backend (recarga solo) y landing
+docker-compose up -d
 
-# Solo reconstruir backend tras cambios de código
+# Portal en desarrollo: Vite con recarga en caliente en http://localhost:3000 (proxy /api → :8000)
+cd frontend && npm run dev            # desde el celular en la misma red: npm run dev -- --host
+
+# El portal como en producción (build + nginx), solo a pedido: p. ej. para probar el modo sin conexión,
+# que necesita el service worker del build
+docker-compose --profile contenedor up --build -d frontend
+
+# Reconstruir backend (solo si cambian dependencias o el Dockerfile)
 docker-compose up --build -d backend
 
 # Ver logs del backend en tiempo real
@@ -531,5 +556,5 @@ Todos comparten la contraseña `admin123` (ver `_PWD` en `backend/app/db/seeds/u
 | `mmoyainfo@gmail.com` | Super Admin |
 | `hhernandez@santalaura.cl` | Admin Condominio |
 | `cportero@santalaura.cl` | Lector |
-| `mmoyainfo+parcela@gmail.com` | Parcelero |
+| `mmoyainfo+parcela@gmail.com` | Comunero |
 | `porteria@santalaura.cl` | Portería (venta de rifas) |

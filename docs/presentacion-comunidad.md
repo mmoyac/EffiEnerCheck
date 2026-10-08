@@ -7,7 +7,7 @@
 
 Cada mes, el condominio recibe **una sola boleta eléctrica** de la compañía distribuidora que incluye el consumo de todas las parcelas juntas.
 
-Para cobrar a cada parcelero lo que realmente consumió, alguien debía:
+Para cobrar a cada comunero lo que realmente consumió, alguien debía:
 
 - Ir físicamente a leer cada remarcador
 - Anotar los datos en papel o planilla Excel
@@ -15,7 +15,7 @@ Para cobrar a cada parcelero lo que realmente consumió, alguien debía:
 - Distribuir la información por teléfono o papel
 - Repetir el proceso cada mes
 
-Este proceso era **lento, propenso a errores y poco transparente** para los parceleros.
+Este proceso era **lento, propenso a errores y poco transparente** para los comuneros.
 
 ---
 
@@ -23,7 +23,7 @@ Este proceso era **lento, propenso a errores y poco transparente** para los parc
 
 **EnerCheck es un sistema digital que automatiza todo ese proceso.**
 
-Desde la carga de la boleta eléctrica hasta que cada parcelero pueda ver en su celular exactamente cuánto debe pagar ese mes — con el detalle de cómo se calculó su monto.
+Desde la carga de la boleta eléctrica hasta que cada comunero pueda ver en su celular exactamente cuánto debe pagar ese mes — con el detalle de cómo se calculó su monto.
 
 > *"Del papel a la pantalla, con transparencia total."*
 
@@ -37,7 +37,7 @@ El sistema tiene **4 tipos de usuario**, cada uno con acceso a lo que necesita:
 |-------|----------------------|
 | **Administrador** | Carga la boleta eléctrica, revisa liquidaciones, publica resultados |
 | **Lector** | Registra las lecturas de cada remarcador desde su celular |
-| **Parcelero** | Consulta su liquidación y estado de pago desde el celular |
+| **Comunero** | Consulta su liquidación y estado de pago desde el celular |
 | **Super Admin** | Gestiona múltiples condominios (uso interno del sistema) |
 
 ---
@@ -67,9 +67,9 @@ El proceso completo toma **menos de 30 minutos** y sigue siempre el mismo orden:
 │        el sistema recalcula todo al instante                    │
 ├──────┼──────────────────────────────────────────────────────────┤
 │  5   │  ADMIN publica                                           │
-│      │  → Cada parcelero recibe acceso a su liquidación          │
+│      │  → Cada comunero recibe acceso a su liquidación           │
 ├──────┼──────────────────────────────────────────────────────────┤
-│  6   │  PARCELERO consulta desde su celular                     │
+│  6   │  COMUNERO consulta desde su celular                      │
 │      │  → Ve su monto, el desglose y si ya fue marcado pagado   │
 └──────┴──────────────────────────────────────────────────────────┘
 ```
@@ -93,9 +93,9 @@ Los cargos fijos de la boleta (administración de servicio, cargo público) se d
 
 ---
 
-## ¿Qué ve el parcelero?
+## ¿Qué ve el comunero?
 
-Desde su celular, el parcelero puede ver:
+Desde su celular, el comunero puede ver:
 
 - **El monto total a pagar** ese mes
 - El desglose: energía + prorrateo variable + cuota fija
@@ -110,7 +110,7 @@ Desde su celular, el parcelero puede ver:
 | Antes | Con EnerCheck |
 |-------|--------------|
 | Cálculos manuales en Excel | Cálculo automático en segundos |
-| Resultado enviado por WhatsApp/papel | Cada parcelero lo ve en su celular |
+| Resultado enviado por WhatsApp/papel | Cada comunero lo ve en su celular |
 | Sin detalle del cálculo | Desglose completo y transparente |
 | Errores difíciles de corregir | Corrección en 1 clic, recálculo instantáneo |
 | Sin historial accesible | Historial de todos los períodos disponible |
@@ -136,7 +136,7 @@ El administrador **revisa y confirma** antes de guardar. La IA ahorra tiempo per
 
 - Cada acción (carga de boleta, edición de lectura, cierre de período) queda **registrada** con quién la hizo y cuándo
 - El período no se puede modificar una vez publicado
-- Cada parcelero solo ve **su propia información**
+- Cada comunero solo ve **su propia información**
 - Acceso por usuario y contraseña
 
 ---
@@ -153,9 +153,9 @@ EnerCheck funciona **100% en la nube**, sin necesidad de instalar nada en los co
 
 ## Próximos pasos sugeridos
 
-1. **Validar el primer período** — cerrar y publicar Marzo 2026 para que los parceleros puedan ver su primera liquidación
+1. **Validar el primer período** — cerrar y publicar Marzo 2026 para que los comuneros puedan ver su primera liquidación
 2. **Capacitar al lector** — mostrarle cómo capturar lecturas desde el celular
-3. **Comunicar a los parceleros** — enviar sus credenciales de acceso
+3. **Comunicar a los comuneros** — enviar sus credenciales de acceso
 4. **Operar Abril 2026** — primer período completo operado con EnerCheck
 
 ---

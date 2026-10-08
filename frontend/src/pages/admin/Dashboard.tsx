@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { useAuth, useModulo } from '../../hooks/useAuth'
-import { FileText, Activity, Calculator, TrendingUp } from 'lucide-react'
+import { FileText, Activity, Calculator, TrendingUp, Gauge } from 'lucide-react'
 import { boletasApi } from '../../api/boletas'
+import { lecturasApi } from '../../api/lecturas'
 import { liquidacionesApi } from '../../api/liquidaciones'
 import { Card, CardHeader, CardTitle } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
@@ -62,12 +63,22 @@ function PanelEnergia() {
   })
 
   const ultimaBoleta = boletas[0]
+  // La lectura inicial no es un período facturado: no hay KPIs de liquidación, sino su avance
+  const enLecturaInicial = ultimaBoleta?.tipo === 'lectura_inicial'
+  const periodosFacturados = boletas.filter((b) => b.tipo !== 'lectura_inicial').length
 
   const { data: liquidaciones = [] } = useQuery({
     queryKey: ['liquidaciones', ultimaBoleta?.id],
     queryFn: () => liquidacionesApi.list(ultimaBoleta!.id),
-    enabled: !!ultimaBoleta,
+    enabled: !!ultimaBoleta && !enLecturaInicial,
   })
+
+  const { data: lecturasIniciales = [] } = useQuery({
+    queryKey: ['lecturas', ultimaBoleta?.id],
+    queryFn: () => lecturasApi.list(ultimaBoleta!.id),
+    enabled: enLecturaInicial,
+  })
+  const iniciales_tomadas = lecturasIniciales.filter((l) => l.fecha_toma).length
 
   const totalRecaudar = liquidaciones.reduce((s, l) => s + (l.total_pagar_mes ?? 0), 0)
   const liquidacionesPagadas = liquidaciones.filter((l) => l.pagado).length
@@ -87,11 +98,29 @@ function PanelEnergia() {
         <p className="text-sm text-slate-500">Resumen del período activo</p>
       </div>
 
+      {enLecturaInicial && (
+        <Card>
+          <div className="flex items-start gap-4">
+            <div className="rounded-xl bg-yellow-500/10 p-3 text-yellow-400"><Gauge className="h-5 w-5" /></div>
+            <div>
+              <p className="text-sm text-slate-400">Lectura inicial · {periodoCorto(ultimaBoleta.periodo_mes)}</p>
+              <p className="mt-1 text-2xl font-bold text-slate-100">{iniciales_tomadas} de {lecturasIniciales.length} medidores</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {ultimaBoleta.lecturas_cerradas
+                  ? 'Cerrada: ya puedes cargar la primera boleta.'
+                  : 'Al completar y cerrar las lecturas podrás cargar la primera boleta.'}{' '}
+                <Link to={`/boletas/${ultimaBoleta.id}`} className="text-primary-400 hover:underline">Ver lecturas</Link>
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {!enLecturaInicial && <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <KpiCard
           title="Boletas"
-          value={String(boletas.length)}
+          value={String(periodosFacturados)}
           sub="períodos registrados"
           icon={FileText}
           color="bg-blue-500/10 text-blue-400"
@@ -117,7 +146,7 @@ function PanelEnergia() {
           icon={TrendingUp}
           color="bg-purple-500/10 text-purple-400"
         />
-      </div>
+      </div>}
 
       {/* Boletas recientes */}
       <Card padding={false}>
@@ -140,12 +169,16 @@ function PanelEnergia() {
                 <tr key={b.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
                   <td className="px-5 py-3">
                     <Link to={`/boletas/${b.id}`} className="font-medium text-slate-200 hover:text-primary-400">
-                      {periodoCorto(b.periodo_mes)}
+                      {b.tipo === 'lectura_inicial' ? `Lectura inicial · ${periodoCorto(b.periodo_mes)}` : periodoCorto(b.periodo_mes)}
                     </Link>
                   </td>
-                  <td className="px-5 py-3">{estadoBadge(b)}</td>
-                  <td className="px-5 py-3 text-right font-mono text-slate-300">{kwh(b.total_kwh_compania)}</td>
-                  <td className="px-5 py-3 text-right font-mono text-slate-300">{clp(b.monto_total_emision)}</td>
+                  <td className="px-5 py-3">
+                    {b.tipo === 'lectura_inicial'
+                      ? <Badge color={b.lecturas_cerradas ? 'blue' : 'yellow'} dot>{b.lecturas_cerradas ? 'Cerrada' : 'En toma'}</Badge>
+                      : estadoBadge(b)}
+                  </td>
+                  <td className="px-5 py-3 text-right font-mono text-slate-300">{b.tipo === 'lectura_inicial' ? '—' : kwh(b.total_kwh_compania)}</td>
+                  <td className="px-5 py-3 text-right font-mono text-slate-300">{b.tipo === 'lectura_inicial' ? '—' : clp(b.monto_total_emision)}</td>
                 </tr>
               ))}
               {boletas.length === 0 && (

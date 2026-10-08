@@ -56,7 +56,6 @@ export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false
   const [voucher, setVoucher] = useState<Blob | null>(null)
   const [confirmando, setConfirmando] = useState(false)
   const [error, setError] = useState('')
-  const [exito, setExito] = useState('')
 
   const parcela = parcelas.find((p) => p.id === parcelaId) ?? null
   const vendidos = useMemo(() => new Set(rifa.numeros_vendidos), [rifa.numeros_vendidos])
@@ -88,7 +87,6 @@ export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false
   }, [vendidos])
 
   const toggle = (n: number) => {
-    setExito('')
     setSeleccion((prev) => {
       const next = new Set(prev)
       if (next.has(n)) next.delete(n)
@@ -140,9 +138,6 @@ export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false
       qc.invalidateQueries({ queryKey: ['rifas'] })
       qc.invalidateQueries({ queryKey: ['rifa-caja', rifa.id] })
       setError('')
-      if (!esStaff) {
-        setExito(`Listo: folio ${compra.folio}, ${compra.numeros.length === 1 ? 'número' : 'números'} ${compra.numeros.join(', ')} a nombre de la parcela ${compra.parcela_numero}.`)
-      }
       reiniciar()
       onVendida?.(compra)
     },
@@ -182,7 +177,6 @@ export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false
       ) : null}
 
       {error && <Alert variant="error">{error}</Alert>}
-      {exito && <Alert variant="success">{exito}</Alert>}
 
       {/* 2. Números */}
       <section className="space-y-2">

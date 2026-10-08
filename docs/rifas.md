@@ -11,6 +11,7 @@ Admin crea la rifa (premios, precio, cantidad de números, datos para transferir
 → Portería vende: parcela → números → comprador → forma de pago → (voucher) → teléfono
      ↳ comprobante: WhatsApp con el mensaje listo, o folio en pantalla / impreso
 → Vecinos compran desde /mis-rifas (transferencia o gasto común)
+     ↳ pantalla de agradecimiento: folio, números, total y qué sigue según el pago
 → Admin confirma las transferencias revisando el voucher
 → Admin cierra la rifa → cerrada + una imputación al gasto común por parcela
 → Admin descarga el CSV, lo carga en Comunidad Feliz y marca cada imputación como cargada
@@ -34,6 +35,7 @@ Admin crea la rifa (premios, precio, cantidad de números, datos para transferir
 | Folio | `R<rifa>-<correlativo>` (p. ej. `R3-042`). Se muestra en grande tras la venta para anotarlo si el comprador no tiene teléfono. Sirve para buscar la compra en portería. |
 | Teléfono | Se proponen los teléfonos de los residentes de la parcela (editables). Se normalizan a `56XXXXXXXXX`. |
 | Comprobante | Enlace `wa.me` con el mensaje listo: la portería toca «Enviar» en WhatsApp. El sistema no envía mensajes. Botón «Imprimir» opcional (formato de impresora térmica). |
+| Agradecimiento | Tras comprar desde el portal, el comunero ve «¡Gracias por tu aporte!» con el comprobante (datos que devolvió el servidor) y qué sigue: datos para transferir y pago pendiente, o cargo en un próximo gasto común. Puede compartirlo (hoja nativa del celular o WhatsApp), guardarlo (imprimir/PDF), comprar más o volver. |
 | Anular | Solo con la rifa abierta. El admin anula cualquiera; el vecino, lo que compró él desde el portal si no está pagado. **La portería no anula.** |
 | Privacidad | La grilla del vecino muestra qué números están tomados, no de quién. Los vouchers se guardan fuera del estático público y solo los ven el staff y los usuarios de esa parcela. |
 | Editar | Nombre, beneficiario, descripción, premios y datos para transferir, mientras esté abierta. El precio se bloquea con el primer número vendido. La cantidad puede crecer, pero no bajar del mayor número vendido. |
@@ -72,9 +74,9 @@ Auditoría: `CREATE_RIFA`, `UPDATE_RIFA`, `COMPRAR_RIFA`, `ANULAR_COMPRA_RIFA`, 
 |------|-------|---------|
 | `/porteria` | Portería (`porteria@santalaura.cl`) | `pages/porteria/VentaRifa.tsx`: Vender, Buscar compra, Caja |
 | `/rifas`, `/rifas/:id` | Admin (sidebar «Rifas») | `pages/admin/Rifas.tsx`, `RifaDetalle.tsx`: Compras, Registrar venta, Gasto común, Caja |
-| `/mis-rifas`, `/mis-rifas/:id` | Parcelero (aviso en `/liquidaciones` y enlace en la cabecera) | `pages/parcelero/Rifas.tsx` |
+| `/mis-rifas`, `/mis-rifas/:id` | Comunero (aviso en `/liquidaciones` y enlace en la cabecera) | `pages/comunero/Rifas.tsx` |
 
-Componentes compartidos en `components/rifas/`: `NumeroGrid` (sobre 200 números pagina en rangos de 100), `CompraPanel`, `ParcelaBuscador`, `VoucherInput` (reduce las fotos a 1600 px JPEG antes de subirlas), `ComprobanteVenta`, `ComprasLista` y `CajaResumen`.
+Componentes compartidos en `components/rifas/`: `NumeroGrid` (sobre 200 números pagina en rangos de 100), `CompraPanel`, `ParcelaBuscador`, `VoucherInput` (reduce las fotos a 1600 px JPEG antes de subirlas), `ComprobanteVenta` (portería y admin), `AgradecimientoCompra` (portal del comunero), `ComprasLista` y `CajaResumen`.
 
 ## Despliegue
 

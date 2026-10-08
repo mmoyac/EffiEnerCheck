@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { BoletaMaestra, BoletaMaestraCreate } from '../types'
+import type { BoletaMaestra, BoletaMaestraCreate, ImportacionLecturasIniciales } from '../types'
 
 export const boletasApi = {
   list: async (): Promise<BoletaMaestra[]> => {
@@ -14,6 +14,33 @@ export const boletasApi = {
 
   create: async (payload: BoletaMaestraCreate): Promise<BoletaMaestra> => {
     const { data } = await api.post<BoletaMaestra>('/boletas/', payload)
+    return data
+  },
+
+  /** Abre el período de lectura inicial (solo en un condominio sin boletas). periodo_mes: 'YYYY-MM-01' */
+  crearLecturaInicial: async (payload: { condominio_id?: number; periodo_mes: string }): Promise<BoletaMaestra> => {
+    const { data } = await api.post<BoletaMaestra>('/boletas/lectura-inicial', payload)
+    return data
+  },
+
+  /** Plantilla Excel de la lectura inicial (se pide con el token y se descarga como archivo) */
+  descargarPlantillaLecturasIniciales: async (id: number, nombre: string): Promise<void> => {
+    const { data } = await api.get<Blob>(`/boletas/${id}/lecturas-iniciales/plantilla`, { responseType: 'blob' })
+    const href = URL.createObjectURL(data)
+    const a = document.createElement('a')
+    a.href = href
+    a.download = nombre
+    a.click()
+    URL.revokeObjectURL(href)
+  },
+
+  /** aplicar=false: vista previa sin modificar nada; aplicar=true: todo o nada */
+  importarLecturasIniciales: async (id: number, archivo: File, aplicar: boolean): Promise<ImportacionLecturasIniciales> => {
+    const form = new FormData()
+    form.append('archivo', archivo)
+    const { data } = await api.post<ImportacionLecturasIniciales>(`/boletas/${id}/lecturas-iniciales/importar`, form, {
+      params: { aplicar },
+    })
     return data
   },
 

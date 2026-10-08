@@ -31,4 +31,10 @@ export const lecturasApi = {
     const { data } = await api.patch<LecturaParcela>(`/lecturas/${id}`, payload)
     return data
   },
+
+  /** La foto del medidor es privada: se pide con el token y se abre como blob (revocar la URL al cerrar). */
+  verFoto: async (id: number): Promise<string> => {
+    const { data } = await api.get<Blob>(`/lecturas/${id}/foto`, { responseType: 'blob' })
+    return URL.createObjectURL(data)
+  },
 }

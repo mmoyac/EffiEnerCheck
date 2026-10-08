@@ -24,6 +24,12 @@ export const parcelasApi = {
     return data
   },
 
+  /** Recorrido del lector: parcelas en el orden en que se caminan. Lista vacía = quitar el recorrido. */
+  guardarOrdenRecorrido: async (parcela_ids: number[], condominio_id?: number): Promise<Parcela[]> => {
+    const { data } = await api.put<Parcela[]>('/parcelas/orden-recorrido', { parcela_ids, condominio_id })
+    return data
+  },
+
   update: async (id: number, payload: Partial<ParcelaCreate>): Promise<Parcela> => {
     const { data } = await api.patch<Parcela>(`/parcelas/${id}`, payload)
     return data
