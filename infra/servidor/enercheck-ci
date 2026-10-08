@@ -179,11 +179,16 @@ respaldar() {
     fi
     echo "Base: $(basename "$prefijo").dump ($(du -h "$prefijo.dump" | cut -f1))"
 
-    # Compose vigente (el que generó Dokploy) e imagen en ejecución: lo necesario para volver atrás.
+    # Compose vigente (el que generó Dokploy), su .env (el Environment de Dokploy: los secretos de
+    # producción) e imagen en ejecución: lo necesario para volver atrás o levantar otro servidor.
+    # El .env viaja cifrado como el resto; local queda 600 en la carpeta 700 de respaldos.
     if existe enercheck_backend; then
         local compose
         compose=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' enercheck_backend)
-        [ -f "$compose" ] && cp "$compose" "$prefijo.compose.yml"
+        if [ -f "$compose" ]; then
+            cp "$compose" "$prefijo.compose.yml"
+            [ -f "$(dirname "$compose")/.env" ] && install -m 600 "$(dirname "$compose")/.env" "$prefijo.env"
+        fi
         docker inspect -f '{{.Config.Image}}' enercheck_backend > "$prefijo.imagen.txt"
     fi
     podar "$tipo" "$conservar"

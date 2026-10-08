@@ -66,9 +66,9 @@ Pasos: localizar el conjunto → (R2) bajar y verificar `.sha256` → descifrar 
 Los archivos se escriben con un contenedor auxiliar de la **imagen de la base** (ya está en el servidor, sin red), empaquetados con dueño `10001` y permisos `u=rwX,go=rX`, porque el backend está detenido durante la restauración. Con `--desde local` solo se restaura la base: los archivos del volumen se dejan como están.
 Se prueba con `infra/servidor/pruebas/probar-enercheck-ci.sh`: servidor y R2 falsos en Docker local, con los casos de la spec (llave incorrecta, conjunto alterado, dump truncado, sin confirmación, por SSH, servidor perdido, volúmenes completos).
 
-### D7. Secretos como `produccion.env.age`
-El operador exporta el Environment de Dokploy a un archivo, lo cifra con la llave pública y lo sube a `r2:<bucket>/secretos/produccion-<fecha>.env.age` (el bucket lock conserva las versiones anteriores). No lo hace `enercheck-ci`: es un comando documentado en el runbook y se ejecuta en el PC del operador, porque el Environment se edita a mano en Dokploy y así el archivo en claro nunca queda en el servidor. Al migrar, se descifra en el PC del operador y se pega en Dokploy.
-*Alternativa:* `sops` en el repo (descartado: otra herramienta, y el repo es la fuente del código, no de los secretos).
+### D7. Secretos: el `.env` de Dokploy viaja en cada respaldo
+Dokploy escribe el Environment del proyecto como `.env` junto al compose que despliega (`/etc/dokploy/compose/<app>/code/`), el mismo directorio del que `respaldar` ya copia el `.compose.yml` (lo localiza por la etiqueta `com.docker.compose.project.config_files` de `enercheck_backend`). Se copia también como `<prefijo>.env` (600 en la carpeta 700) y se cifra y sube con el resto del conjunto. Así la copia de los secretos está **siempre al día** sin pasos manuales: un secreto cambiado en Dokploy llega en el siguiente respaldo (diario o del próximo deploy), y el texto en claro nunca sale del servidor. Al migrar, el operador descifra `<conjunto>.env.age` en su PC y lo pega en el Environment de Dokploy del servidor nuevo.
+*Alternativas:* exportarlo a mano desde el PC a `secretos/` (el plan inicial: depende de acordarse y pasa por el portapapeles); `sops` en el repo (otra herramienta, y el repo es la fuente del código, no de los secretos). La regla de bloqueo `secretos/` del bucket queda sin uso, disponible para copias manuales excepcionales.
 
 ### D8. `preparar-servidor.sh` por fases
 `infra/servidor/preparar-servidor.sh` (reemplaza a `instalar.sh`) reproduce la configuración que se hizo a mano en el servidor de referencia (leída de él el 2026-10-07). Cada fase es idempotente:
@@ -100,13 +100,13 @@ Para que no haya escrituras después del último respaldo: en el VPS viejo se de
 - [Restaurar sobre una base con datos] → Requiere `--confirmar`, carga y valida el respaldo en una base aparte antes de detener nada y deja la base anterior en `enercheck_previa`.
 - [Labels de Traefik y Dokploy en conflicto] → Hacer el cambio de dominios en un deploy aparte, con verificación de HTTPS inmediata; rollback = volver a la pestaña Domains.
 - [Versión de Dokploy distinta en el servidor nuevo] → El compose solo depende de `dokploy-network`, del certresolver `letsencrypt` y de las entradas `web`/`websecure`; el simulacro lo confirma.
-- [Secretos desactualizados en R2] → Paso explícito en el runbook al cambiar cualquier secreto; un `SECRET_KEY` viejo solo cierra sesiones, y `POSTGRES_PASSWORD` no afecta a la base restaurada (Context).
+- [Secretos desactualizados en R2] → Se respaldan solos con cada conjunto (D7); como mucho, un día de atraso si el secreto se cambió en Dokploy sin deploy por el pipeline. Un `SECRET_KEY` viejo solo cierra sesiones, y `POSTGRES_PASSWORD` no afecta a la base restaurada (Context).
 
 ## Migration Plan
 
 1. Crear el bucket R2, Bucket Lock, ciclo de vida y token (operador, con OK). Generar el par `age` en el PC del operador.
 2. Desplegar el nuevo `enercheck-ci` en el servidor actual con `preparar-servidor.sh` (fase aplicación), ejecutar `respaldar diario` y comprobar el conjunto cifrado en R2.
-3. Subir `produccion.env.age`.
+3. Verificar que el conjunto del respaldo trae `.env.age` y que se descifra con las 19 variables.
 4. Deploy con los labels de dominio y retiro de la pestaña Domains.
 5. Simulacro en un VPS desechable con dominios de prueba: preparar → deploy → restaurar desde R2 → verificar login, boletas, vouchers → registrar tiempos → destruir.
 6. Actualizar el runbook con lo aprendido.

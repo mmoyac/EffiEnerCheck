@@ -69,7 +69,12 @@ paso "Preparación"
 docker volume create --label "$ETIQUETA" enercheck_uploads >/dev/null
 docker volume create --label "$ETIQUETA" enercheck_privado >/dev/null
 levantar_db
+# Como Dokploy: la etiqueta del compose apunta a su archivo, con el .env (Environment) al lado.
+mkdir -p /srv/compose
+echo "services: {}" > /srv/compose/docker-compose.yml
+printf 'SECRET_KEY=secreto-de-prueba\nPOSTGRES_PASSWORD=otra\n' > /srv/compose/.env
 docker run -d --name enercheck_backend --label "$ETIQUETA" \
+    --label com.docker.compose.project.config_files=/srv/compose/docker-compose.yml \
     -v enercheck_uploads:/app/uploads -v enercheck_privado:/app/privado \
     --health-cmd true --health-interval 2s postgres:16-alpine sleep infinity >/dev/null
 sql "CREATE TABLE compras (id int primary key, voucher text); INSERT INTO compras VALUES (1, 'v1.png');"
@@ -86,11 +91,16 @@ ok "base, 3 archivos, llave y remoto falso listos"
 # --- Respaldo ---
 paso "Primer respaldo diario: sube la base y todos los archivos"
 ci respaldar diario
-comprobar "conjunto remoto completo (dump, imagen y .sha256)" \
-    test "$(find /srv/r2/diario -name 'diario-*.dump.age' -o -name 'diario-*.imagen.txt.age' -o -name 'diario-*.sha256' | wc -l)" -eq 3
+comprobar "conjunto remoto completo (dump, compose, .env, imagen y .sha256)" \
+    test "$(find /srv/r2/diario -name 'diario-*.dump.age' -o -name 'diario-*.compose.yml.age' -o -name 'diario-*.env.age' \
+        -o -name 'diario-*.imagen.txt.age' -o -name 'diario-*.sha256' | wc -l)" -eq 5
+comprobar "el .env (secretos) se recupera descifrando" \
+    test "$(age -d -i "$LLAVE" "$(find /srv/r2/diario -name 'diario-*.env.age' | head -n 1)" | head -n 1)" = SECRET_KEY=secreto-de-prueba
+comprobar "copia local del .env con permisos 600" \
+    test "$(stat -c %a "$(find "$ENERCHECK_DIR/respaldos" -name 'diario-*.env' | head -n 1)")" = 600
 comprobar "3 archivos cifrados en el remoto" test "$(remotos)" -eq 3
 comprobar "el respaldo local ya no lleva .archivos.tar.gz" test -z "$(find "$ENERCHECK_DIR/respaldos" -name '*.archivos.tar.gz')"
-comprobar "nada en claro en el remoto" sh -c '! grep -rq voucher-uno /srv/r2'
+comprobar "nada en claro en el remoto" sh -c '! grep -rqE "voucher-uno|secreto-de-prueba" /srv/r2'
 
 paso "Segundo respaldo sin cambios: no sube archivos"
 sleep 1

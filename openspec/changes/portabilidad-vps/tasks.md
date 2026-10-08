@@ -20,7 +20,7 @@
 
 ## 4. Secretos recuperables
 
-- [ ] 4.1 Documentar en DEPLOY.md el comando del PC para cifrar el Environment de Dokploy y subirlo a `r2:<bucket>/secretos/produccion-<fecha>.env.age` (D7), y agregar el recordatorio en `.env.prod.example` y en cada sección de DEPLOY.md que cambia un secreto (§3, §3.1). Verificar subiendo la copia actual y descifrándola en el PC: las claves coinciden con las de Dokploy.
+- [ ] 4.1 `respaldar` copia el `.env` que Dokploy deja junto al compose y lo sube cifrado con el conjunto (D7); prueba local con un `.env` falso y DEPLOY.md §7. Verificar en producción que el conjunto trae `.env.age` y que en el PC se descifra con las 19 variables del Environment.
 
 ## 5. Servidor reproducible
 

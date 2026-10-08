@@ -238,7 +238,7 @@ Los genera `enercheck-ci` en dos lugares: una copia **local** en `/opt/enercheck
 | `diario-<fecha>` | Cron a las 03:30, hora de Chile (`/etc/cron.d/enercheck-respaldo`, log en `/var/log/enercheck-respaldo.log`) | 14 | 36 días |
 
 Cada respaldo tiene dos partes:
-- **La base**, completa: `.dump` (`pg_dump -Fc`), `.compose.yml` (el compose que estaba corriendo) e `.imagen.txt` (la imagen que estaba corriendo).
+- **La base**, completa: `.dump` (`pg_dump -Fc`), `.compose.yml` (el compose que estaba corriendo), **`.env` (el Environment de Dokploy: los secretos de producción, siempre al día)** e `.imagen.txt` (la imagen que estaba corriendo).
 - **Los archivos subidos**, de forma **incremental**: imágenes de boletas, logos y vouchers (`uploads` y `privado`). Cada respaldo sube a R2 solo los que aún no están, y en R2 **nunca se borra ninguno**, aunque se borre en el servidor. En el respaldo local no van: un deploy no toca los archivos, y para recuperar uno borrado está R2.
 
 > Las imágenes y los vouchers **no están en la base**: PostgreSQL guarda solo su ruta. El respaldo incremental funciona porque **los archivos subidos son inmutables**: cada subida crea un archivo con nombre nuevo y nunca se reescribe uno existente.
@@ -246,10 +246,9 @@ Cada respaldo tiene dos partes:
 **R2** (bucket `efficomunidad-respaldos`, cuenta Cloudflare del DNS):
 
 ```
-diario/<nombre>.{dump,compose.yml,imagen.txt}.age  +  <nombre>.sha256   ← el .sha256 se sube al final
+diario/<nombre>.{dump,compose.yml,env,imagen.txt}.age  +  <nombre>.sha256   ← el .sha256 se sube al final
 predeploy/...                                                            (sin él, el conjunto está incompleto)
 archivos/uploads/<ruta>.age   archivos/privado/<ruta>.age
-secretos/produccion-<fecha>.env.age
 ```
 
 - Todo va **cifrado con `age`** antes de salir del servidor. En el servidor está solo la llave **pública** (`/opt/enercheck/respaldos.age.pub`, copia de `infra/servidor/respaldos.age.pub`): puede cifrar, no descifrar. La **privada** la guarda el operador fuera del servidor, en dos lugares.
@@ -276,6 +275,7 @@ enercheck-ci restaurar <nombre> --desde local --confirmar    # un respaldo local
 ```powershell
 rclone copy r2:efficomunidad-respaldos/diario/ . --include "diario-<fecha>.*"
 age -d -i "$HOME\.secretos\enercheck-respaldos.key" -o base.dump diario-<fecha>.dump.age
+age -d -i "$HOME\.secretos\enercheck-respaldos.key" -o produccion.env diario-<fecha>.env.age   # secretos: para el Environment de Dokploy
 rclone copy r2:efficomunidad-respaldos/archivos/privado/vouchers/<archivo>.age .
 age -d -i "$HOME\.secretos\enercheck-respaldos.key" -o <archivo> <archivo>.age
 ```

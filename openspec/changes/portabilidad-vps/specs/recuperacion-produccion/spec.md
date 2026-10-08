@@ -71,7 +71,7 @@ El operador DEBE (SHALL) poder restaurar con una sola orden en el servidor el re
 
 ### Requirement: Secretos de producción recuperables
 
-La configuración secreta de producción (contraseña de la base, clave de firma de sesiones y claves de servicios externos) DEBE (SHALL) existir también como copia cifrada fuera del servidor, descifrable con la misma llave que los respaldos. La copia DEBE (SHALL) actualizarse cada vez que cambia un secreto. Ningún secreto DEBE (SHALL) guardarse sin cifrar en el repositorio ni aparecer en los registros del pipeline.
+La configuración secreta de producción (contraseña de la base, clave de firma de sesiones y claves de servicios externos) DEBE (SHALL) viajar en cada respaldo externo, cifrada y descifrable con la misma llave que los respaldos, sin pasos manuales del operador. Ningún secreto DEBE (SHALL) guardarse sin cifrar en el repositorio ni aparecer en los registros del pipeline.
 
 #### Scenario: Servidor nuevo con los secretos de siempre
 
@@ -80,8 +80,8 @@ La configuración secreta de producción (contraseña de la base, clave de firma
 
 #### Scenario: Secreto cambiado
 
-- **WHEN** el operador cambia un secreto de producción
-- **THEN** el procedimiento documentado incluye actualizar la copia cifrada externa
+- **WHEN** el operador cambia un secreto de producción en la plataforma de despliegue
+- **THEN** el siguiente respaldo externo contiene la configuración con el valor nuevo
 
 ### Requirement: Servidor reproducible
 
