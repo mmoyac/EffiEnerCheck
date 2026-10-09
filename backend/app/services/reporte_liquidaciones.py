@@ -22,7 +22,20 @@ def _num(valor: float) -> str:
     return f"{valor:,.0f}".replace(",", ".") if valor == int(valor) else f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+# Las fuentes base del PDF solo cubren Latin-1: los textos vienen de la administración o del OCR y pueden traer
+# signos tipográficos. Se traducen a su equivalente simple y lo demás se reemplaza por "?", sin que el PDF falle.
+_EQUIVALENTES = str.maketrans({"−": "-", "–": "-", "—": "-", "‘": "'", "’": "'", "“": '"', "”": '"',
+                               "…": "...", "•": "·", " ": " "})
+
+
+def _latin1(texto: str) -> str:
+    return texto.translate(_EQUIVALENTES).encode("latin-1", "replace").decode("latin-1")
+
+
 class _Pdf(FPDF):
+    def normalize_text(self, text):
+        return super().normalize_text(_latin1(text))
+
     def __init__(self, titulo: str):
         super().__init__(orientation="P", unit="mm", format="A4")
         self.titulo = titulo

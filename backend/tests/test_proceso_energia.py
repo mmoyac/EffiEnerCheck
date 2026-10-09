@@ -130,6 +130,16 @@ async def test_recorrido_completo(tx):
                 (await c.get("/api/v1/lecturas/", headers=admin, params={"boleta_id": octubre["id"]})).json()}
     assert [consumos[p.id] for p in parcelas] == [100, 250, 400]   # lectura del mes − lectura inicial
 
+    # Boleta adjunta en PDF; reemplazarla borra el archivo anterior (archivos inmutables)
+    rutas = []
+    for _ in range(2):
+        r = await c.post(f"/api/v1/boletas/{octubre['id']}/imagen", headers=admin,
+                         files={"file": ("boleta.pdf", b"%PDF-1.4 prueba", "application/pdf")})
+        assert r.status_code == 200, r.text
+        rutas.append(os.path.join("/app", r.json()["url_imagen_boleta"].lstrip("/")))
+    assert not os.path.exists(rutas[0]) and os.path.isfile(rutas[1])
+    os.remove(rutas[1])
+
     # PDF de las liquidaciones: solo la administración
     r = await c.get(f"/api/v1/liquidaciones/pdf/{octubre['id']}", headers=admin)
     assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"

@@ -536,6 +536,7 @@ async def upload_imagen_boleta(
     with open(filepath, "wb") as f:
         f.write(image_bytes)
 
+    anterior = boleta.url_imagen_boleta
     boleta.url_imagen_boleta = f"/uploads/boletas/{filename}"
     await registrar_auditoria(
         db, usuario_id=current_user.id, condominio_id=boleta.condominio_id,
@@ -543,6 +544,11 @@ async def upload_imagen_boleta(
         detalles={"boleta_id": boleta_id, "filename": filename},
     )
     await db.commit()
+    # Reemplazar = archivo nuevo + borrar el anterior, recién después de confirmar (archivos inmutables)
+    if anterior and anterior.startswith("/uploads/boletas/"):
+        ruta_anterior = os.path.join(uploads_dir, os.path.basename(anterior))
+        if os.path.isfile(ruta_anterior):
+            os.remove(ruta_anterior)
     return await _get_boleta_o_404(boleta.id, db)
 
 

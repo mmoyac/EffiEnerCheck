@@ -114,3 +114,17 @@ async def test_sin_consumo_el_diferencial_va_a_la_cuota_fija(db):
     liquidaciones = await calcular_liquidaciones_boleta(boleta.id, None, usuario, db)
     assert sum(l.total_pagar_mes for l in liquidaciones) == 100_000
     assert all(l.monto_prorrateo_variable == 0 for l in liquidaciones)
+
+
+def test_pdf_tolera_textos_fuera_de_latin1():
+    """Descripciones con signos tipográficos o emojis (OCR, administración) no deben botar el PDF."""
+    from types import SimpleNamespace
+
+    from app.services.reporte_liquidaciones import generar_pdf
+
+    items = [SimpleNamespace(descripcion="Ajuste (+13 −25) “efectivo” — ok 😀", monto_neto_clp=-12, tipo_calculo="informativo")]
+    boleta = SimpleNamespace(periodo_mes=date(2030, 1, 1), boleta_visible_usuarios=False, liquidaciones_cerradas=False,
+                             total_kwh_compania=100.0, monto_total_emision=1_000, items_detalle=items)
+    fila = {"numero_parcela": "1 – A", "lectura_anterior": 0, "lectura_actual": 100, "kwh": 100,
+            "energia": 900, "variable": 0, "fija": 100, "total": 1_000}
+    assert generar_pdf("Condominio “Prueba”", boleta, [fila]).startswith(b"%PDF")

@@ -19,6 +19,7 @@ import { FotoMedidorModal } from '../../components/FotoMedidorModal'
 import { EstadoPagoLuz } from '../../components/EstadoPagoLuz'
 import { CuentaModal } from '../admin/Cobranza'
 import type { LecturaParcela } from '../../types'
+import { esImagenVisible } from '../../utils/archivoBoleta'
 
 export default function MiLiquidacion() {
   const { user } = useAuth()
@@ -302,7 +303,16 @@ export default function MiLiquidacion() {
                 </div>
               )}
 
-              {boletaActiva.url_imagen_boleta && (
+              {boletaActiva.url_imagen_boleta && !esImagenVisible(boletaActiva.url_imagen_boleta) && (
+                <a href={boletaActiva.url_imagen_boleta} target="_blank" rel="noopener noreferrer"
+                  className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-600 py-3 text-sm font-medium text-slate-300 transition-colors hover:border-primary-500 hover:text-primary-400"
+                >
+                  <FileText className="h-4 w-4" />
+                  Ver la boleta
+                </a>
+              )}
+
+              {boletaActiva.url_imagen_boleta && esImagenVisible(boletaActiva.url_imagen_boleta) && (
                 <button
                   onClick={() => setImagenOpen(true)}
                   className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-600 py-3 text-sm font-medium text-slate-300 transition-colors hover:border-primary-500 hover:text-primary-400"

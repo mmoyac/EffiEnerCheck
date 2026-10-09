@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Lock, Calculator, Globe, Check, X, Pencil, Upload, ImageIcon, ScanLine, ClipboardCheck, Camera, CameraOff, Download, FileSpreadsheet } from 'lucide-react'
+import { ArrowLeft, Lock, Calculator, Globe, Check, X, Pencil, Upload, ImageIcon, ScanLine, ClipboardCheck, Camera, CameraOff, Download, FileSpreadsheet, FileText } from 'lucide-react'
 import { boletasApi } from '../../api/boletas'
 import { lecturasApi } from '../../api/lecturas'
 import { liquidacionesApi } from '../../api/liquidaciones'
@@ -19,6 +19,7 @@ import { FotoMedidorModal } from '../../components/FotoMedidorModal'
 import { EstadoPagoLuz } from '../../components/EstadoPagoLuz'
 import { ImportarLecturasIniciales } from './ImportarLecturasIniciales'
 import { pasosDelPeriodo, type ClavePaso } from '../../utils/pasosPeriodo'
+import { esImagenVisible } from '../../utils/archivoBoleta'
 
 type Tab = 'resumen' | 'lecturas' | 'liquidaciones' | 'boleta'
 
@@ -642,11 +643,18 @@ export default function BoletaDetalle() {
                   </Button>
                 )}
               </div>
-              <img
-                src={boleta.url_imagen_boleta}
-                alt={`Boleta ${periodoCorto(boleta.periodo_mes)}`}
-                className="w-full rounded-lg border border-slate-700 object-contain max-h-[75vh]"
-              />
+              {esImagenVisible(boleta.url_imagen_boleta) ? (
+                <img
+                  src={boleta.url_imagen_boleta}
+                  alt={`Boleta ${periodoCorto(boleta.periodo_mes)}`}
+                  className="w-full rounded-lg border border-slate-700 object-contain max-h-[75vh]"
+                />
+              ) : (
+                <a href={boleta.url_imagen_boleta} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-slate-600 py-6 text-sm font-medium text-slate-300 transition-colors hover:border-primary-500 hover:text-primary-400">
+                  <FileText className="h-5 w-5" /> Abrir {boleta.url_imagen_boleta.toLowerCase().endsWith('.pdf') ? 'PDF' : 'archivo'} de la boleta
+                </a>
+              )}
             </Card>
           ) : (
             <Alert variant="info">No hay imagen cargada para esta boleta.</Alert>
