@@ -89,7 +89,7 @@ Los cargos de la boleta que dependen del consumo total (transporte, potencia) se
 ### 3. Cuota fija
 Los cargos fijos de la boleta (administración de servicio, cargo público) se dividen en partes iguales entre todas las parcelas activas.
 
-> **El diferencial** — la diferencia entre el kWh que cobró la compañía y la suma de todos los remarcadores — también se distribuye en la cuota fija, asegurando que la suma de todas las liquidaciones **siempre cuadra con el total de la boleta.**
+> **El diferencial** — la diferencia entre el kWh que cobró la compañía y la suma de todos los remarcadores — se distribuye según el consumo de cada parcela, junto con los cargos variables, asegurando que la suma de todas las liquidaciones **siempre cuadra con el total de la boleta.**
 
 ---
 

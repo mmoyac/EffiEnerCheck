@@ -1,17 +1,21 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.audit import registrar_auditoria
 from app.core.dependencies import AdminRequired, AnyRoleRequired, TenantId, get_db
 from app.models.boleta import BoletaMaestra
+from app.models.condominio import Condominio
+from app.models.lectura import LecturaParcela
 from app.models.liquidacion import LiquidacionParcela
 from app.models.parcela import Parcela
 from app.models.usuario import Usuario
 from app.schemas.liquidacion import LiquidacionParcelaResponse
 from app.services.periodos import exigir_periodo_regular
+from app.services.reporte_liquidaciones import generar_pdf
 
 router = APIRouter(prefix="/liquidaciones", tags=["liquidaciones"])
 
@@ -49,6 +53,56 @@ async def list_liquidaciones(
 
     result = await db.execute(stmt)
     return result.scalars().all()
+
+
+def _orden_natural(numero_parcela: str) -> tuple[int, str]:
+    digitos = "".join(c for c in numero_parcela if c.isdigit())
+    return (int(digitos) if digitos else 0, numero_parcela)
+
+
+@router.get("/pdf/{boleta_id}")
+async def pdf_liquidaciones(
+    boleta_id: int,
+    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    tenant_id: TenantId,
+    db: DB,
+):
+    """PDF con las liquidaciones del período, el desglose de la boleta y el cuadre contra el total emisión."""
+    boleta = (await db.execute(
+        select(BoletaMaestra).options(selectinload(BoletaMaestra.items_detalle)).where(BoletaMaestra.id == boleta_id)
+    )).scalar_one_or_none()
+    if not boleta:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Boleta no encontrada")
+    if tenant_id is not None and boleta.condominio_id != tenant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin acceso a esta boleta")
+    exigir_periodo_regular(boleta)
+
+    filas_db = (await db.execute(
+        select(LiquidacionParcela, Parcela, LecturaParcela)
+        .join(Parcela, LiquidacionParcela.parcela_id == Parcela.id)
+        .outerjoin(LecturaParcela, (LecturaParcela.parcela_id == Parcela.id) & (LecturaParcela.boleta_id == boleta_id))
+        .where(LiquidacionParcela.boleta_id == boleta_id)
+    )).all()
+    if not filas_db:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="El período aún no tiene liquidaciones. Calcúlalas antes de descargar el PDF.")
+
+    filas = [
+        {"numero_parcela": p.numero_parcela,
+         "lectura_anterior": l.lectura_anterior if l else 0, "lectura_actual": l.lectura_actual if l else 0,
+         "kwh": l.kwh_consumidos if l else 0,
+         "energia": liq.monto_energia_kwh, "variable": liq.monto_prorrateo_variable,
+         "fija": liq.monto_cuota_fija, "total": liq.total_pagar_mes}
+        for liq, p, l in sorted(filas_db, key=lambda f: _orden_natural(f[1].numero_parcela))
+    ]
+    condominio = await db.get(Condominio, boleta.condominio_id)
+    contenido = generar_pdf(condominio.nombre, boleta, filas)
+    return Response(
+        content=contenido,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="liquidaciones-{boleta.periodo_mes:%Y-%m}.pdf"',
+                 "Cache-Control": "private, no-store"},
+    )
 
 
 @router.get("/{liquidacion_id}", response_model=LiquidacionParcelaResponse)

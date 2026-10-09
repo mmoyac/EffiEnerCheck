@@ -9,10 +9,15 @@ Fórmulas (fuente: AGENTS.md §8):
   monto_total_energia = monto_total_emision − (Σ ítems_fijo + Σ ítems_variable)
   valor_kwh           = monto_total_energia / total_kwh_compania
   diferencial         = (total_kwh_compania − Σ kwh_remarcadores) × valor_kwh
-  cuota_fija          = (Σ ítems_fijo + diferencial) / total_parcelas_activas
-  prorrateo_var       = Σ ítems_variable × (kwh_parcela / Σ kwh_remarcadores)
+  cuota_fija          = Σ ítems_fijo / total_parcelas_activas
+  prorrateo_var       = (Σ ítems_variable + diferencial) × (kwh_parcela / Σ kwh_remarcadores)
   monto_energia       = valor_kwh × kwh_parcela
   total_pagar         = monto_energia + prorrateo_var + cuota_fija
+
+El diferencial (energía que la compañía cobró y ningún remarcador registró) se
+prorratea según el consumo, igual que los ítems variables: es el criterio de la
+planilla con que la administración liquidaba (cambio diferencial-por-consumo).
+Si nadie registró consumo, el diferencial y los variables van a la cuota fija, para que el total cuadre.
 
 Clasificación de los ítems:
   fijo        → se reparte en partes iguales entre las parcelas activas
@@ -172,10 +177,17 @@ async def calcular_liquidaciones_boleta(
             item.monto_neto_clp = round(monto_diferencial)
             db.add(item)
 
+    # El diferencial se prorratea por consumo junto con los ítems variables (cambio
+    # diferencial-por-consumo). Sin consumo registrado no hay a quién prorratear: todo va a la cuota fija.
+    if suma_kwh_remarcadores > 0:
+        monto_a_prorratear = suma_items_variable + monto_diferencial
+        fijo_a_repartir = suma_items_fijo
+    else:
+        monto_a_prorratear = 0.0
+        fijo_a_repartir = suma_items_fijo + suma_items_variable + monto_diferencial
+
     # Cuota fija idéntica para cada parcela activa
-    cuota_fija_por_parcela: float = (
-        suma_items_fijo + monto_diferencial
-    ) / total_parcelas_activas
+    cuota_fija_por_parcela: float = fijo_a_repartir / total_parcelas_activas
 
     # ------------------------------------------------------------------ #
     # 5. Limpiar liquidaciones previas (recálculo idempotente)
@@ -194,7 +206,7 @@ async def calcular_liquidaciones_boleta(
     ]
     energia_exacta = [valor_kwh * k for k in kwh]
     variable_exacta = [
-        suma_items_variable * (k / suma_kwh_remarcadores) if suma_kwh_remarcadores > 0 else 0.0
+        monto_a_prorratear * (k / suma_kwh_remarcadores) if suma_kwh_remarcadores > 0 else 0.0
         for k in kwh
     ]
     total_exacto = sum(energia_exacta) + sum(variable_exacta) + cuota_fija_por_parcela * total_parcelas_activas

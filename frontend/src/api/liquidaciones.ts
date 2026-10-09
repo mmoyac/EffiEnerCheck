@@ -13,4 +13,14 @@ export const liquidacionesApi = {
     return data
   },
 
+  /** PDF del período: desglose de la boleta, una fila por parcela y el cuadre contra el total emisión */
+  descargarPdf: async (boletaId: number, nombre: string): Promise<void> => {
+    const { data } = await api.get<Blob>(`/liquidaciones/pdf/${boletaId}`, { responseType: 'blob' })
+    const href = URL.createObjectURL(data)
+    const a = document.createElement('a')
+    a.href = href
+    a.download = nombre
+    a.click()
+    URL.revokeObjectURL(href)
+  },
 }

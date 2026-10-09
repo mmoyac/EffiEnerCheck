@@ -695,7 +695,14 @@ export default function BoletaDetalle() {
                   ? <>{pagadas}/{liquidaciones.length} pagadas · los abonos se registran en <Link to="/cobranza" className="underline">Cobranza</Link></>
                   : <>{liquidaciones.length} liquidaciones · los pagos se registran después de publicar</>}
               </p>
-              <p className="font-mono font-bold text-primary-400">{clp(totalLiq)}</p>
+              <div className="flex items-center gap-3">
+                <p className="font-mono font-bold text-primary-400">{clp(totalLiq)}</p>
+                <Button size="sm" variant="secondary"
+                  onClick={() => liquidacionesApi.descargarPdf(boletaId, `liquidaciones-${boleta.periodo_mes.slice(0, 7)}.pdf`)
+                    .catch(() => setActionError('No se pudo descargar el PDF'))}>
+                  <Download className="h-4 w-4" /> PDF
+                </Button>
+              </div>
             </div>
           )}
           <Card padding={false}>

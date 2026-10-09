@@ -327,8 +327,8 @@ Por la misma razón, **las liquidaciones calculadas se descartan** cuando cambia
 
 | `tipo_calculo` | ¿Entra al reparto? | Cómo se distribuye |
 |----------------|--------------------|--------------------|
-| `fijo` | Sí | Partes iguales entre las parcelas activas, junto con el diferencial de energía no registrada. |
-| `variable` | Sí | Proporcional a los kWh consumidos por cada parcela. |
+| `fijo` | Sí | Partes iguales entre las parcelas activas. |
+| `variable` | Sí | Proporcional a los kWh consumidos por cada parcela, junto con el diferencial de energía no registrada. |
 | `informativo` | No | Visible en el desglose, sin efecto en ninguna liquidación. Es cómo el administrador excluye un cargo a propósito. |
 | `pendiente` | No — todavía | **Nuevo.** Creado por el OCR, sin juzgar. Bloquea la corroboración hasta recibir clasificación definitiva. |
 

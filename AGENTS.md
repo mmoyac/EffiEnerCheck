@@ -99,8 +99,8 @@ Para garantizar que la suma de todas las liquidaciones cuadre exactamente con la
 monto_total_energia = monto_total_emision - (suma_items_fijo + suma_items_variable)
 valor_kwh     = monto_total_energia / total_kwh_compania
 diferencial   = (total_kwh_compania − Σ kwh_remarcadores) × valor_kwh
-cuota_fija    = (Σ ítems_fijo + diferencial) / total_parcelas_activas
-prorrateo_var = Σ ítems_variable × (kwh_parcela / Σ kwh_remarcadores)
+cuota_fija    = Σ ítems_fijo / total_parcelas_activas
+prorrateo_var = (Σ ítems_variable + diferencial) × (kwh_parcela / Σ kwh_remarcadores)
 monto_energia = valor_kwh × kwh_parcela
 total_pagar   = monto_energia + prorrateo_var + cuota_fija
 ```

@@ -338,7 +338,7 @@
       },
       {
         titulo: 'Calcular',
-        texto: 'Toca <b>Calcular liquidaciones</b>. Cada parcela paga su energía, su parte variable y la cuota fija (con el diferencial: lo que la compañía cobró y ningún medidor registró).',
+        texto: 'Toca <b>Calcular liquidaciones</b>. Cada parcela paga su energía, su parte variable (que incluye el diferencial: lo que la compañía cobró y ningún medidor registró) y la cuota fija.',
         pantalla: () => periodo({ paso: 3, sellos: [['Desglose corroborado', 'morado'], ['Lecturas cerradas', 'amarillo']], botones: boton('Reabrir lecturas') + boton('Calcular liquidaciones', { prim: true, t: 'calcular', ic: 'calculadora' }), siguiente: '<b>Siguiente paso:</b> calcula cuánto paga cada parcela. Puedes recalcular las veces que necesites.' }),
         toque: 'calcular',
       },

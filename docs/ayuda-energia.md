@@ -42,7 +42,7 @@ Admin: Cerrar lecturas                 Lector: toma las lecturas en terreno (app
 | **Lectura anterior / actual** | El número del medidor el mes pasado y el de hoy. La anterior la pone el sistema; la actual la toma el lector. |
 | **kWh consumidos** | Actual − anterior. La app los calcula al escribir la lectura actual. |
 | **kWh compañía** | El consumo total que la compañía le cobra al condominio (el medidor general). |
-| **Diferencial** | Los kWh que la compañía cobró y que ningún medidor de parcela registró (pérdidas, áreas comunes). Se reparte en partes iguales, dentro de la cuota fija. |
+| **Diferencial** | Los kWh que la compañía cobró y que ningún medidor de parcela registró (pérdidas, áreas comunes). Se reparte según el consumo de cada parcela, junto con los cargos variables. |
 | **Concepto / ítem** | Cada línea de la boleta de la compañía: cargo fijo, transporte, intereses… Son **montos del condominio completo**, no por parcela. |
 | **Fijo / variable / informativo** | Fijo: se divide en partes iguales. Variable: según el consumo de cada parcela. Informativo: se muestra, pero no se cobra aparte (su monto queda dentro del total). |
 | **Corroborar desglose** | El administrador confirma que los conceptos y su tipo están bien. Sin esto no se puede calcular. |
@@ -121,7 +121,7 @@ Admin: Cerrar lecturas                 Lector: toma las lecturas en terreno (app
 
 | Campo | Para qué |
 |---|---|
-| **kWh compañía** | El consumo total del medidor general. Conviene que sea mayor que la suma de los consumos de las parcelas; si no, el diferencial sale negativo y rebaja la cuota fija. |
+| **kWh compañía** | El consumo total del medidor general. Conviene que sea mayor que la suma de los consumos de las parcelas; si no, el diferencial sale negativo y rebaja lo que paga cada parcela según su consumo. |
 | **Monto neto** | Requisito del cálculo. |
 | **Total emisión** | **Lo que se reparte.** La suma de las liquidaciones da exactamente este monto, al peso. |
 

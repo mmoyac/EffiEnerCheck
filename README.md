@@ -75,15 +75,15 @@ El valor del kWh se despeja **a la inversa** desde el Total Emisión, de modo qu
 monto_total_energia = monto_total_emision − (Σ ítems_fijo + Σ ítems_variable)
 valor_kwh     = monto_total_energia / total_kwh_compania
 diferencial   = (total_kwh_compania − Σ kwh_remarcadores) × valor_kwh
-cuota_fija    = (Σ ítems_fijo + diferencial) / total_parcelas_activas
-prorrateo_var = Σ ítems_variable × (kwh_parcela / Σ kwh_remarcadores)
+cuota_fija    = Σ ítems_fijo / total_parcelas_activas
+prorrateo_var = (Σ ítems_variable + diferencial) × (kwh_parcela / Σ kwh_remarcadores)
 monto_energia = valor_kwh × kwh_parcela
 total_pagar   = monto_energia + prorrateo_var + cuota_fija
 ```
 
 Los ítems de detalle se manejan **con IVA incluido** (el OCR aplica el 19% al extraerlos). Los de tipo `informativo` no participan del reparto. Cada componente se redondea al entero más cercano.
 
-El **diferencial** es la energía que la boleta cobra pero que ningún remarcador registró —pérdidas, áreas comunes, medidores no cubiertos— y se reparte en partes iguales dentro de la cuota fija.
+El **diferencial** es la energía que la boleta cobra pero que ningún remarcador registró —pérdidas, áreas comunes, medidores no cubiertos— y se prorratea según el consumo de cada parcela, junto con los ítems variables. Si nadie registró consumo, va a la cuota fija.
 
 El motor es **idempotente**: elimina y recrea las liquidaciones en cada ejecución, garantizando consistencia.
 

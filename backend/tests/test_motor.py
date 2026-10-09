@@ -89,3 +89,28 @@ async def test_parcela_sin_consumo_solo_paga_cuota_fija(db):
     assert sin_consumo.monto_energia_kwh == 0 and sin_consumo.monto_prorrateo_variable == 0
     assert sin_consumo.total_pagar_mes == sin_consumo.monto_cuota_fija
     assert sum(l.total_pagar_mes for l in liquidaciones) == 200_001
+
+
+async def test_diferencial_se_prorratea_por_consumo(db):
+    """Cambio diferencial-por-consumo: como la planilla de la administración, el diferencial va con los
+    variables. Cada parcela paga sus kWh × (emisión − fijos) / Σ kWh, más su parte de los fijos."""
+    kwh = [782.0, 156.0, 0.0, 317.0, 0.0, 1.0]
+    items = [("Potencia punta", 50_000.0, "variable"), ("Administración", 6_000.0, "fijo")]
+    boleta, usuario = await _escenario(db, items, kwh, emision=300_000, kwh_compania=1_500.0)   # 244 kWh sin medir
+
+    liquidaciones = await calcular_liquidaciones_boleta(boleta.id, None, usuario, db)
+
+    por_kwh = (300_000 - 6_000) / sum(kwh)
+    for l, k in zip(liquidaciones, kwh):
+        assert abs(l.total_pagar_mes - (k * por_kwh + 6_000 / len(kwh))) <= 1
+    # Sin consumo: solo la cuota fija, sin parte del diferencial
+    assert liquidaciones[2].total_pagar_mes == liquidaciones[2].monto_cuota_fija == 1_000
+    assert sum(l.total_pagar_mes for l in liquidaciones) == 300_000
+
+
+async def test_sin_consumo_el_diferencial_va_a_la_cuota_fija(db):
+    boleta, usuario = await _escenario(db, [("Potencia punta", 10_000.0, "variable"), ("Adm.", 3_000.0, "fijo")],
+                                       [0.0, 0.0, 0.0], emision=100_000)
+    liquidaciones = await calcular_liquidaciones_boleta(boleta.id, None, usuario, db)
+    assert sum(l.total_pagar_mes for l in liquidaciones) == 100_000
+    assert all(l.monto_prorrateo_variable == 0 for l in liquidaciones)

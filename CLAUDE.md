@@ -44,7 +44,7 @@ EnerCheck/
 │   │   │       ├── boletas.py           # CRUD boleta maestra + OCR + candados de período
 │   │   │       ├── condominios.py       # CRUD condominios + parametrización comercial (módulos, dominios, portal_url, color, logo)
 │   │   │       ├── lecturas.py          # CRUD lecturas de remarcadores
-│   │   │       ├── liquidaciones.py     # Calcular (Motor EnerCheck) + consulta + pago
+│   │   │       ├── liquidaciones.py     # Calcular (Motor EnerCheck) + consulta + PDF del período
 │   │   │       ├── menus.py             # GET /menus/me → navegación según rol
 │   │   │       ├── parcelas.py          # CRUD parcelas del condominio
 │   │   │       ├── rifas.py             # Rifas: venta, pagos, voucher, caja, cierre, imputaciones, CSV
@@ -72,6 +72,7 @@ EnerCheck/
 │   │   ├── schemas/                     # Pydantic v2 (request/response)
 │   │   ├── services/
 │   │   │   ├── enercheck.py             # Motor EnerCheck — fórmulas de distribución
+│   │   │   ├── reporte_liquidaciones.py # PDF del período (fpdf2): boleta, una fila por parcela y cuadre
 │   │   │   ├── enlaces.py               # Enlaces de acceso de un solo uso (invitación 7 d, recuperación 1 h)
 │   │   │   ├── correo.py                # Correo transaccional vía Resend (HTTP); nunca lanza
 │   │   │   ├── claves.py                # asignar_clave(): política + hash + cierra sesiones
@@ -340,13 +341,15 @@ Para garantizar que el total liquidado sea exactamente igual a la emisión, el v
 monto_total_energia = monto_total_emision - (suma_items_fijo + suma_items_variable)
 valor_kwh     = monto_total_energia / total_kwh_compania
 diferencial   = (total_kwh_compania − Σ kwh_remarcadores) × valor_kwh
-cuota_fija    = (Σ ítems_fijo + diferencial) / total_parcelas_activas
-prorrateo_var = Σ ítems_variable × (kwh_parcela / Σ kwh_remarcadores)
+cuota_fija    = Σ ítems_fijo / total_parcelas_activas
+prorrateo_var = (Σ ítems_variable + diferencial) × (kwh_parcela / Σ kwh_remarcadores)
 monto_energia = valor_kwh × kwh_parcela
 total_pagar   = monto_energia + prorrateo_var + cuota_fija
 ```
 
 **Cuadre al peso:** cada componente no se redondea por separado. `repartir_al_peso()` (mayor resto) hace que Σ `total_pagar_mes` = total de emisión exacto: cuota fija igual para todas (redondeada), variable por mayor resto, y la energía completa el cuadre repartida por mayor resto solo entre parcelas con consumo (puede diferir en $1 de `round(valor_kwh × kWh)`). Los tests del motor exigen igualdad exacta, sin tolerancia.
+
+**Diferencial por consumo** (cambio `diferencial-por-consumo`): el diferencial se prorratea según los kWh de cada parcela, junto con los ítems variables, igual que la planilla con que liquidaba la administración. Una parcela sin consumo paga solo la cuota fija. Si nadie registró consumo, el diferencial y los variables van a la cuota fija.
 
 El motor es **idempotente**: hace `DELETE FROM liquidaciones WHERE boleta_id = X` antes de insertar. Se puede llamar múltiples veces sin duplicar datos.
 

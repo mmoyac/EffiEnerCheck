@@ -130,6 +130,12 @@ async def test_recorrido_completo(tx):
                 (await c.get("/api/v1/lecturas/", headers=admin, params={"boleta_id": octubre["id"]})).json()}
     assert [consumos[p.id] for p in parcelas] == [100, 250, 400]   # lectura del mes − lectura inicial
 
+    # PDF de las liquidaciones: solo la administración
+    r = await c.get(f"/api/v1/liquidaciones/pdf/{octubre['id']}", headers=admin)
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert r.content.startswith(b"%PDF") and "liquidaciones-2099-10.pdf" in r.headers["content-disposition"]
+    assert (await c.get(f"/api/v1/liquidaciones/pdf/{octubre['id']}", headers=cab_comunero)).status_code == 403
+
     # ---- Etapa 5: cierre; el comunero aún no ve nada -------------------------------------------------
     assert (await c.post(f"/api/v1/boletas/{octubre['id']}/cerrar-liquidaciones", headers=admin)).status_code == 200
     r = await c.get("/api/v1/liquidaciones/", headers=cab_comunero, params={"boleta_id": octubre["id"]})
