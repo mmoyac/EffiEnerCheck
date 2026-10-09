@@ -276,6 +276,23 @@ Auditoría: `TOGGLE_VISIBILITY`
 
 ## Comunero — la consulta
 
+### 10b. Cobrar: la cuenta corriente de luz
+
+```
+GET  /api/v1/cuenta-luz/resumen
+GET  /api/v1/cuenta-luz/parcelas/{id}
+POST /api/v1/cuenta-luz/abonos              {fecha, nota, items: [{parcela_id, monto}]}
+POST /api/v1/cuenta-luz/abonos/{id}/anular  {motivo}
+```
+
+El cargo de luz se cobra en el gasto común. Cada parcela tiene una **cuenta corriente**:
+- **cargos:** el saldo inicial del onboarding y las liquidaciones de los períodos **publicados**;
+- **abonos:** cualquier monto, registrados por la administración en *Liquidaciones y cobranza*.
+
+Los abonos se **imputan a la deuda más antigua**. De esa imputación salen `monto_abonado`, `pagado` y `fecha_pago` de cada liquidación (Pagado, Parcial o Pendiente), que **no se marcan a mano**. Publicar un período lo vuelve cargo y reaplica el saldo a favor.
+
+Un abono **nunca se borra**: se anula con motivo. Auditoría: `REGISTRAR_ABONO_LUZ` y `ANULAR_ABONO_LUZ`, con el saldo antes y después.
+
 ### 11. Ver su liquidación
 
 ```
@@ -296,11 +313,13 @@ Es donde se materializa la transparencia frente a la comunidad: el comunero pued
 | Reversa | Condición |
 |---------|-----------|
 | `validada` → `borrador` | **Nuevo.** Automático al reprocesar el OCR o al editar los detalles. |
-| `POST /boletas/{id}/reabrir-lecturas` | Solo mientras las liquidaciones no estén cerradas. |
+| `POST /boletas/{id}/reabrir-lecturas` | Solo mientras las liquidaciones no estén cerradas. **Descarta las liquidaciones calculadas**: hay que recalcular antes de cerrar el período. |
 | `POST /boletas/{id}/reabrir-liquidaciones` | Solo mientras la boleta no haya sido publicada. |
 | `DELETE /boletas/{id}` | Solo mientras las lecturas no estén cerradas. Borra lecturas, liquidaciones, ítems y las fotos del medidor (del disco, después del commit). |
 
 La reversa automática existe para que el juicio del administrador nunca sobreviva a un cambio de las cifras que lo sustentan.
+
+Por la misma razón, **las liquidaciones calculadas se descartan** cuando cambia cualquiera de sus insumos antes del cierre: reabrir lecturas, editar el desglose, reprocesar con IA o registrar, corregir o sincronizar una lectura (auditoría: `liquidaciones_descartadas`). No se puede cerrar ni publicar un período con montos que no corresponden a los datos vigentes.
 
 ---
 

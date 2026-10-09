@@ -23,6 +23,9 @@ class LiquidacionParcela(Base):
     monto_cuota_fija: Mapped[Optional[int]] = mapped_column(Integer)
 
     total_pagar_mes: Mapped[Optional[int]] = mapped_column(Integer)
+    # Derivados de la cuenta corriente de luz (cambio cobranza-energia): los abonos se imputan a la deuda
+    # más antigua. No se marcan a mano; los recalcula services/cuenta_luz.recalcular().
+    monto_abonado: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     pagado: Mapped[bool] = mapped_column(Boolean, default=False)
     fecha_pago: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 

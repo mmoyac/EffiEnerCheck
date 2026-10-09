@@ -249,7 +249,7 @@ async def test_plantilla_se_lee_de_vuelta(tx):
     r = await c.get(f"/api/v1/boletas/{bid}/lecturas-iniciales/plantilla", headers=cab)
     assert r.status_code == 200, r.text
     filas = list(load_workbook(io.BytesIO(r.content)).active.iter_rows(values_only=True))
-    assert filas[0] == ("Parcela", "Propietario", "Lectura inicial")
+    assert filas[0] == ("Parcela", "Propietario", "Lectura inicial", "Saldo luz")
     assert [f[0] for f in filas[1:]] == ["1", "2", "10"]   # orden natural
 
     # La misma plantilla, completada, sirve para importar

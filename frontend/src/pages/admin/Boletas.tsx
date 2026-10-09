@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Eye, Lock, Calculator, Globe, Trash2, Gauge, FileSpreadsheet } from 'lucide-react'
+import { Plus, Eye, Trash2, Gauge, FileSpreadsheet, ArrowRight } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { boletasApi } from '../../api/boletas'
-import { liquidacionesApi } from '../../api/liquidaciones'
 import { condominiosApi } from '../../api/condominios'
 import { useRole, useAuth } from '../../hooks/useAuth'
 import { Card } from '../../components/ui/Card'
@@ -120,27 +119,10 @@ export default function Boletas() {
     setInicialOpen(true)
   }
 
-  const cerrarLecturasMut = useMutation({
-    mutationFn: boletasApi.cerrarLecturas,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['boletas'] }),
-  })
-
   const deleteMut = useMutation({
     mutationFn: boletasApi.delete,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['boletas'] }),
     onError: (e: unknown) => setActionError(getErrMsg(e, 'Error al eliminar la boleta')),
-  })
-
-  const calcularMut = useMutation({
-    mutationFn: (id: number) => liquidacionesApi.calcular(id),
-    onSuccess: (_data, id) => { qc.invalidateQueries({ queryKey: ['boletas'] }); navigate(`/boletas/${id}?tab=liquidaciones`) },
-    onError: (e: unknown) => setActionError(getErrMsg(e, 'Error al calcular liquidaciones')),
-  })
-
-
-  const publicarMut = useMutation({
-    mutationFn: (id: number) => boletasApi.update(id, { boleta_visible_usuarios: true }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['boletas'] }),
   })
 
   const handleCreate = (aceptar_sin_lectura_anterior = false) => {
@@ -151,20 +133,49 @@ export default function Boletas() {
     } as any) // as any porque hicimos los campos opcionales en el backend pero quizas los types.ts todavia piden periodo_mes
   }
 
+  // Acciones de una fila: las mismas en la tabla (md+) y en la lista del celular
+  const acciones = (b: BoletaMaestra) => (
+    <>
+      <Link to={`/boletas/${b.id}`}>
+        <Button variant="ghost" size="sm" title="Ver detalle"><Eye className="h-4 w-4" /></Button>
+      </Link>
+      {esLecturaInicial(b) && !b.lecturas_cerradas && (
+        <Button variant="ghost" size="sm" title="Cargar lecturas iniciales desde Excel" onClick={() => setImportarDe(b.id)}>
+          <FileSpreadsheet className="h-4 w-4 text-primary-400" />
+        </Button>
+      )}
+      {!b.lecturas_cerradas && (
+        <Button variant="ghost" size="sm" title="Eliminar boleta"
+          loading={deleteMut.isPending && deleteMut.variables === b.id}
+          onClick={() => { if (window.confirm('¿Seguro que deseas eliminar esta boleta y todos sus datos? Esta acción no se puede deshacer.')) deleteMut.mutate(b.id) }}>
+          <Trash2 className="h-4 w-4 text-red-400 hover:text-red-300" />
+        </Button>
+      )}
+      {/* Los pasos del ciclo se hacen en el detalle, guiados por la barra de pasos (cambio pasos-del-periodo) */}
+      {!b.boleta_visible_usuarios && !(esLecturaInicial(b) && b.lecturas_cerradas) && (
+        <Link to={`/boletas/${b.id}`}>
+          <Button variant="secondary" size="sm" title="Ir al siguiente paso del período">
+            Continuar <ArrowRight className="h-4 w-4" />
+          </Button>
+        </Link>
+      )}
+    </>
+  )
+
   if (isLoading) {
     return <div className="flex h-64 items-center justify-center"><Spinner size="lg" className="text-primary-500" /></div>
   }
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-slate-100">Boletas</h1>
           <p className="text-sm text-slate-500">
             {boletasFiltradas.length}{filtroCondominio ? ` de ${boletas.length}` : ''} períodos registrados
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {isSuperAdmin && condominios.length > 0 && (
             <select
               value={filtroCondominio}
@@ -178,11 +189,12 @@ export default function Boletas() {
             </select>
           )}
           {puedeLecturaInicial && (
-            <Button variant="secondary" onClick={() => abrirLecturaInicial(Number(filtroCondominio) || me?.condominio_id)}>
+            // Sin boletas, el siguiente paso es la lectura inicial: es el botón destacado (cambio pasos-del-periodo)
+            <Button onClick={() => abrirLecturaInicial(Number(filtroCondominio) || me?.condominio_id)}>
               <Gauge className="h-4 w-4" /> Comenzar con lectura inicial
             </Button>
           )}
-          <Button onClick={() => {
+          <Button variant={puedeLecturaInicial ? 'secondary' : 'primary'} onClick={() => {
             setForm({ condominio_id: filtroCondominio || (me?.condominio_id ? String(me.condominio_id) : '') })
             setError('')
             setSinLectura(null)
@@ -203,7 +215,7 @@ export default function Boletas() {
       )}
 
       <Card padding={false}>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-700 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -234,44 +246,7 @@ export default function Boletas() {
                     </>
                   )}
                   <td className="px-5 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <Link to={`/boletas/${b.id}`}>
-                        <Button variant="ghost" size="sm" title="Ver detalle"><Eye className="h-4 w-4" /></Button>
-                      </Link>
-                      {esLecturaInicial(b) && !b.lecturas_cerradas && (
-                        <Button variant="ghost" size="sm" title="Cargar lecturas iniciales desde Excel" onClick={() => setImportarDe(b.id)}>
-                          <FileSpreadsheet className="h-4 w-4 text-primary-400" />
-                        </Button>
-                      )}
-                      {!b.lecturas_cerradas && (
-                        <>
-                          <Button variant="ghost" size="sm" title="Eliminar boleta"
-                            loading={deleteMut.isPending && deleteMut.variables === b.id}
-                            onClick={() => { if (window.confirm('¿Seguro que deseas eliminar esta boleta y todos sus datos? Esta acción no se puede deshacer.')) deleteMut.mutate(b.id) }}>
-                            <Trash2 className="h-4 w-4 text-red-400 hover:text-red-300" />
-                          </Button>
-                          <Button variant="ghost" size="sm" title="Cerrar lecturas"
-                            loading={cerrarLecturasMut.isPending && cerrarLecturasMut.variables === b.id}
-                            onClick={() => cerrarLecturasMut.mutate(b.id)}>
-                            <Lock className="h-4 w-4 text-yellow-400 hover:text-yellow-300" />
-                          </Button>
-                        </>
-                      )}
-                      {!esLecturaInicial(b) && b.lecturas_cerradas && !b.liquidaciones_cerradas && (
-                        <Button variant="ghost" size="sm" title="Calcular liquidaciones"
-                          loading={calcularMut.isPending}
-                          onClick={() => { setActionError(''); calcularMut.mutate(b.id) }}>
-                          <Calculator className="h-4 w-4 text-blue-400" />
-                        </Button>
-                      )}
-                      {!esLecturaInicial(b) && b.liquidaciones_cerradas && !b.boleta_visible_usuarios && (
-                        <Button variant="ghost" size="sm" title="Publicar"
-                          loading={publicarMut.isPending}
-                          onClick={() => publicarMut.mutate(b.id)}>
-                          <Globe className="h-4 w-4 text-primary-400" />
-                        </Button>
-                      )}
-                    </div>
+                    <div className="flex items-center justify-end gap-1">{acciones(b)}</div>
                   </td>
                 </tr>
               ))}
@@ -281,6 +256,43 @@ export default function Boletas() {
             </tbody>
           </table>
         </div>
+
+        {/* Celular: lista apilada, sin scroll horizontal */}
+        <ul className="divide-y divide-slate-700/50 md:hidden">
+          {boletasFiltradas.map((b) => (
+            <li key={b.id} className="space-y-2 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0 truncate font-medium text-slate-200">
+                  {esLecturaInicial(b) ? <>Lectura inicial · {periodoCorto(b.periodo_mes)}</> : periodoCorto(b.periodo_mes)}
+                </span>
+                <EstadoBadge b={b} />
+              </div>
+              {isSuperAdmin && <p className="truncate text-sm text-slate-400">{condominioNombre(b.condominio_id)}</p>}
+              {esLecturaInicial(b) ? (
+                <p className="text-xs text-slate-500">Sin boleta: solo lecturas de partida</p>
+              ) : (
+                <dl className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="min-w-0">
+                    <dt className="text-slate-500">kWh</dt>
+                    <dd className="truncate font-mono text-slate-300">{kwh(b.total_kwh_compania)}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-slate-500">Monto neto</dt>
+                    <dd className="truncate font-mono text-slate-300">{clp(b.monto_neto_electricidad_consumida)}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-slate-500">Total emisión</dt>
+                    <dd className="truncate font-mono text-slate-300">{clp(b.monto_total_emision)}</dd>
+                  </div>
+                </dl>
+              )}
+              <div className="flex flex-wrap items-center justify-end gap-1">{acciones(b)}</div>
+            </li>
+          ))}
+          {boletasFiltradas.length === 0 && (
+            <li className="px-4 py-10 text-center text-slate-500">Sin boletas{filtroCondominio ? ' para este condominio' : ''}.</li>
+          )}
+        </ul>
       </Card>
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Generar nuevo período" size="md">

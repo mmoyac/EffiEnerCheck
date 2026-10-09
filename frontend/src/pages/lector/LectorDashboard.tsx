@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  AlertTriangle, CameraOff, CheckCircle2, ChevronRight, Circle, CloudOff, CloudUpload, Download, RefreshCw, Wifi, Zap,
+  AlertTriangle, CameraOff, Lock, CheckCircle2, ChevronRight, Circle, CloudOff, CloudUpload, Download, RefreshCw, Wifi, Zap,
 } from 'lucide-react'
 import { Spinner } from '../../components/ui/Spinner'
 import { Alert } from '../../components/ui/Alert'
@@ -133,6 +133,15 @@ export default function LectorDashboard() {
               </div>
               <span className="text-sm font-bold tabular-nums text-slate-200">{completadas}/{total}</span>
             </div>
+            {boleta.lecturas_cerradas && (
+              <p className="mt-2 flex items-start gap-2 rounded-lg bg-slate-800 px-3 py-2 text-xs text-slate-300">
+                <Lock className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                <span>
+                  Las lecturas de {boleta.tipo === 'lectura_inicial' ? 'la lectura inicial' : periodoCorto(boleta.periodo_mes)} están
+                  <strong> cerradas</strong>: ya no se pueden modificar. Si hay que corregir una, pide a la administración que las reabra.
+                </span>
+              </p>
+            )}
             {leidasSinFoto > 0 && (
               <p className="mt-1 flex items-center gap-1 text-xs text-slate-500">
                 <CameraOff className="h-3.5 w-3.5" /> {leidasSinFoto} leída{leidasSinFoto === 1 ? '' : 's'} sin foto del medidor

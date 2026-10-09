@@ -14,10 +14,7 @@ class LiquidacionParcelaResponse(BaseModel):
     monto_prorrateo_variable: int | None
     monto_cuota_fija: int | None
     total_pagar_mes: int | None
+    # Derivados de la cuenta corriente de luz: lo abonado a este mes (imputación a la deuda más antigua)
+    monto_abonado: int = 0
     pagado: bool
     fecha_pago: datetime | None
-
-
-class MarcarPagadoRequest(BaseModel):
-    pagado: bool
-    fecha_pago: datetime | None = None

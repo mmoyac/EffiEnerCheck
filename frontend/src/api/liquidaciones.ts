@@ -13,15 +13,4 @@ export const liquidacionesApi = {
     return data
   },
 
-  marcarPago: async (
-    id: number,
-    pagado: boolean,
-    fechaPago?: string,
-  ): Promise<LiquidacionParcela> => {
-    const { data } = await api.patch<LiquidacionParcela>(`/liquidaciones/${id}/pago`, {
-      pagado,
-      fecha_pago: fechaPago ?? null,
-    })
-    return data
-  },
 }

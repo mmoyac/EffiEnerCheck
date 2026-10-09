@@ -34,7 +34,7 @@
 
 - [ ] 3.1 `offline/lecturas.ts`:
   - IndexedDB versión 2 con el almacén `fotos`;
-  - `procesarFoto(archivo)` (bitmap con orientación, canvas de 1600 px, JPEG 0,7);
+  - `procesarFoto(archivo, leyenda)` (bitmap con orientación, canvas de 1600 px, franja con parcela y fecha y hora de la foto, JPEG 0,7);
   - `guardarPendiente(lectura, valor, foto)` y `guardarFotoDeLectura()`;
   - `listarFotos()`, `leerFoto()` y `descartarFoto()`;
   - `descartar()` también borra la foto;
@@ -51,7 +51,7 @@
   - retomar y quitar;
   - aviso si no se pudo procesar.
 
-  Guarda la foto con la misma `fecha_toma` que la lectura, y permite agregar una foto a una lectura ya sincronizada. Verificar en un celular real (Android e iPhone), con y sin señal.
+  Guarda la foto con la misma `fecha_toma` que la lectura, y permite agregar una foto a una lectura ya sincronizada. Si la lectura ya tiene foto en el servidor, **Ver foto** la descarga a pedido, solo con señal y sin guardarla en el celular. Verificar en un celular real (Android e iPhone), con y sin señal.
 - [ ] 4.2 `LectorDashboard`: «N fotos por subir», parcelas leídas «sin foto» y fotos rechazadas en la lista **Revisar**. Verificar en el navegador con DevTools en modo *Offline*.
 - [ ] 4.3 `BoletaDetalle`, pestaña *Lecturas*:
   - ícono de cámara en las lecturas con foto;

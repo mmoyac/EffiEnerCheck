@@ -18,8 +18,8 @@ from app.schemas.boleta import (
     LecturaInicialCreate,
 )
 from app.services import fotos_lectura
-from app.services import lecturas_iniciales
-from app.services.periodos import LECTURA_INICIAL, es_lectura_inicial, exigir_periodo_regular
+from app.services import cuenta_luz, lecturas_iniciales
+from app.services.periodos import LECTURA_INICIAL, descartar_liquidaciones, es_lectura_inicial, exigir_periodo_regular
 
 router = APIRouter(prefix="/boletas", tags=["boletas"])
 
@@ -329,6 +329,16 @@ async def _lecturas_con_parcela(boleta_id: int, db: AsyncSession):
     return sorted(filas, key=lambda f: _orden_natural(f[1].numero_parcela))
 
 
+async def _saldos_iniciales(boleta: BoletaMaestra, db: AsyncSession) -> dict:
+    """Saldo inicial de luz vigente por parcela (movimiento no anulado del condominio)."""
+    from app.models.cuenta_luz import MovimientoLuz
+    filas = (await db.execute(
+        select(MovimientoLuz).where(MovimientoLuz.condominio_id == boleta.condominio_id,
+                                    MovimientoLuz.tipo == "saldo_inicial", MovimientoLuz.anulado == False)  # noqa: E712
+    )).scalars().all()
+    return {m.parcela_id: m for m in filas}
+
+
 @router.get("/{boleta_id}/lecturas-iniciales/plantilla")
 async def plantilla_lecturas_iniciales(
     boleta_id: int,
@@ -338,7 +348,9 @@ async def plantilla_lecturas_iniciales(
 ):
     """Plantilla Excel de la lectura inicial: una fila por parcela, con la lectura ya tomada si la hay."""
     boleta = await _lectura_inicial_abierta(boleta_id, tenant_id, db)
-    filas = [(p.numero_parcela, p.propietario_nombre, l.lectura_actual if l.fecha_toma else None)
+    saldos = await _saldos_iniciales(boleta, db)
+    filas = [(p.numero_parcela, p.propietario_nombre, l.lectura_actual if l.fecha_toma else None,
+              saldos[p.id].monto if p.id in saldos else None)
              for l, p in await _lecturas_con_parcela(boleta.id, db)]
     contenido = lecturas_iniciales.plantilla(filas, f"Lectura inicial {boleta.periodo_mes:%Y-%m}")
     return Response(
@@ -370,14 +382,17 @@ async def importar_lecturas_iniciales(
 
     contenido = await archivo.read(lecturas_iniciales.MAX_BYTES + 1)
     filas = await _lecturas_con_parcela(boleta.id, db)
+    saldos = await _saldos_iniciales(boleta, db)
     try:
         resultado = lecturas_iniciales.leer_planilla(
-            contenido, [(l.id, p.id, p.numero_parcela, l.lectura_actual, l.fecha_toma is not None) for l, p in filas])
+            contenido, [(l.id, p.id, p.numero_parcela, l.lectura_actual, l.fecha_toma is not None) for l, p in filas],
+            {pid: m.monto for pid, m in saldos.items()})
     except lecturas_iniciales.PlanillaInvalida as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
     cuerpo = {
         "a_aplicar": [vars(f) for f in resultado.a_aplicar],
+        "saldos": [vars(f) for f in resultado.saldos],
         "sin_cambio": resultado.sin_cambio,
         "vacias": resultado.vacias,
         "errores": resultado.errores,
@@ -400,13 +415,33 @@ async def importar_lecturas_iniciales(
         lectura.kwh_consumidos = f.valor - lectura.lectura_anterior
         lectura.fecha_toma = ahora
         lectura.lector_id = current_user.id
+
+    # Saldo inicial de luz: el vigente nunca se pisa; se anula (con motivo) y se registra el nuevo
+    from app.models.cuenta_luz import MovimientoLuz
+    cambios_saldo = []
+    for f in resultado.saldos:
+        anterior = saldos.get(f.parcela_id)
+        if anterior is not None:
+            anterior.anulado = True
+            anterior.anulado_por = current_user.id
+            anterior.anulado_en = ahora
+            anterior.motivo_anulacion = "Reemplazado por una nueva carga de la planilla de la lectura inicial"
+        if f.valor > 0:
+            db.add(MovimientoLuz(condominio_id=boleta.condominio_id, parcela_id=f.parcela_id, tipo="saldo_inicial",
+                                 monto=f.valor, fecha=boleta.periodo_mes, boleta_id=boleta.id,
+                                 nota="Saldo de luz anterior a la plataforma", creado_por=current_user.id))
+        cambios_saldo.append({"parcela_id": f.parcela_id, "antes": f.valor_actual, "despues": f.valor})
+    if cambios_saldo:
+        await db.flush()
+        await cuenta_luz.recalcular(db, [c["parcela_id"] for c in cambios_saldo])
+
     await registrar_auditoria(
         db, usuario_id=current_user.id, condominio_id=boleta.condominio_id, accion="IMPORTAR_LECTURAS_INICIALES",
-        detalles={"boleta_id": boleta.id, "aplicadas": len(cambios), "cambios": cambios},
+        detalles={"boleta_id": boleta.id, "aplicadas": len(cambios), "cambios": cambios, "saldos": cambios_saldo},
         ip_address=request.client.host if request.client else None,
     )
     await db.commit()
-    cuerpo["aplicadas"] = len(cambios)
+    cuerpo["aplicadas"] = len(cambios) + len(cambios_saldo)
     return cuerpo
 
 
@@ -457,6 +492,11 @@ async def actualizar_boleta(
     estado_anterior = {k: getattr(boleta, k) for k in cambios}
     for campo, valor in cambios.items():
         setattr(boleta, campo, valor)
+
+    if cambios.get("boleta_visible_usuarios") is True:
+        # Publicado: sus liquidaciones pasan a ser cargos de la cuenta de luz (cambio cobranza-energia)
+        await db.flush()
+        await cuenta_luz.recalcular_periodo(db, boleta.id)
 
     accion = "TOGGLE_VISIBILITY" if "boleta_visible_usuarios" in cambios else "UPDATE_BOLETA"
     await registrar_auditoria(
@@ -625,10 +665,12 @@ async def procesar_ocr_boleta(
             )
             items_pendientes_creados += 1
 
-    # Las cifras cambiaron: un juicio previo del administrador ya no las respalda.
+    # Las cifras cambiaron: un juicio previo del administrador ya no las respalda, ni las liquidaciones
+    # calculadas con ellas.
     estado_revertido = boleta.estado == "validada"
     if estado_revertido:
         boleta.estado = "borrador"
+    descartadas = await descartar_liquidaciones(db, boleta.id)
 
     await registrar_auditoria(
         db, usuario_id=current_user.id, condominio_id=boleta.condominio_id,
@@ -638,6 +680,7 @@ async def procesar_ocr_boleta(
             "items_actualizados": items_actualizados,
             "items_pendientes_creados": items_pendientes_creados,
             "estado_revertido_a_borrador": estado_revertido,
+            "liquidaciones_descartadas": descartadas,
         },
     )
     await db.commit()
@@ -675,10 +718,11 @@ async def actualizar_detalles_boleta(
     for item in data.items_detalle:
         db.add(BoletaItemDetalle(**item.model_dump(), boleta_id=boleta.id))
 
-    # El desglose cambió: la corroboración previa ya no respalda estas cifras.
+    # El desglose cambió: la corroboración previa ya no respalda estas cifras, ni las liquidaciones calculadas.
     estado_revertido = boleta.estado == "validada"
     if estado_revertido:
         boleta.estado = "borrador"
+    descartadas = await descartar_liquidaciones(db, boleta.id)
 
     await registrar_auditoria(
         db, usuario_id=current_user.id, condominio_id=boleta.condominio_id,
@@ -686,6 +730,7 @@ async def actualizar_detalles_boleta(
         detalles={
             "boleta_id": boleta_id,
             "estado_revertido_a_borrador": estado_revertido,
+            "liquidaciones_descartadas": descartadas,
         },
     )
     await db.commit()
@@ -831,9 +876,11 @@ async def reabrir_lecturas(
             )
 
     boleta.lecturas_cerradas = False
+    # Las lecturas pueden cambiar: lo calculado con ellas deja de valer
+    descartadas = await descartar_liquidaciones(db, boleta.id)
     await registrar_auditoria(
         db, usuario_id=current_user.id, condominio_id=boleta.condominio_id,
-        accion="REABRIR_LECTURAS", detalles={"boleta_id": boleta_id},
+        accion="REABRIR_LECTURAS", detalles={"boleta_id": boleta_id, "liquidaciones_descartadas": descartadas},
     )
     await db.commit()
     return await _get_boleta_o_404(boleta.id, db)
@@ -934,6 +981,14 @@ async def eliminar_boleta_borrador(
 
     await db.execute(delete(LiquidacionParcela).where(LiquidacionParcela.boleta_id == boleta_id))
     await db.execute(delete(LecturaParcela).where(LecturaParcela.boleta_id == boleta_id))
+    # Saldos iniciales de luz cargados en esta lectura inicial: no se borran (auditoría), se anulan
+    from datetime import datetime, timezone
+    from sqlalchemy import update
+    from app.models.cuenta_luz import MovimientoLuz
+    await db.execute(update(MovimientoLuz).where(MovimientoLuz.boleta_id == boleta_id, MovimientoLuz.anulado == False)  # noqa: E712
+                     .values(anulado=True, anulado_por=current_user.id, anulado_en=datetime.now(timezone.utc),
+                             motivo_anulacion="Se eliminó la lectura inicial que lo cargó"))
+    await db.execute(update(MovimientoLuz).where(MovimientoLuz.boleta_id == boleta_id).values(boleta_id=None))
     
     # BoletaItemDetalle se elimina en cascada por SQLAlchemy
     await db.delete(boleta)

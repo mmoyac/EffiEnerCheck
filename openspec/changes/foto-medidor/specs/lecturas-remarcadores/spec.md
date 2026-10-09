@@ -4,12 +4,17 @@
 
 ### Requirement: Foto del medidor en la captura
 
-La pantalla de captura DEBE (SHALL) permitir al lector tomar una fotografía del medidor con la cámara del dispositivo, con o sin conexión. La foto DEBE (SHALL) ser opcional: su ausencia no impide guardar la lectura. Antes de guardarla, el dispositivo DEBE (SHALL) reducirla (lado mayor de 1600 px como máximo), comprimirla en JPEG y descartar su metadata EXIF, incluida la ubicación.
+La pantalla de captura DEBE (SHALL) permitir al lector tomar una fotografía del medidor con la cámara del dispositivo, con o sin conexión. La foto DEBE (SHALL) ser opcional: su ausencia no impide guardar la lectura. Antes de guardarla, el dispositivo DEBE (SHALL) reducirla (lado mayor de 1600 px como máximo), comprimirla en JPEG y descartar su metadata EXIF, incluida la ubicación. Además DEBE (SHALL) agregar debajo de la imagen, sin tapar el medidor, una franja con el número de parcela y la fecha y hora en que se sacó la foto (la del archivo o, si no la trae, la de la captura).
 
 #### Scenario: Lectura con foto
 
 - **WHEN** el lector toma la foto del medidor, ingresa el valor y guarda
 - **THEN** la lectura y su foto quedan guardadas en el dispositivo con la misma `fecha_toma`, y la pantalla muestra la vista previa de la foto
+
+#### Scenario: Foto con fecha y hora
+
+- **WHEN** el lector toma la foto del medidor de la parcela 23
+- **THEN** la foto guardada lleva debajo una franja con «Parcela 23» y la fecha y hora en que se sacó, en hora de Chile
 
 #### Scenario: Lectura sin foto
 
@@ -106,6 +111,11 @@ El sistema DEBE (SHALL) exponer `GET /api/v1/lecturas/{id}/foto`, que entrega la
 
 - **WHEN** el administrador abre la foto de una lectura en la pestaña Lecturas del período
 - **THEN** ve la foto junto al valor digitado
+
+#### Scenario: Lector revisa la foto guardada, con señal
+
+- **WHEN** el lector abre una parcela cuya lectura ya tiene foto en el servidor
+- **THEN** con conexión puede ver esa foto a pedido, sin guardarla en el dispositivo; sin conexión, la aplicación le indica que necesita señal para verla
 
 #### Scenario: Comunero ve la foto de su medidor
 

@@ -58,7 +58,36 @@ export default function Rifas() {
         <Alert variant="info">Aún no hay rifas. Crea una para que los comuneros puedan comprar números desde su portal.</Alert>
       ) : (
         <Card padding={false}>
-          <div className="overflow-x-auto">
+          {/* Celular: lista apilada, una tarjeta por rifa */}
+          <ul className="divide-y divide-slate-700/50 md:hidden">
+            {rifas.map((r) => (
+              <li
+                key={r.id}
+                onClick={() => navigate(`/rifas/${r.id}`)}
+                className="cursor-pointer space-y-2 px-4 py-3 transition-colors hover:bg-slate-700/40"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="flex min-w-0 items-center gap-2 font-medium text-slate-100">
+                      <Ticket className="h-4 w-4 shrink-0 text-primary-400" /><span className="truncate">{r.nombre}</span>
+                    </p>
+                    <p className="break-words text-xs text-slate-400">A beneficio de {r.beneficiario}</p>
+                    {isSuperAdmin && <p className="truncate text-xs text-slate-300">{condominioNombre(r.condominio_id)}</p>}
+                  </div>
+                  <div className="shrink-0">
+                    {r.estado === 'abierta' ? <Badge color="green" dot>Abierta</Badge> : <Badge color="slate">Cerrada</Badge>}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-slate-400">
+                  <span>Precio <span className="font-mono text-slate-300">{clp(r.precio_numero)}</span></span>
+                  <span>Vendidos <span className="font-mono text-slate-300">{r.numeros_vendidos_total} / {r.cantidad_numeros}</span></span>
+                  <span>Recaudado <span className="font-mono font-semibold text-primary-400">{clp(r.recaudado)}</span></span>
+                  <span>Creada {fecha(r.created_at)}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-700 text-left text-xs uppercase tracking-wider text-slate-500">

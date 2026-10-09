@@ -1,20 +1,23 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQueries, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { CheckCircle2, Clock, Zap, TrendingUp, DollarSign, FileText, ImageIcon, ChevronRight, ChevronLeft, Ticket, Camera } from 'lucide-react'
+import { CheckCircle2, Clock, Receipt, Zap, TrendingUp, DollarSign, FileText, ImageIcon, ChevronRight, ChevronLeft, Ticket, Camera } from 'lucide-react'
 import { boletasApi } from '../../api/boletas'
 import { lecturasApi } from '../../api/lecturas'
 import { liquidacionesApi } from '../../api/liquidaciones'
+import { cuentaLuzApi } from '../../api/cuentaLuz'
 import { rifasApi } from '../../api/rifas'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { Spinner } from '../../components/ui/Spinner'
 import { Alert } from '../../components/ui/Alert'
 import { Modal } from '../../components/ui/Modal'
-import { clp, kwh, periodoCorto, fecha } from '../../utils/format'
+import { clp, kwh, numero, periodoCorto, fecha, fechaHora } from '../../utils/format'
 import { useAuth, useModulo } from '../../hooks/useAuth'
 import { Header } from '../../components/layout/Header'
 import { FotoMedidorModal } from '../../components/FotoMedidorModal'
+import { EstadoPagoLuz } from '../../components/EstadoPagoLuz'
+import { CuentaModal } from '../admin/Cobranza'
 import type { LecturaParcela } from '../../types'
 
 export default function MiLiquidacion() {
@@ -23,6 +26,12 @@ export default function MiLiquidacion() {
   const [imagenOpen, setImagenOpen] = useState(false)
   const [selectedBoletaId, setSelectedBoletaId] = useState<number | null>(null)
   const [fotoDe, setFotoDe] = useState<LecturaParcela | null>(null)
+  const [cuentaDe, setCuentaDe] = useState<number | null>(null)
+
+  // Cuenta corriente de luz de cada parcela propia (cambio cobranza-energia)
+  const cuentas = useQueries({
+    queries: misParcelas.map((p) => ({ queryKey: ['cuenta-luz', p.id], queryFn: () => cuentaLuzApi.cuenta(p.id) })),
+  })
 
   const { data: boletas = [], isLoading: loadingBoletas } = useQuery({
     queryKey: ['boletas'],
@@ -86,6 +95,24 @@ export default function MiLiquidacion() {
               <p className="text-sm text-slate-500">Selecciona un período para ver el detalle</p>
             </div>
 
+            {/* Saldo de luz por parcela */}
+            {cuentas.map(({ data: cuenta }) => cuenta && (
+              <button key={cuenta.parcela_id} onClick={() => setCuentaDe(cuenta.parcela_id)}
+                      className={`flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-all active:scale-[0.98] ${
+                        cuenta.saldo > 0 ? 'border-yellow-500/40 bg-yellow-500/10 hover:bg-yellow-500/15' : 'border-slate-700 bg-slate-800 hover:bg-slate-700'}`}>
+                <Receipt className={`h-6 w-6 shrink-0 ${cuenta.saldo > 0 ? 'text-yellow-400' : 'text-primary-400'}`} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-slate-100">
+                    {cuenta.saldo > 0 ? <>Debes {clp(cuenta.saldo)} por luz</> : cuenta.saldo < 0 ? <>Tienes {clp(-cuenta.saldo)} a favor</> : <>Estás al día con la luz</>}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {misParcelas.length > 1 ? `Parcela ${cuenta.numero_parcela} · ` : ''}Toca para ver tu cuenta: cargos, abonos y estado de cada mes
+                  </p>
+                </div>
+                <ChevronRight className="h-5 w-5 shrink-0 text-slate-500" />
+              </button>
+            ))}
+
             {loadingBoletas ? (
               <div className="flex h-48 items-center justify-center">
                 <Spinner size="lg" className="text-primary-500" />
@@ -115,6 +142,7 @@ export default function MiLiquidacion() {
         )}
 
         <FotoMedidorModal lectura={fotoDe} onClose={() => setFotoDe(null)} titulo="Foto de tu medidor" />
+        {cuentaDe != null && <CuentaModal parcelaId={cuentaDe} soloLectura onClose={() => setCuentaDe(null)} />}
 
         {/* VISTA DE DETALLE */}
         {selectedBoletaId && boletaActiva && (
@@ -151,12 +179,21 @@ export default function MiLiquidacion() {
                           <p className="text-sm text-slate-400">{parcela.propietario_nombre}</p>
                         )}
                       </div>
-                      {liq.pagado ? (
-                        <Badge color="green" dot>Pagado</Badge>
-                      ) : (
-                        <Badge color="yellow" dot>Pendiente</Badge>
-                      )}
+                      <EstadoPagoLuz total={liq.total_pagar_mes} abonado={liq.monto_abonado} />
                     </div>
+
+                    {/* Consumo del período: lo que marcó su medidor (cambio proceso-energia) */}
+                    {lectura?.fecha_toma && (
+                      <div className="mb-3 rounded-xl border border-slate-700 px-4 py-3">
+                        <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Tu consumo del período</p>
+                        <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                          <div><p className="text-xs text-slate-500">Lectura anterior</p><p className="font-mono text-slate-300">{numero(lectura.lectura_anterior)}</p></div>
+                          <div><p className="text-xs text-slate-500">Lectura actual</p><p className="font-mono text-slate-100">{numero(lectura.lectura_actual)}</p></div>
+                          <div><p className="text-xs text-slate-500">Consumo</p><p className="font-mono font-bold text-primary-400">{kwh(lectura.kwh_consumidos)}</p></div>
+                        </div>
+                        <p className="mt-2 text-center text-xs text-slate-500">Medidor leído el {fechaHora(lectura.fecha_toma)}</p>
+                      </div>
+                    )}
 
                     {/* Desglose */}
                     <div className="space-y-2 rounded-xl bg-slate-700/40 p-4">
@@ -187,7 +224,9 @@ export default function MiLiquidacion() {
                     ) : (
                       <div className="mt-4 flex items-center gap-2 text-sm text-yellow-400">
                         <Clock className="h-4 w-4" />
-                        Pago pendiente — contacta a la administración
+                        {liq.monto_abonado > 0
+                          ? <>Abonado {clp(liq.monto_abonado)} de {clp(liq.total_pagar_mes)} — se paga con tu gasto común</>
+                          : <>Pago pendiente — se paga con tu gasto común</>}
                       </div>
                     )}
 

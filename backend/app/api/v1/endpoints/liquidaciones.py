@@ -10,7 +10,7 @@ from app.models.boleta import BoletaMaestra
 from app.models.liquidacion import LiquidacionParcela
 from app.models.parcela import Parcela
 from app.models.usuario import Usuario
-from app.schemas.liquidacion import LiquidacionParcelaResponse, MarcarPagadoRequest
+from app.schemas.liquidacion import LiquidacionParcelaResponse
 from app.services.periodos import exigir_periodo_regular
 
 router = APIRouter(prefix="/liquidaciones", tags=["liquidaciones"])
@@ -82,44 +82,6 @@ async def get_liquidacion(
                 detail="La liquidación aún no está publicada.",
             )
 
-    return liq
-
-
-@router.patch("/{liquidacion_id}/pago", response_model=LiquidacionParcelaResponse)
-async def marcar_pago(
-    liquidacion_id: int,
-    data: MarcarPagadoRequest,
-    current_user: Annotated[Usuario, Depends(AdminRequired)],
-    tenant_id: TenantId,
-    db: DB,
-):
-    result = await db.execute(
-        select(LiquidacionParcela)
-        .join(Parcela, LiquidacionParcela.parcela_id == Parcela.id)
-        .where(LiquidacionParcela.id == liquidacion_id)
-    )
-    liq = result.scalar_one_or_none()
-    if not liq:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Liquidación no encontrada")
-
-    parcela_result = await db.execute(select(Parcela).where(Parcela.id == liq.parcela_id))
-    parcela = parcela_result.scalar_one_or_none()
-    if tenant_id is not None and parcela.condominio_id != tenant_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sin acceso a esta liquidación")
-
-    boleta = await _get_boleta(liq.boleta_id, db)
-    if boleta.liquidaciones_cerradas:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El período está cerrado y no permite modificaciones")
-
-    liq.pagado = data.pagado
-    liq.fecha_pago = data.fecha_pago
-
-    await registrar_auditoria(
-        db, usuario_id=current_user.id, condominio_id=parcela.condominio_id,
-        accion="MARCAR_PAGO", detalles={"liquidacion_id": liquidacion_id, "pagado": data.pagado},
-    )
-    await db.commit()
-    await db.refresh(liq)
     return liq
 
 

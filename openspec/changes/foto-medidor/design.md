@@ -38,6 +38,7 @@ Abre la cámara nativa del celular, funciona sin conexión, no pide permisos de 
 
 - Reencodear en el canvas **descarta el EXIF**, incluida la ubicación GPS. Es lo correcto: la ubicación no aporta y es un dato personal.
 - 1600 px alcanza para leer los dígitos de un medidor con holgura.
+- **Franja de evidencia:** el canvas agrega una franja debajo de la imagen, sin tapar el medidor, con «Parcela N · dd-mm-aaaa hh:mm» (hora de Chile). La fecha es `File.lastModified`: con la cámara coincide con la captura, y una foto vieja elegida de la galería muestra su fecha real. Si falta o está en el futuro, se usa el momento de la captura. Queda quemada en la imagen y no depende del EXIF, que se descarta.
 - Si `createImageBitmap` falla (formato no soportado, como HEIC en algunos navegadores), se muestra «No se pudo procesar la foto, intenta de nuevo» y la lectura se puede guardar igual.
 
 ### 3. Almacén `fotos` separado en IndexedDB (versión 2 de la base)

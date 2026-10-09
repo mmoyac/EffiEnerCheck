@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Camera, CheckCircle2, CloudOff, RefreshCw, Trash2, Zap } from 'lucide-react'
+import { ArrowLeft, Camera, CheckCircle2, CloudOff, Eye, RefreshCw, Trash2, Zap } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Alert } from '../../components/ui/Alert'
 import { Spinner } from '../../components/ui/Spinner'
 import { numero } from '../../utils/format'
 import { useAuth } from '../../hooks/useAuth'
+import { lecturasApi } from '../../api/lecturas'
 import {
   FotoIlegible, guardarFotoDeLectura, guardarPendiente, leerFoto, leerRecorrido, listarFotos, listarPendientes,
   procesarFoto, sincronizar, type Pendiente, type Recorrido,
@@ -34,6 +35,23 @@ export default function CapturarLectura() {
   const [fotoUrl, setFotoUrl] = useState<string | null>(null)
   const [procesandoFoto, setProcesandoFoto] = useState(false)
   const [errorFoto, setErrorFoto] = useState('')
+  // Foto ya guardada en el servidor: se descarga solo a pedido y solo con señal (no se guarda en el celular)
+  const [fotoServidor, setFotoServidor] = useState<string | null>(null)
+  const [cargandoServidor, setCargandoServidor] = useState(false)
+  useEffect(() => () => { if (fotoServidor) URL.revokeObjectURL(fotoServidor) }, [fotoServidor])
+
+  const verFotoServidor = async () => {
+    if (!lectura) return
+    setCargandoServidor(true)
+    setErrorFoto('')
+    try {
+      setFotoServidor(await lecturasApi.verFoto(lectura.id))
+    } catch {
+      setErrorFoto('No se pudo descargar la foto. Revisa la señal e intenta de nuevo.')
+    } finally {
+      setCargandoServidor(false)
+    }
+  }
 
   const parcela = recorrido?.parcelas.find((p) => p.id === Number(parcelaId))
   const lectura = recorrido?.lecturas.find((l) => l.parcela_id === Number(parcelaId))
@@ -67,7 +85,7 @@ export default function CapturarLectura() {
     setProcesandoFoto(true)
     setErrorFoto('')
     try {
-      setFoto(await procesarFoto(archivo))
+      setFoto(await procesarFoto(archivo, parcela ? `Parcela ${parcela.numero_parcela}` : ''))
       setFotoCambiada(true)
     } catch (err) {
       setErrorFoto(err instanceof FotoIlegible
@@ -222,7 +240,22 @@ export default function CapturarLectura() {
                 </button>
               )}
               {!foto && lectura.tiene_foto && (
-                <p className="text-center text-xs text-slate-500">Esta lectura ya tiene foto en el servidor. Si tomas otra, la reemplaza.</p>
+                <div className="space-y-2 text-center">
+                  <p className="text-xs text-slate-500">Esta lectura ya tiene foto en el servidor. Si tomas otra, la reemplaza.</p>
+                  {fotoServidor ? (
+                    <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-800">
+                      <img src={fotoServidor} alt="Foto guardada del medidor" className="max-h-56 w-full object-contain" />
+                      <p className="border-t border-slate-700 py-2 text-xs text-slate-500">Foto guardada en el servidor</p>
+                    </div>
+                  ) : navigator.onLine ? (
+                    <button onClick={verFotoServidor} disabled={cargandoServidor}
+                            className="inline-flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-300 hover:border-primary-500 disabled:opacity-50">
+                      {cargandoServidor ? <Spinner size="sm" /> : <Eye className="h-4 w-4" />} Ver foto
+                    </button>
+                  ) : (
+                    <p className="text-xs text-yellow-300">Necesitas señal para ver la foto guardada.</p>
+                  )}
+                </div>
               )}
               {errorFoto && <p className="text-center text-xs text-yellow-300">{errorFoto}</p>}
             </div>

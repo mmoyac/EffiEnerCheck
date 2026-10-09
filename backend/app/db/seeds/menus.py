@@ -12,7 +12,7 @@ MENUS = [
     {"id": 4, "label": "Parcelas",      "path": "/parcelas",      "icon": "map-pin",     "orden": 4, "modulo": None},
     {"id": 5, "label": "Boletas",       "path": "/boletas",       "icon": "file-text",   "orden": 5, "modulo": "energia"},
     {"id": 6, "label": "Lecturas",      "path": "/lecturas",      "icon": "activity",    "orden": 6, "modulo": "energia"},
-    {"id": 7, "label": "Liquidaciones", "path": "/liquidaciones", "icon": "calculator",  "orden": 7, "modulo": "energia"},
+    {"id": 7, "label": "Cobranza",      "path": "/cobranza",      "icon": "calculator",  "orden": 7, "modulo": "energia"},
     {"id": 8, "label": "Auditoría",     "path": "/auditoria",     "icon": "shield",      "orden": 8, "modulo": None},
     {"id": 9, "label": "Rifas",         "path": "/rifas",         "icon": "ticket",      "orden": 9, "modulo": "rifas"},
 ]
@@ -35,7 +35,7 @@ MENU_ROLES = [
     # Lecturas — super_admin, admin_condominio, lector
     {"menu_id": 6, "rol_id": 1}, {"menu_id": 6, "rol_id": 2},
     {"menu_id": 6, "rol_id": 3},
-    # Liquidaciones — super_admin, admin_condominio, comunero
+    # Cobranza (liquidaciones y cuenta de luz) — super_admin, admin_condominio; el comunero entra a /liquidaciones desde su portal
     {"menu_id": 7, "rol_id": 1}, {"menu_id": 7, "rol_id": 2},
     {"menu_id": 7, "rol_id": 4},
     # Auditoría — solo super_admin

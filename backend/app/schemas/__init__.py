@@ -10,7 +10,7 @@ from app.schemas.boleta import (
 )
 from app.schemas.condominio import CondominioCreate, CondominioResponse, CondominioUpdate
 from app.schemas.lectura import LecturaParcelaCreate, LecturaParcelaResponse, LecturaParcelaUpdate
-from app.schemas.liquidacion import LiquidacionParcelaResponse, MarcarPagadoRequest
+from app.schemas.liquidacion import LiquidacionParcelaResponse
 from app.schemas.parcela import ParcelaCreate, ParcelaResponse, ParcelaUpdate
 from app.schemas.rol import RolResponse
 from app.schemas.usuario import UsuarioCreate, UsuarioDetailResponse, UsuarioResponse, UsuarioUpdate
@@ -22,7 +22,7 @@ __all__ = [
     "BoletaMaestraCreate", "BoletaMaestraUpdate", "BoletaMaestraResponse", "BoletaMaestraComuneroResponse",
     "CondominioCreate", "CondominioUpdate", "CondominioResponse",
     "LecturaParcelaCreate", "LecturaParcelaUpdate", "LecturaParcelaResponse",
-    "LiquidacionParcelaResponse", "MarcarPagadoRequest",
+    "LiquidacionParcelaResponse",
     "ParcelaCreate", "ParcelaUpdate", "ParcelaResponse",
     "RolResponse",
     "UsuarioCreate", "UsuarioUpdate", "UsuarioResponse", "UsuarioDetailResponse",

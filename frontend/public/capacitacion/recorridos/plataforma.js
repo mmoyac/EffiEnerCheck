@@ -26,13 +26,13 @@
       {
         icono: 'casa',
         nombre: 'Comunero',
-        texto: 'Vecino de una o más parcelas. Consulta sus liquidaciones de energía y compra números de rifa desde su celular.',
+        texto: 'Vecino de una o más parcelas. Consulta su consumo, su liquidación y su cuenta de luz, y compra números de rifa desde su celular.',
         modulos: ['energia', 'rifas'],
       },
       {
         icono: 'maletin',
         nombre: 'Administración',
-        texto: 'La administración del condominio, sea de la comunidad o externa. Carga las boletas, calcula y publica los cobros, gestiona rifas, usuarios y parcelas.',
+        texto: 'La administración del condominio, sea de la comunidad o externa. Carga las boletas, calcula, publica y cobra la luz, y gestiona rifas, usuarios y parcelas.',
         modulos: ['nucleo', 'energia', 'rifas'],
       },
       {
@@ -44,7 +44,7 @@
       {
         icono: 'medidor',
         nombre: 'Lector',
-        texto: 'Recorre las parcelas y registra la lectura de cada remarcador. Funciona incluso sin señal.',
+        texto: 'Recorre las parcelas y registra la lectura y la foto de cada medidor. Funciona incluso sin señal.',
         modulos: ['energia'],
       },
     ],
@@ -58,14 +58,6 @@
       icono: 'candado',
       estado: 'proximamente',
       resumen: 'Crear tu clave con la invitación, recuperarla si la olvidas, y para la administración: usuarios y parcelas.',
-    },
-    {
-      id: 'energia',
-      orden: 2,
-      nombre: 'Energía (EnerCheck)',
-      icono: 'energia',
-      estado: 'proximamente',
-      resumen: 'De la boleta eléctrica al cobro de cada parcela: carga de la boleta, lecturas, cálculo, publicación y consulta del comunero.',
     },
   )
 })(window.Capacitacion)

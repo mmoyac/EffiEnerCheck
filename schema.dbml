@@ -143,8 +143,30 @@ Table liquidaciones_parcelas {
   monto_cuota_fija integer
   
   total_pagar_mes integer
+  // Derivados de la cuenta corriente de luz (imputación a la deuda más antigua); no se marcan a mano
+  monto_abonado integer [default: 0]
   pagado boolean [default: false]
   fecha_pago timestamp
+}
+
+// 7. CUENTA CORRIENTE DE LUZ (cambio cobranza-energia)
+// Cargos = saldo inicial + liquidaciones publicadas; abonos = pagos de cualquier monto.
+// Un movimiento NUNCA se borra: se anula con motivo, quién y cuándo (auditoría).
+Table movimientos_luz {
+  id integer [primary key]
+  condominio_id integer [ref: > condominios.id]
+  parcela_id integer [ref: > parcelas.id]
+  tipo varchar [note: 'saldo_inicial | abono']
+  monto integer [note: '> 0']
+  fecha date [note: 'Fecha del pago o de la deuda']
+  nota text
+  boleta_id integer [ref: > boletas_maestras.id, note: 'Lectura inicial que cargó el saldo inicial']
+  creado_por integer [ref: > usuarios.id]
+  creado_en timestamp
+  anulado boolean [default: false]
+  anulado_por integer [ref: > usuarios.id]
+  anulado_en timestamp
+  motivo_anulacion text
 }
 
 // 7. NAVEGACIÓN POR ROL

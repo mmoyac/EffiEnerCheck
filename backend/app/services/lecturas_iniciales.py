@@ -1,7 +1,8 @@
 """
 Carga masiva de lecturas iniciales desde Excel (cambio lectura-inicial).
 
-- `plantilla()`: genera el .xlsx con una fila por parcela del período (Parcela, Propietario, Lectura inicial).
+- `plantilla()`: genera el .xlsx con una fila por parcela del período (Parcela, Propietario, Lectura inicial y
+  Saldo luz: la deuda por luz anterior a la plataforma, que abre la cuenta corriente; cambio cobranza-energia).
 - `leer_planilla()`: interpreta el .xlsx subido y lo cruza con las lecturas del período. No toca la base:
   devuelve lo que se aplicaría, lo que no cambia, las filas vacías y los errores por fila.
 """
@@ -17,6 +18,7 @@ from openpyxl.styles import Font
 MAX_BYTES = 2 * 1024 * 1024
 ENCABEZADOS_PARCELA = ("parcela", "unidad")
 ENCABEZADOS_LECTURA = ("lectura inicial", "lectura")
+ENCABEZADOS_SALDO = ("saldo luz", "deuda luz", "saldo inicial luz", "saldo inicial")
 
 
 class PlanillaInvalida(ValueError):
@@ -34,8 +36,17 @@ class FilaAplicable:
 
 
 @dataclass
+class FilaSaldo:
+    parcela_id: int
+    numero_parcela: str
+    valor: int                   # 0 = sin deuda (anula el saldo vigente)
+    valor_actual: int | None     # None si no tenía saldo inicial
+
+
+@dataclass
 class Resultado:
     a_aplicar: list[FilaAplicable] = field(default_factory=list)
+    saldos: list[FilaSaldo] = field(default_factory=list)
     sin_cambio: int = 0
     vacias: int = 0
     errores: list[dict] = field(default_factory=list)
@@ -72,19 +83,20 @@ def interpretar_valor(valor) -> float:
         raise ValueError("no es un número") from None
 
 
-def plantilla(filas: list[tuple[str, str | None, float | None]], titulo: str) -> bytes:
-    """filas: (numero_parcela, propietario, lectura_inicial_o_None), ya en orden natural."""
+def plantilla(filas: list[tuple[str, str | None, float | None, int | None]], titulo: str) -> bytes:
+    """filas: (numero_parcela, propietario, lectura_inicial_o_None, saldo_luz_o_None), ya en orden natural."""
     libro = Workbook()
     hoja = libro.active
     hoja.title = "Lecturas iniciales"
-    hoja.append(["Parcela", "Propietario", "Lectura inicial"])
+    hoja.append(["Parcela", "Propietario", "Lectura inicial", "Saldo luz"])
     for celda in hoja[1]:
         celda.font = Font(bold=True)
-    for numero, propietario, lectura in filas:
-        hoja.append([numero, propietario or "", lectura])
+    for numero, propietario, lectura, saldo in filas:
+        hoja.append([numero, propietario or "", lectura, saldo])
     hoja.column_dimensions["A"].width = 12
     hoja.column_dimensions["B"].width = 36
     hoja.column_dimensions["C"].width = 16
+    hoja.column_dimensions["D"].width = 16
     hoja.freeze_panes = "A2"
     libro.properties.title = titulo
     salida = io.BytesIO()
@@ -92,11 +104,15 @@ def plantilla(filas: list[tuple[str, str | None, float | None]], titulo: str) ->
     return salida.getvalue()
 
 
-def leer_planilla(contenido: bytes, lecturas: list[tuple[int, int, str, float, bool]]) -> Resultado:
+def leer_planilla(contenido: bytes, lecturas: list[tuple[int, int, str, float, bool]],
+                  saldos: dict[int, int] | None = None) -> Resultado:
     """
     lecturas del período: (lectura_id, parcela_id, numero_parcela, lectura_actual, tomada).
+    saldos: saldo inicial de luz vigente por parcela_id (las que no aparecen no tienen).
+    La columna «Saldo luz» es opcional; una celda vacía no cambia el saldo y 0 lo deja sin deuda.
     Lanza PlanillaInvalida si el archivo no se puede leer o le faltan columnas.
     """
+    saldos = saldos or {}
     if len(contenido) > MAX_BYTES:
         raise PlanillaInvalida("La planilla supera los 2 MB")
     if not contenido.startswith(b"PK"):
@@ -109,12 +125,13 @@ def leer_planilla(contenido: bytes, lecturas: list[tuple[int, int, str, float, b
     except Exception:
         raise PlanillaInvalida("No se pudo leer la planilla. Guárdala como .xlsx e intenta de nuevo.") from None
 
-    col_parcela = col_lectura = None
+    col_parcela = col_lectura = col_saldo = None
     inicio = 0
     for n, fila in enumerate(filas):
         encabezados = [_normalizar(c) for c in fila]
         col_parcela = next((encabezados.index(h) for h in ENCABEZADOS_PARCELA if h in encabezados), None)
         col_lectura = next((encabezados.index(h) for h in ENCABEZADOS_LECTURA if h in encabezados), None)
+        col_saldo = next((encabezados.index(h) for h in ENCABEZADOS_SALDO if h in encabezados), None)
         if col_parcela is not None and col_lectura is not None:
             inicio = n + 1
             break
@@ -128,7 +145,8 @@ def leer_planilla(contenido: bytes, lecturas: list[tuple[int, int, str, float, b
     for n, fila in enumerate(filas[inicio:], start=inicio + 1):
         celda_parcela = fila[col_parcela] if col_parcela < len(fila) else None
         celda_lectura = fila[col_lectura] if col_lectura < len(fila) else None
-        if celda_parcela in (None, "") and celda_lectura in (None, ""):
+        celda_saldo = fila[col_saldo] if col_saldo is not None and col_saldo < len(fila) else None
+        if celda_parcela in (None, "") and celda_lectura in (None, "") and celda_saldo in (None, ""):
             continue
         clave = clave_parcela(celda_parcela)
         if not clave:
@@ -141,8 +159,27 @@ def leer_planilla(contenido: bytes, lecturas: list[tuple[int, int, str, float, b
             resultado.errores.append({"fila": n, "mensaje": f"La parcela «{celda_parcela}» se repite (ya está en la fila {vistas[clave]})"})
             continue
         vistas[clave] = n
-        if celda_lectura is None or str(celda_lectura).strip() == "":
+        lid, pid, numero, actual, tomada = por_clave[clave]
+        lectura_vacia = celda_lectura is None or str(celda_lectura).strip() == ""
+        saldo_vacio = celda_saldo is None or str(celda_saldo).strip() == ""
+        if lectura_vacia and saldo_vacio:
             resultado.vacias += 1
+            continue
+
+        if not saldo_vacio:
+            try:
+                saldo = round(interpretar_valor(celda_saldo))
+            except ValueError:
+                resultado.errores.append({"fila": n, "mensaje": f"El saldo de luz «{celda_saldo}» no es un número"})
+                continue
+            if saldo < 0:
+                resultado.errores.append({"fila": n, "mensaje": f"El saldo de luz no puede ser negativo ({saldo})"})
+                continue
+            vigente = saldos.get(pid)
+            if (vigente or 0) != saldo:
+                resultado.saldos.append(FilaSaldo(parcela_id=pid, numero_parcela=numero, valor=saldo, valor_actual=vigente))
+
+        if lectura_vacia:
             continue
         try:
             valor = interpretar_valor(celda_lectura)
@@ -152,7 +189,6 @@ def leer_planilla(contenido: bytes, lecturas: list[tuple[int, int, str, float, b
         if valor < 0:
             resultado.errores.append({"fila": n, "mensaje": f"La lectura no puede ser negativa ({valor:g})"})
             continue
-        lid, pid, numero, actual, tomada = por_clave[clave]
         if tomada and abs(actual - valor) < 1e-9:
             resultado.sin_cambio += 1
             continue

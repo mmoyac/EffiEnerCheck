@@ -16,6 +16,7 @@ import Condominios from './pages/admin/Condominios'
 import LectorDashboard from './pages/lector/LectorDashboard'
 import CapturarLectura from './pages/lector/CapturarLectura'
 import MiLiquidacion from './pages/comunero/MiLiquidacion'
+import Cobranza from './pages/admin/Cobranza'
 import EstablecerClave from './pages/EstablecerClave'
 import MisRifas from './pages/comunero/Rifas'
 import Rifas from './pages/admin/Rifas'
@@ -42,6 +43,22 @@ function SinAcceso() {
   )
 }
 
+const esAdmin = (role: string | null | undefined) => role === 'super_admin' || role === 'admin_condominio'
+
+/** /liquidaciones es del comunero; la administración usa /cobranza (cambio cobranza-energia) */
+function LiquidacionesRouter() {
+  const role = useRole()
+  if (esAdmin(role)) return <Navigate to="/cobranza" replace />
+  return <MiLiquidacion />
+}
+
+/** /cobranza es de la administración; otro rol vuelve a su pantalla de liquidaciones */
+function CobranzaRouter() {
+  const role = useRole()
+  if (!esAdmin(role)) return <Navigate to="/liquidaciones" replace />
+  return <Cobranza />
+}
+
 function LecturasRouter() {
   const role = useRole()
   if (role === 'lector') return <LectorDashboard />
@@ -62,7 +79,7 @@ export default function App() {
         <Route element={<ModuloRoute modulo="energia" />}>
           <Route path="/lecturas" element={<LecturasRouter />} />
           <Route path="/lecturas/capturar/:parcelaId/:boletaId" element={<CapturarLectura />} />
-          <Route path="/liquidaciones" element={<MiLiquidacion />} />
+          <Route path="/liquidaciones" element={<LiquidacionesRouter />} />
         </Route>
         <Route element={<ModuloRoute modulo="rifas" />}>
           <Route path="/mis-rifas" element={<MisRifas />} />
@@ -82,6 +99,7 @@ export default function App() {
           <Route element={<ModuloRoute modulo="energia" />}>
             <Route path="/boletas" element={<Boletas />} />
             <Route path="/boletas/:id" element={<BoletaDetalle />} />
+            <Route path="/cobranza" element={<CobranzaRouter />} />
           </Route>
           <Route element={<ModuloRoute modulo="rifas" />}>
             <Route path="/rifas" element={<Rifas />} />

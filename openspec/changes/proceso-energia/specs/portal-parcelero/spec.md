@@ -28,3 +28,13 @@ El sistema NO DEBE (SHALL NOT) entregar liquidaciones al rol `comunero` mientras
 
 - **WHEN** un `comunero` lista liquidaciones de un período publicado
 - **THEN** el sistema entrega las de sus parcelas
+
+### Requirement: Consumo del período visible para el comunero
+
+En el detalle de un período publicado, el portal DEBE (SHALL) mostrar al comunero, por cada parcela suya, la lectura anterior, la lectura actual, los kWh consumidos y la fecha y hora de la lectura. Junto con la foto del medidor, le permiten contrastar su cobro con lo que marca su medidor.
+
+#### Scenario: Comunero revisa su consumo
+
+- **WHEN** el comunero abre un período publicado
+- **THEN** ve que su medidor pasó, por ejemplo, de 24 a 26 (2 kWh) y cuándo se leyó, además del desglose de montos
+

@@ -154,7 +154,7 @@ function PanelEnergia() {
           <CardTitle>Boletas recientes</CardTitle>
           <Link to="/boletas" className="text-sm text-primary-400 hover:underline">Ver todas</Link>
         </CardHeader>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-700 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -187,6 +187,29 @@ function PanelEnergia() {
             </tbody>
           </table>
         </div>
+
+        {/* Celular: lista apilada, sin scroll horizontal */}
+        <ul className="divide-y divide-slate-700/50 md:hidden">
+          {boletas.slice(0, 5).map((b) => (
+            <li key={b.id} className="space-y-1 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Link to={`/boletas/${b.id}`} className="min-w-0 truncate font-medium text-slate-200 hover:text-primary-400">
+                  {b.tipo === 'lectura_inicial' ? `Lectura inicial · ${periodoCorto(b.periodo_mes)}` : periodoCorto(b.periodo_mes)}
+                </Link>
+                {b.tipo === 'lectura_inicial'
+                  ? <Badge color={b.lecturas_cerradas ? 'blue' : 'yellow'} dot>{b.lecturas_cerradas ? 'Cerrada' : 'En toma'}</Badge>
+                  : estadoBadge(b)}
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                <span className="text-slate-500">kWh <span className="font-mono text-slate-300">{b.tipo === 'lectura_inicial' ? '—' : kwh(b.total_kwh_compania)}</span></span>
+                <span className="text-slate-500">Emisión <span className="font-mono text-slate-300">{b.tipo === 'lectura_inicial' ? '—' : clp(b.monto_total_emision)}</span></span>
+              </div>
+            </li>
+          ))}
+          {boletas.length === 0 && (
+            <li className="px-4 py-8 text-center text-slate-500">Sin boletas registradas</li>
+          )}
+        </ul>
       </Card>
     </div>
   )

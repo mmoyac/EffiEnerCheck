@@ -374,3 +374,32 @@ a.tarjeta:hover { transform: translateY(-2px); border-color: var(--acento); }
 .s-compra { display: flex; gap: 12px; padding: 12px 14px; border-radius: 12px; background: #1e293b; }
 .s-compra .s-badge { margin-top: 6px; }
 .s-compra .s-acciones { margin-top: 8px; }
+
+/* ---- Piezas del módulo Energía (recorridos/energia.js) ---- */
+.s-aviso-amarillo { border-color: rgb(234 179 8 / .4); background: rgb(234 179 8 / .08); }
+.s-badge-rojo { background: rgb(239 68 68 / .15); color: #f87171; }
+.s-rojo { color: #f87171; }
+.s-guia { padding: 12px 14px; border-radius: 14px; background: #1e293b; }
+.s-guia-pasos { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 0; padding: 0; list-style: none; font-size: 12px; color: #64748b; }
+.s-guia-pasos li { display: inline-flex; align-items: center; gap: 5px; }
+.s-guia-pasos i { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 999px; border: 1px solid #475569; font-style: normal; font-size: 10px; }
+.s-guia-pasos .hecho { color: #cbd5e1; }
+.s-guia-pasos .hecho i { background: #16a34a; border-color: #16a34a; color: #fff; }
+.s-guia-pasos .actual { color: #f1f5f9; font-weight: 700; }
+.s-guia-pasos .actual i { border: 2px solid #4ade80; color: #4ade80; }
+.s-guia-sig { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid #334155; font-size: 12px; color: #cbd5e1; }
+.s-lista { border-radius: 12px; overflow: hidden; background: #1e293b; }
+.s-lista > div { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 10px; padding: 10px 12px; font-size: 13px; color: #cbd5e1; }
+.s-lista > div + div { border-top: 1px solid #334155; }
+.s-lista b { color: #f1f5f9; }
+.s-avance { height: 6px; border-radius: 999px; background: #334155; overflow: hidden; }
+.s-avance > span { display: block; height: 100%; background: #22c55e; }
+.s-tres { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+.s-tres p { margin: 0; }
+.s-foto { border-radius: 12px; overflow: hidden; border: 1px solid #334155; background: #0f172a; }
+.s-foto-img { display: grid; place-items: center; height: 120px; background: radial-gradient(circle at 50% 45%, #334155 0 32px, #1e293b 33px 60px, #0f172a 61px); }
+.s-foto-img span { padding: 4px 10px; border-radius: 6px; background: #020617; color: #f1f5f9; font-family: var(--mono); font-size: 18px; letter-spacing: .12em; }
+.s-foto-franja { padding: 6px 10px; background: #0f172a; color: #fff; font-size: 11px; font-weight: 600; border-top: 1px solid #334155; }
+.s-num-grande { font-family: var(--mono); font-size: 28px; font-weight: 800; color: #f1f5f9; text-align: center; margin: 0; }
+.s-banda { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; font-size: 12px; background: #1e293b; color: #94a3b8; }
+.s-banda-amarilla { background: rgb(234 179 8 / .1); color: #fde047; }

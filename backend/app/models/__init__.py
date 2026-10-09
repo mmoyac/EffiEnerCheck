@@ -4,6 +4,7 @@ from .base import Base
 from .boleta import BoletaItemDetalle, BoletaMaestra
 from .condominio import Condominio
 from .condominio_modulo import CondominioDominio, CondominioModulo
+from .cuenta_luz import MovimientoLuz
 from .lectura import LecturaParcela
 from .liquidacion import LiquidacionParcela
 from .parcela import Parcela

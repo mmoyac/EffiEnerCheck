@@ -4,6 +4,7 @@ from app.api.v1.endpoints import (
     auth,
     boletas,
     condominios,
+    cuenta_luz,
     lecturas,
     liquidaciones,
     menus,
@@ -30,4 +31,5 @@ _energia = [Depends(modulo_requerido("energia"))]
 api_router.include_router(boletas.router, dependencies=_energia)
 api_router.include_router(lecturas.router, dependencies=_energia)
 api_router.include_router(liquidaciones.router, dependencies=_energia)
+api_router.include_router(cuenta_luz.router, dependencies=_energia)
 api_router.include_router(rifas.router, dependencies=[Depends(modulo_requerido("rifas"))])

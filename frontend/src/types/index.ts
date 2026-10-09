@@ -109,8 +109,54 @@ export interface LiquidacionParcela {
   monto_prorrateo_variable: number | null
   monto_cuota_fija: number | null
   total_pagar_mes: number | null
+  /** Lo abonado a este mes según la cuenta corriente de luz (imputación a la deuda más antigua) */
+  monto_abonado: number
   pagado: boolean
   fecha_pago: string | null
+}
+
+// --- Cuenta corriente de luz (cambio cobranza-energia) ---
+
+export type EstadoCargo = 'pagado' | 'parcial' | 'pendiente'
+
+export interface CargoLuz {
+  tipo: 'saldo_inicial' | 'mes'
+  fecha: string            // YYYY-MM-DD
+  boleta_id: number | null
+  monto: number
+  cubierto: number
+  estado: EstadoCargo
+  fecha_pago: string | null
+}
+
+export interface AbonoLuz {
+  id: number
+  fecha: string            // YYYY-MM-DD
+  monto: number
+  nota: string | null
+  creado_por: number
+  creado_en: string
+  anulado: boolean
+  anulado_en: string | null
+  motivo_anulacion: string | null
+}
+
+export interface CuentaLuz {
+  parcela_id: number
+  numero_parcela: string
+  propietario_nombre: string | null
+  total_cargos: number
+  total_abonos: number
+  /** Negativo = saldo a favor */
+  saldo: number
+  cargos: CargoLuz[]
+  abonos: AbonoLuz[]
+}
+
+export interface ResumenCobranza {
+  totales: { saldo_inicial: number; emitido: number; cargos: number; abonado: number; por_cobrar: number; a_favor: number }
+  periodos: { tipo: 'saldo_inicial' | 'mes'; boleta_id: number | null; fecha: string; emitido: number; cubierto: number; pendiente: number; cargos: number; pagados: number }[]
+  deudores: { parcela_id: number; numero_parcela: string; propietario_nombre: string | null; saldo: number; pendientes: CargoLuz[]; ultimo_abono: string | null }[]
 }
 
 export interface MenuItem {
@@ -148,6 +194,8 @@ export interface BoletaMaestraCreate {
 
 /** Vista previa / resultado de la carga masiva de lecturas iniciales desde Excel */
 export interface ImportacionLecturasIniciales {
+  /** Saldos iniciales de luz que cambian (columna opcional «Saldo luz») */
+  saldos: { parcela_id: number; numero_parcela: string; valor: number; valor_actual: number | null }[]
   a_aplicar: { lectura_id: number; parcela_id: number; numero_parcela: string; valor: number; valor_actual: number | null; reemplaza: boolean }[]
   sin_cambio: number
   vacias: number

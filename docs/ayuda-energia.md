@@ -82,7 +82,7 @@ Admin: Cerrar lecturas                 Lector: toma las lecturas en terreno (app
 
 ### 3.3 Cerrar la lectura inicial
 
-- **Candado** de la fila, o **Cerrar lecturas** en el detalle. Exige todas las parcelas con lectura (las cargadas por Excel cuentan como tomadas).
+- **Continuar** (en la fila) → **Cerrar lecturas**, el botón verde del detalle. Exige todas las parcelas con lectura (las cargadas por Excel cuentan como tomadas).
 - Cerrada, queda lista para generar la primera boleta.
 - Se puede **reabrir** para corregir **solo mientras no exista la primera boleta**. Después, ya no.
 
@@ -97,6 +97,10 @@ Admin: Cerrar lecturas                 Lector: toma las lecturas en terreno (app
 ---
 
 ## 4. Administración: cada mes
+
+**Desde la lista de Boletas**, cada período en curso tiene **«Continuar»**, que abre su detalle; las acciones del ciclo se hacen ahí.
+
+**Guía de pasos:** el detalle de cada período muestra arriba la barra **Datos de la boleta → Corroborar desglose → Lecturas (X de N) → Calcular → Cerrar período → Publicar**, con ✓ en lo hecho y una línea **«Siguiente paso»** que explica qué hacer. **El botón verde siempre es el siguiente paso**; los grises son acciones posibles pero no las que tocan ahora. Mientras el lector toma las lecturas, la guía muestra el avance y no destaca ningún botón. En la lectura inicial, la barra es: Lecturas de partida → Cerrar lecturas → Lista para la primera boleta.
 
 ### 4.1 Generar el período
 
@@ -143,6 +147,8 @@ Las toma el lector (sección 5). Aquí, la pestaña *Lecturas* muestra el avance
 3. **Cerrar período**. Se puede **Reabrir período** para corregir.
 4. **Publicar**. Desde ese momento los comuneros lo ven, y **ya no se puede reabrir**.
 
+**Liquidaciones siempre al día:** si antes de cerrar el período reabres las lecturas, cambias montos o conceptos, o se corrige una lectura, las liquidaciones calculadas **se descartan solas** y la guía vuelve a pedir **Calcular**. No se puede cerrar ni publicar con montos viejos.
+
 *Ejemplo ficticio por parcela* (300 kWh, con los totales de 4.2 y unos 15.900 kWh en el condominio): energía ≈ $50.000 + transporte ≈ $10.190 + cuota fija ≈ $7.740 = **≈ $67.930**.
 
 ---
@@ -157,10 +163,12 @@ Las toma el lector (sección 5). Aquí, la pestaña *Lecturas* muestra el avance
 ### 5.2 Tomar una lectura
 1. Tocar la parcela. Aparecen en orden de recorrido, si existe; si no, en orden numérico. La pestaña **Pendientes** muestra las que faltan.
 2. Ver la **lectura anterior**, escribir la **lectura actual** y ver los **kWh consumidos**. En rojo si es menor que la anterior; en ese caso no deja guardar.
-3. **Tomar foto del medidor** (opcional, recomendada): abre la cámara. Permite **Retomar** y **Quitar**. Que se lean bien los dígitos.
+3. **Tomar foto del medidor** (opcional, recomendada): abre la cámara. Permite **Retomar** y **Quitar**. Que se lean bien los dígitos. La foto queda con una franja abajo: «Parcela 23 · 09-10-2026 10:35», con la fecha y hora en que se sacó.
 4. **Confirmar lectura** muestra «¡Lectura guardada!», o «Guardada en el celular» si no hay señal.
 
 *Parcela ya leída sin foto:* entrar, tomar la foto y confirmar **sin cambiar el número**. Solo se agrega la foto.
+
+*Revisar una foto ya subida:* en la parcela aparece «Esta lectura ya tiene foto en el servidor» y el botón **Ver foto**, que solo funciona con señal. Una vez que el servidor confirma la subida, la foto se borra del celular para no ocupar memoria.
 
 ### 5.3 Sin señal
 - Barra amarilla: «Sin conexión: las lecturas se guardan en el celular · N sin sincronizar · N fotos por subir».
@@ -180,14 +188,33 @@ Misma app. Arriba dice «Lectura inicial · mes». La pantalla pide solo **«Lec
 
 ---
 
+## 5b. Administración: cobranza de la luz
+
+La luz se cobra **dentro del gasto común**. Menú **Cobranza** (`/cobranza`) → **Liquidaciones y cobranza**:
+
+- **Indicadores:** cargos emitidos (incluye el saldo inicial), abonado, **por cobrar** y saldo a favor.
+- **Cobranza por período:** emitido, cubierto, pendiente y cuántos pagaron. Solo cuentan los períodos **publicados**.
+- **Deudores:** cada parcela con deuda, sus meses adeudados (con «parcial» cuando corresponde), su último abono y su saldo.
+  - **Abonar:** un pago de **cualquier monto**, con fecha y nota (por ejemplo, «gasto común octubre, comprobante 1234»).
+  - **Registrar pago del saldo:** se seleccionan varias parcelas y se registra el saldo completo de cada una, con la misma fecha.
+  - **Cuenta:** todos los movimientos de la parcela. Un abono equivocado se **anula con un motivo**; no se borra y sigue visible tachado.
+  - **Exportar CSV:** la lista de deudores para Excel.
+- **Cómo se aplica un abono:** primero a la **deuda más antigua** (el saldo inicial y luego los meses en orden). Por eso un mes puede quedar **Parcial**.
+- **El saldo inicial** (la deuda por luz anterior a la plataforma) se carga una vez, en el onboarding, en la columna **«Saldo luz»** de la planilla de la lectura inicial.
+- **Todo queda en la auditoría:** quién registró o anuló cada abono, cuándo y el saldo antes y después.
+
+*Ejemplo ficticio:* la parcela 2 debe un saldo inicial de $5.000, octubre $10.000 y noviembre $11.000, un total de $26.000. Abona $12.000: el saldo inicial queda pagado, octubre parcial ($7.000 de $10.000), y debe $14.000.
+
 ## 6. Comunero: su liquidación
 
 1. Entrar al portal → **Mis liquidaciones**: la lista de **períodos publicados**.
 2. Tocar el período para ver, por cada parcela suya:
+   - **Tu consumo del período:** lectura anterior, lectura actual, kWh consumidos y cuándo se leyó el medidor;
    - **Energía (kWh)**, **Prorrateo variable**, **Cuota fija** y **Total a pagar**;
-   - estado **Pagado / Pendiente**;
+   - estado **Pagado / Parcial / Pendiente**, según sus abonos;
    - **Ver foto del medidor**, si el lector la tomó;
    - la **boleta de la compañía**: totales e imagen, si se subió.
+- Arriba ve su **saldo de luz**: «Debes $X por luz», «Estás al día» o «Tienes $X a favor». Al tocarlo, ve su **cuenta**: saldo inicial, cada mes con su estado y sus abonos con fecha.
 - Solo ve **sus** parcelas y solo **lo publicado**. Un período cerrado pero no publicado no se ve. La lectura inicial nunca se ve.
 
 ---
@@ -237,7 +264,7 @@ Siguiendo el formato de `recorridos/rifas.js`: un recorrido por rol, con pasos d
 3. Descargar la plantilla Excel.
 4. Cargar el Excel → vista previa (a aplicar, reemplazos, errores).
 5. Aplicar.
-6. Cerrar lecturas (candado).
+6. Continuar → Cerrar lecturas (botón verde del detalle).
 7. Parcelas → Orden del recorrido → ordenar → Guardar.
 
 **Administración: el mes** (computador)

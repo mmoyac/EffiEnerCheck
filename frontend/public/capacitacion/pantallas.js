@@ -49,6 +49,14 @@ window.Capacitacion = window.Capacitacion || { modulos: [], plataforma: null }
     documento: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/>',
     ubicacion: '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
     usuarios: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    camara: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
+    nube: '<path d="m2 2 20 20"/><path d="M5.782 5.782A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.307-.193"/><path d="M21.532 16.5A4.5 4.5 0 0 0 17.5 10h-1.79A7.008 7.008 0 0 0 10 5.07"/>',
+    subir: '<path d="M12 13v8"/><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="m8 17 4-4 4 4"/>',
+    descargar: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+    planilla: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/>',
+    ruta: '<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
+    billetera: '<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+    alerta: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
     calculadora: '<rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"/>',
   }
   /** Ícono en línea; decorativo salvo que se le dé un título. */
@@ -97,7 +105,7 @@ window.Capacitacion = window.Capacitacion || { modulos: [], plataforma: null }
 
   const MENU_ADMIN = [
     { grupo: null, items: [['panel', 'Dashboard']] },
-    { grupo: 'Energía', items: [['documento', 'Boletas'], ['medidor', 'Lecturas'], ['calculadora', 'Liquidaciones']] },
+    { grupo: 'Energía', items: [['documento', 'Boletas'], ['medidor', 'Lecturas'], ['calculadora', 'Cobranza']] },
     { grupo: 'Comunidad', items: [['ticket', 'Rifas']] },
     { grupo: 'Administración', items: [['usuarios', 'Usuarios'], ['ubicacion', 'Parcelas']] },
   ]
@@ -163,15 +171,22 @@ window.Capacitacion = window.Capacitacion || { modulos: [], plataforma: null }
       </div>`
   }
 
-  function misLiquidaciones() {
-    const periodos = [['Sep. 2026', 38450, 'Pendiente'], ['Ago. 2026', 41200, 'Pagada'], ['Jul. 2026', 44780, 'Pagada']]
+  /** Inicio del comunero: aviso de rifa, su saldo de luz y los períodos publicados. */
+  function misLiquidaciones({ conRifa = true, saldo = 38450 } = {}) {
+    const periodos = [['Sep. 2026', 38450, 'Pendiente', 'amarillo'], ['Ago. 2026', 41200, 'Pagado', 'verde'], ['Jul. 2026', 44780, 'Pagado', 'verde']]
     return `
-      ${avisoRifa()}
+      ${conRifa ? avisoRifa() : ''}
       <p class="s-h1">Mis liquidaciones</p>
       <p class="s-muted">Selecciona un período para ver el detalle</p>
-      ${periodos.map(([p, m, e]) => `
-        <div class="s-fila-card"><div><p class="s-fuerte">${p}</p><p class="s-chico">Parcela 14</p></div>
-          <div class="s-der"><p class="s-mono">${clp(m)}</p><span class="s-badge ${e === 'Pagada' ? 's-badge-verde' : 's-badge-amarillo'}">${e}</span></div></div>`).join('')}`
+      <div class="s-aviso ${saldo > 0 ? 's-aviso-amarillo' : ''}" data-t="saldo">
+        ${icono('boleta', saldo > 0 ? 's-amarillo' : 's-verde')}
+        <div class="s-flex1"><p class="s-fuerte">${saldo > 0 ? `Debes ${clp(saldo)} por luz` : 'Estás al día con la luz'}</p>
+          <p class="s-chico">Toca para ver tu cuenta: cargos, abonos y estado de cada mes</p></div>
+        ${icono('der')}
+      </div>
+      ${periodos.map(([p, m, e, color], i) => `
+        <div class="s-fila-card" data-t="periodo-${i}"><div><p class="s-fuerte">${p}</p><p class="s-chico">Parcela 14</p></div>
+          <div class="s-der"><p class="s-mono">${clp(m)}</p><span class="s-badge s-badge-${color}">${e}</span></div></div>`).join('')}`
   }
 
   function encabezadoRifa({ volver = 'Volver a rifas' } = {}) {

@@ -6,6 +6,7 @@ from app.models.menu import Menu, menu_roles  # noqa: F401
 from app.models.auditoria import AuditoriaLog  # noqa: F401
 from app.models.boleta import BoletaItemDetalle, BoletaMaestra  # noqa: F401
 from app.models.condominio import Condominio  # noqa: F401
+from app.models.cuenta_luz import MovimientoLuz  # noqa: F401
 from app.models.enlace_acceso import EnlaceAcceso  # noqa: F401
 from app.models.lectura import LecturaParcela  # noqa: F401
 from app.models.liquidacion import LiquidacionParcela  # noqa: F401

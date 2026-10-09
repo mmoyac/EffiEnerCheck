@@ -28,14 +28,15 @@ export function Modal({ open, onClose, title, children, size = 'md' }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative w-full ${sizes[size]} rounded-xl border border-slate-700 bg-slate-800 shadow-2xl`}>
-        <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
+      {/* Nunca más alta que la pantalla (celulares): el cuerpo hace scroll vertical, nunca horizontal */}
+      <div className={`relative flex max-h-[calc(100dvh-2rem)] w-full flex-col ${sizes[size]} rounded-xl border border-slate-700 bg-slate-800 shadow-2xl`}>
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-700 px-5 py-4">
           <h2 className="text-base font-semibold text-slate-100">{title}</h2>
           <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-700 hover:text-slate-100 transition-colors">
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="p-5">{children}</div>
+        <div className="min-h-0 overflow-y-auto overflow-x-hidden p-5">{children}</div>
       </div>
     </div>
   )

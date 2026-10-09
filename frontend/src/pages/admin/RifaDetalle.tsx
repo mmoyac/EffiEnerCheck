@@ -106,6 +106,21 @@ export default function RifaDetalle() {
   ]
   const tabActiva = tabs.some((t) => t.key === tab) ? tab : 'compras'
 
+  // Fragmentos compartidos por la tabla (md+) y la lista del celular
+  type Imputacion = (typeof rifa.imputaciones)[number]
+  const estadoImputacion = (imp: Imputacion) =>
+    imp.cargada ? <Badge color="green" dot>Cargada {fecha(imp.cargada_at)}</Badge> : <Badge color="yellow" dot>Por cargar</Badge>
+  const botonImputacion = (imp: Imputacion) => (
+    <Button
+      size="sm"
+      variant={imp.cargada ? 'ghost' : 'secondary'}
+      loading={imputacionMut.isPending && imputacionMut.variables?.impId === imp.id}
+      onClick={() => { setActionError(''); imputacionMut.mutate({ impId: imp.id, cargada: !imp.cargada }) }}
+    >
+      {imp.cargada ? 'Desmarcar' : 'Marcar cargada'}
+    </Button>
+  )
+
   return (
     <div className="space-y-6">
       <div>
@@ -113,19 +128,19 @@ export default function RifaDetalle() {
           <ChevronLeft className="h-4 w-4" /> Rifas
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-slate-100">{rifa.nombre}</h1>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="min-w-0 break-words text-2xl font-bold text-slate-100">{rifa.nombre}</h1>
               {abierta ? <Badge color="green" dot>Abierta</Badge> : <Badge color="slate">Cerrada</Badge>}
             </div>
-            <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-300">
-              <HeartHandshake className="h-4 w-4 text-primary-400" /> A beneficio de {rifa.beneficiario}
+            <p className="mt-1 flex items-center gap-1.5 break-words text-sm text-slate-300">
+              <HeartHandshake className="h-4 w-4 shrink-0 text-primary-400" /> A beneficio de {rifa.beneficiario}
             </p>
-            {rifa.descripcion && <p className="mt-1 max-w-2xl text-sm text-slate-400">{rifa.descripcion}</p>}
+            {rifa.descripcion && <p className="mt-1 max-w-2xl break-words text-sm text-slate-400">{rifa.descripcion}</p>}
             {rifa.premios.length > 0 ? (
               <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-300">
-                <Trophy className="h-4 w-4 text-yellow-400" />
-                {rifa.premios.map((p, i) => <span key={i}><span className="text-slate-500">{i + 1}.</span> {p}</span>)}
+                <Trophy className="h-4 w-4 shrink-0 text-yellow-400" />
+                {rifa.premios.map((p, i) => <span key={i} className="break-words"><span className="text-slate-500">{i + 1}.</span> {p}</span>)}
               </p>
             ) : (
               <p className="mt-2 text-sm text-yellow-400">Sin premios registrados: agrégalos con «Editar».</p>
@@ -170,12 +185,12 @@ export default function RifaDetalle() {
         ].map(({ label, value }) => (
           <Card key={label}>
             <p className="text-xs text-slate-500">{label}</p>
-            <p className="mt-1 font-mono font-semibold text-slate-200">{value}</p>
+            <p className="mt-1 break-words font-mono font-semibold text-slate-200">{value}</p>
           </Card>
         ))}
       </div>
 
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-700">
+      <div className="flex flex-wrap gap-1 border-b border-slate-700">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -230,6 +245,25 @@ export default function RifaDetalle() {
                   <Download className="h-4 w-4" /> CSV para Comunidad Feliz
                 </Button>
               </div>
+              {/* Celular: lista apilada, una fila por imputación */}
+              <ul className="divide-y divide-slate-700/50 md:hidden">
+                {rifa.imputaciones.map((imp) => (
+                  <li key={imp.id} className="space-y-2 px-4 py-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-slate-200">{imp.parcela_numero}</p>
+                        <p className="text-xs text-slate-400">Números <span className="font-mono text-slate-300">{imp.cantidad_numeros}</span></p>
+                      </div>
+                      <p className="shrink-0 font-mono font-semibold text-slate-100">{clp(imp.monto)}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      {estadoImputacion(imp)}
+                      {botonImputacion(imp)}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-700 text-left text-xs uppercase tracking-wider text-slate-500">
@@ -246,23 +280,13 @@ export default function RifaDetalle() {
                       <td className="px-4 py-3 text-slate-200">{imp.parcela_numero}</td>
                       <td className="px-4 py-3 text-right font-mono text-slate-300">{imp.cantidad_numeros}</td>
                       <td className="px-4 py-3 text-right font-mono font-semibold text-slate-100">{clp(imp.monto)}</td>
-                      <td className="px-4 py-3">
-                        {imp.cargada ? <Badge color="green" dot>Cargada {fecha(imp.cargada_at)}</Badge> : <Badge color="yellow" dot>Por cargar</Badge>}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Button
-                          size="sm"
-                          variant={imp.cargada ? 'ghost' : 'secondary'}
-                          loading={imputacionMut.isPending && imputacionMut.variables?.impId === imp.id}
-                          onClick={() => { setActionError(''); imputacionMut.mutate({ impId: imp.id, cargada: !imp.cargada }) }}
-                        >
-                          {imp.cargada ? 'Desmarcar' : 'Marcar cargada'}
-                        </Button>
-                      </td>
+                      <td className="px-4 py-3">{estadoImputacion(imp)}</td>
+                      <td className="px-4 py-3 text-right">{botonImputacion(imp)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             </>
           )}
         </Card>

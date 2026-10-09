@@ -36,9 +36,10 @@ La spec `proceso-energia` resume el proceso. Sus reglas de detalle llegan a las 
 | 2 y 6. Foto del medidor y acceso del comunero a ella | `foto-medidor` | `lecturas-remarcadores` |
 | 4. Cálculo cuadrado al peso | `cuadre-al-peso` | `motor-liquidaciones` |
 | 6. El comunero ve solo lo publicado | este cambio | `portal-parcelero` |
+| Después de publicar: cobranza, cuenta corriente de luz y saldo inicial | `cobranza-energia` | `cobranza-energia`, `motor-liquidaciones`, `portal-parcelero` |
 | Término «comunero» y renombre `portal-parcelero` → `portal-comunero` | `ajustes-post-presentacion` | todas |
 
-**Orden de archivado:** primero los cambios de detalle (`items-credito-y-validacion`, `lecturas-sin-conexion`, `foto-medidor`, `lectura-inicial`, `cuadre-al-peso`, `orden-recorrido`), después este, y al final `ajustes-post-presentacion`. Ese último renombra `portal-parcelero`, y en su barrido terminológico debe actualizar también los enlaces de esta spec a `portal-parcelero`.
+**Orden de archivado:** primero los cambios de detalle (`items-credito-y-validacion`, `lecturas-sin-conexion`, `foto-medidor`, `lectura-inicial`, `cuadre-al-peso`, `orden-recorrido`, `pasos-del-periodo`, `cobranza-energia`), después este, y al final `ajustes-post-presentacion`. Ese último renombra `portal-parcelero`, y en su barrido terminológico debe actualizar también los enlaces de esta spec a `portal-parcelero`.
 
 ## Capabilities
 

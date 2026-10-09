@@ -125,7 +125,7 @@
               <h3>${r.titulo}</h3>
               <p class="camino-rol">${icono(r.dispositivo === 'escritorio' ? 'notebook' : 'celular')} ${r.rol}</p>
               <p>${r.resumen}</p>
-              <p class="etiquetas">${r.pagos.map(chipPago).join('')}</p>
+              ${r.pagos ? `<p class="etiquetas">${r.pagos.map(chipPago).join('')}</p>` : ''}
               <span class="ir">${icono('play')} Ver recorrido · ${r.pasos.length} pasos</span>
             </a></li>`).join('')}
         </ol>
@@ -187,7 +187,7 @@
           <ol class="lista-pasos" id="lista-pasos">
             ${r.pasos.map((p, i) => `<li><button type="button" data-paso="${i}">${p.titulo}</button></li>`).join('')}
           </ol>
-          <div class="pagos-camino"><p>Formas de pago en este camino</p><p class="etiquetas">${r.pagos.map(chipPago).join('')}</p></div>
+          ${r.pagos ? `<div class="pagos-camino"><p>Formas de pago en este camino</p><p class="etiquetas">${r.pagos.map(chipPago).join('')}</p></div>` : ''}
         </div>
       </div>
       <div class="fin" id="fin" hidden>

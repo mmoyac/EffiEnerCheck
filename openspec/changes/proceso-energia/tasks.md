@@ -23,6 +23,10 @@
 
   Verificar con la suite completa en verde.
 
+## 2b. Portal del comunero
+
+- [ ] 2.2 `MiLiquidacion.tsx`: bloque «Tu consumo del período» (lectura anterior, actual, kWh y fecha de la lectura) en el detalle de un período publicado. Verificar en el navegador como comunero.
+
 ## 3. Documentación
 
 - [x] 3.1 `docs/flujo-periodo.md` (el comunero ve lo publicado; enlace a la spec `proceso-energia`) y `CLAUDE.md` (la spec en la tabla de OpenSpec). Verificar con `openspec validate proceso-energia --strict`.

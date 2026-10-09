@@ -354,6 +354,15 @@ El endpoint `POST /liquidaciones/calcular/{boleta_id}` puede ejecutarse con `lec
 
 ---
 
+## Cuenta corriente de luz (`endpoints/cuenta_luz.py`, `services/cuenta_luz.py`)
+
+El cargo de luz se cobra en el gasto común; el comunero abona a su deuda total (cambio `cobranza-energia`).
+
+- **Cargos:** el saldo inicial (`movimientos_luz.tipo='saldo_inicial'`, desde la columna «Saldo luz» de la planilla de la lectura inicial) y las liquidaciones de períodos **publicados**. **Abonos:** `tipo='abono'`, de cualquier monto.
+- **Imputación a la deuda más antigua:** `services/cuenta_luz.recalcular()` deriva `monto_abonado`, `pagado` y `fecha_pago` de cada liquidación. **Nunca se marcan a mano**: no existe `PATCH /liquidaciones/{id}/pago`. Recalcular tras registrar o anular un abono, cambiar el saldo inicial o publicar un período.
+- **Un movimiento nunca se borra:** se anula (`anulado`, `anulado_por`, `anulado_en`, `motivo_anulacion`). Auditoría `REGISTRAR_ABONO_LUZ` / `ANULAR_ABONO_LUZ`, con el saldo antes y después. Un saldo inicial corregido anula al anterior.
+- **Pantallas:** `/cobranza` (`Cobranza.tsx`, opción «Cobranza» del menú) es de la administración; `/liquidaciones` (`MiLiquidacion`) es del comunero. Cada una redirige a la otra si entra el rol equivocado. La migración `menu_cobranza` renombró la opción del menú.
+
 ## Rifas solidarias (`backend/app/api/v1/endpoints/rifas.py`)
 
 Módulo **aparte** de la boleta: nada de lo recaudado entra a `liquidaciones_parcelas` ni al Motor EnerCheck. No mezclar. Detalle en [docs/rifas.md](docs/rifas.md).
@@ -427,6 +436,13 @@ Siempre invalidar la key correcta en `onSuccess` de mutations.
 ```typescript
 .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { numeric: true, sensitivity: 'base' }))
 ```
+
+### UI pensada para el celular
+El portal se usa sobre todo desde el celular (cambio `portal-movil`):
+- **Sin scroll horizontal:** las tablas de más de tres columnas se muestran como lista apilada en celular (`md:hidden`), y la tabla solo desde `md` (`hidden md:block`), con los mismos datos y acciones.
+- **`Modal`** ya limita su altura a la pantalla y hace scroll vertical interno. Dentro de una ventana, las listas largas llevan `max-h-*` y `overflow-y-auto`.
+- **Barras de botones** con `flex-wrap`, y `min-w-0` / `truncate` en textos largos.
+- **Revisar cada pantalla nueva en ancho de celular** (DevTools, unos 390 px) antes de darla por lista.
 
 ### Cliente HTTP
 `frontend/src/api/client.ts` — axios instance con baseURL `VITE_API_URL` e interceptor que añade `Authorization: Bearer <token>` desde localStorage.

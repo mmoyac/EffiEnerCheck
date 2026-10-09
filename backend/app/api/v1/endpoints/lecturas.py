@@ -18,7 +18,7 @@ from app.schemas.lectura import (
     ResultadoSincronizacion, SincronizarLecturasRequest, SincronizarLecturasResponse,
 )
 from app.services import fotos_lectura
-from app.services.periodos import es_lectura_inicial
+from app.services.periodos import descartar_liquidaciones, es_lectura_inicial
 
 router = APIRouter(prefix="/lecturas", tags=["lecturas"])
 
@@ -105,10 +105,12 @@ async def crear_lectura(
     db.add(lectura)
     await db.flush()
 
+    descartadas = await descartar_liquidaciones(db, data.boleta_id)
     await registrar_auditoria(
         db, usuario_id=current_user.id, condominio_id=parcela.condominio_id,
         accion="CREATE_LECTURA",
-        detalles={"lectura_id": lectura.id, "parcela_id": data.parcela_id, "kwh_consumidos": lectura.kwh_consumidos},
+        detalles={"lectura_id": lectura.id, "parcela_id": data.parcela_id, "kwh_consumidos": lectura.kwh_consumidos,
+                  "liquidaciones_descartadas": descartadas},
     )
     await db.commit()
     await db.refresh(lectura)
@@ -171,9 +173,11 @@ async def actualizar_lectura(
     audit_before = {k: (v.isoformat() if isinstance(v, datetime) else v) for k, v in estado_anterior.items()}
     audit_after = {k: (v.isoformat() if isinstance(v, datetime) else v) for k, v in cambios.items()}
 
+    descartadas = await descartar_liquidaciones(db, lectura.boleta_id)
     await registrar_auditoria(
         db, usuario_id=current_user.id, condominio_id=parcela.condominio_id,
-        accion="UPDATE_LECTURA", detalles={"before": audit_before, "after": audit_after},
+        accion="UPDATE_LECTURA",
+        detalles={"before": audit_before, "after": audit_after, "liquidaciones_descartadas": descartadas},
     )
     await db.commit()
     await db.refresh(lectura)
@@ -207,6 +211,7 @@ async def sincronizar_lecturas(
     - rechazada: período cerrado, contador regresivo u otro condominio.
     """
     resultados: list[ResultadoSincronizacion] = []
+    periodos_modificados: set[int] = set()
     for item in data.items:
         lectura = (await db.execute(
             select(LecturaParcela).where(LecturaParcela.id == item.lectura_id)
@@ -260,8 +265,12 @@ async def sincronizar_lecturas(
                                     "lector_id": current_user.id}},
             )
         await db.flush()
+        periodos_modificados.add(lectura.boleta_id)
         resultados.append(ResultadoSincronizacion(lectura_id=lectura.id, estado="aplicada",
                                                   lectura=LecturaParcelaResponse.model_validate(lectura)))
+    # Lecturas nuevas: las liquidaciones calculadas antes quedan desactualizadas
+    for boleta_id in periodos_modificados:
+        await descartar_liquidaciones(db, boleta_id)
     await db.commit()
     return SincronizarLecturasResponse(resultados=resultados)
 

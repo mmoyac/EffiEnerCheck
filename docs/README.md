@@ -7,7 +7,7 @@
 | [flujo-periodo.html](flujo-periodo.html) | Presentación | La misma información en formato visual. Se abre directo en el navegador, sin servidor. |
 | [presentacion-comunidad.md](presentacion-comunidad.md) | Comunidad Santa Laura | Documento para la reunión de copropietarios. |
 | [rifas.md](rifas.md) | Equipo técnico | Rifas solidarias: flujo, reglas, endpoints y pantallas. Se cobran aparte de la boleta eléctrica. |
-| [/capacitacion/](../frontend/public/capacitacion/index.html) | Todos los usuarios | Centro de capacitación de EFFIComunidad: recorridos animados por módulo y rol (hoy, Rifas). Público en `/capacitacion/` del portal; fuentes en `frontend/public/capacitacion/`. |
+| [/capacitacion/](../frontend/public/capacitacion/index.html) | Todos los usuarios | Centro de capacitación de EFFIComunidad: recorridos animados por módulo y rol (Energía y Rifas). Público en `/capacitacion/` del portal; fuentes en `frontend/public/capacitacion/`. |
 | [sitio-publico.md](sitio-publico.md) | Equipo técnico | Landing pública del condominio: contrato, secciones, cómo editar el contenido y plan para editarlo desde el portal. |
 
 ## Dónde vive el resto

@@ -16,7 +16,9 @@ import { clp, kwh, numero, periodoCorto, fecha, fechaHora } from '../../utils/fo
 import type { LecturaParcela, Parcela } from '../../types'
 import ModalEditDetalles, { CONCEPTOS_SUGERIDOS } from './ModalEditDetalles'
 import { FotoMedidorModal } from '../../components/FotoMedidorModal'
+import { EstadoPagoLuz } from '../../components/EstadoPagoLuz'
 import { ImportarLecturasIniciales } from './ImportarLecturasIniciales'
+import { pasosDelPeriodo, type ClavePaso } from '../../utils/pasosPeriodo'
 
 type Tab = 'resumen' | 'lecturas' | 'liquidaciones' | 'boleta'
 
@@ -56,7 +58,8 @@ export default function BoletaDetalle() {
   const { data: lecturas = [] } = useQuery({
     queryKey: ['lecturas', boletaId],
     queryFn: () => lecturasApi.list(boletaId),
-    enabled: tab === 'lecturas',
+    // Siempre: la guía de pasos muestra el avance de las lecturas (cambio pasos-del-periodo)
+    enabled: !!boleta,
   })
 
   const { data: liquidaciones = [] } = useQuery({
@@ -96,7 +99,8 @@ export default function BoletaDetalle() {
 
   const reabrirLectMut = useMutation({
     mutationFn: () => boletasApi.reabrirLecturas(boletaId),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['boleta', boletaId] }); qc.invalidateQueries({ queryKey: ['boletas'] }); setTab('lecturas') },
+    // Reabrir descarta las liquidaciones calculadas (cambio pasos-del-periodo)
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['boleta', boletaId] }); qc.invalidateQueries({ queryKey: ['boletas'] }); qc.invalidateQueries({ queryKey: ['liquidaciones', boletaId] }); setTab('lecturas') },
     onError: (e: unknown) => setActionError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error'),
   })
 
@@ -108,6 +112,7 @@ export default function BoletaDetalle() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['lecturas', boletaId] })
+      qc.invalidateQueries({ queryKey: ['liquidaciones', boletaId] })   // corregir una lectura las descarta
       setEditingLectura(null)
       // La lectura inicial no se liquida; un período regular sin corroborar tampoco se puede calcular
       if (!inicial && boleta?.estado === 'validada') calcularMut.mutate()
@@ -157,11 +162,6 @@ export default function BoletaDetalle() {
     onError: (e: unknown) => setActionError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error'),
   })
 
-  const marcarPagoMut = useMutation({
-    mutationFn: ({ liqId, pagado }: { liqId: number; pagado: boolean }) =>
-      liquidacionesApi.marcarPago(liqId, pagado, pagado ? new Date().toISOString() : undefined),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['liquidaciones', boletaId] }),
-  })
 
   const uploadImagenMut = useMutation({
     mutationFn: (file: File) => boletasApi.uploadImagen(boletaId, file),
@@ -176,6 +176,7 @@ export default function BoletaDetalle() {
     mutationFn: () => boletasApi.procesarOcr(boletaId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['boleta', boletaId] })
+      qc.invalidateQueries({ queryKey: ['liquidaciones', boletaId] })
       setTab('resumen')
     },
     onError: (e: unknown) => setActionError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al procesar la imagen con IA'),
@@ -186,6 +187,7 @@ export default function BoletaDetalle() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['boleta', boletaId] })
       qc.invalidateQueries({ queryKey: ['boletas'] })
+      qc.invalidateQueries({ queryKey: ['liquidaciones', boletaId] })   // editar el desglose las descarta
       setEditingDetalles(false)
     },
     onError: (e: unknown) => setActionError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al actualizar detalles'),
@@ -209,6 +211,96 @@ export default function BoletaDetalle() {
   // Ítems que el OCR creó y nadie ha clasificado: bloquean la corroboración.
   const itemsPendientes = boleta.items_detalle.filter((i) => i.tipo_calculo === 'pendiente').length
 
+  // Guía de pasos: solo el botón del siguiente paso va destacado (cambio pasos-del-periodo)
+  const guia = pasosDelPeriodo({
+    boleta, tomadas: lecturas.filter((l) => l.fecha_toma).length, total: lecturas.length, liquidaciones: liquidaciones.length,
+  })
+  const variante = (clave: ClavePaso) => (guia.siguiente === clave && !guia.esperaLector ? 'primary' : 'secondary')
+
+  // Fragmentos de Lecturas compartidos por la tabla (md+) y la lista apilada (celular)
+  const editableLecturas = !boleta.lecturas_cerradas && !boleta.liquidaciones_cerradas
+  const nombreParcela = (parcelaId: number) => parcelaMap[parcelaId]?.numero_parcela ?? `#${parcelaId}`
+
+  const guardarActual = (l: LecturaParcela) => {
+    const v = Number(editValue)
+    if (v < l.lectura_anterior) { setActionError(`Lectura actual (${v}) no puede ser menor que la anterior (${l.lectura_anterior})`); return }
+    setActionError(''); updateLecturaMut.mutate({ lecturaId: l.id, lecturaActual: v })
+  }
+
+  const celdaAnterior = (l: LecturaParcela) => (
+    editingAnterior === l.id ? (
+      <span className="inline-flex items-center gap-1">
+        <input type="number" value={anteriorValue} autoFocus
+          onChange={(e) => setAnteriorValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') guardarAnterior(l); if (e.key === 'Escape') setEditingAnterior(null) }}
+          className="w-28 rounded border border-primary-500 bg-slate-800 px-2 py-1 text-right font-mono text-slate-100 focus:outline-none" />
+        <button onClick={() => guardarAnterior(l)} className="rounded p-1 text-green-400 hover:bg-green-500/20" title="Guardar"><Check className="h-3.5 w-3.5" /></button>
+        <button onClick={() => setEditingAnterior(null)} className="rounded p-1 text-slate-400 hover:bg-slate-700" title="Cancelar"><X className="h-3.5 w-3.5" /></button>
+      </span>
+    ) : l.lectura_anterior_editable && !boleta.lecturas_cerradas ? (
+      <button onClick={() => { setEditingAnterior(l.id); setAnteriorValue(l.lectura_anterior ? String(l.lectura_anterior) : '') }}
+              title="Parcela sin período anterior: ingresa su lectura anterior"
+              className="inline-flex items-center gap-1 rounded px-1 text-yellow-300 hover:bg-slate-700">
+        {numero(l.lectura_anterior)} <Pencil className="h-3 w-3" />
+      </button>
+    ) : numero(l.lectura_anterior)
+  )
+
+  const celdaActual = (l: LecturaParcela) => (
+    editingLectura === l.id ? (
+      <input
+        type="number"
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') guardarActual(l)
+          if (e.key === 'Escape') setEditingLectura(null)
+        }}
+        className="w-28 rounded border border-primary-500 bg-slate-800 px-2 py-1 text-right font-mono text-slate-100 focus:outline-none"
+        autoFocus
+      />
+    ) : (
+      numero(l.lectura_actual)
+    )
+  )
+
+  const botonFoto = (l: LecturaParcela) => (
+    <button onClick={() => setFotoDe(l)} title="Ver foto del medidor"
+            className="rounded p-1 text-primary-400 hover:bg-slate-700 hover:text-primary-300">
+      <Camera className="h-4 w-4" />
+    </button>
+  )
+
+  const accionesLectura = (l: LecturaParcela) => (
+    editingLectura === l.id ? (
+      <div className="flex gap-1">
+        <button
+          onClick={() => guardarActual(l)}
+          className="rounded p-1 text-green-400 hover:bg-green-500/20"
+          title="Guardar"
+        ><Check className="h-3.5 w-3.5" /></button>
+        <button
+          onClick={() => setEditingLectura(null)}
+          className="rounded p-1 text-slate-400 hover:bg-slate-700"
+          title="Cancelar"
+        ><X className="h-3.5 w-3.5" /></button>
+      </div>
+    ) : (
+      <button
+        onClick={() => { setEditingLectura(l.id); setEditValue(String(l.lectura_actual)) }}
+        className="rounded p-1 text-slate-500 hover:text-slate-200 hover:bg-slate-700"
+        title="Editar lectura"
+      ><Pencil className="h-3.5 w-3.5" /></button>
+    )
+  )
+
+  // Estado de pago de una liquidación (derivado de la cuenta corriente de luz)
+  const pagoLiquidacion = (total: number | null, abonado: number) => (
+    boleta.boleta_visible_usuarios
+      ? <EstadoPagoLuz total={total} abonado={abonado} />
+      : <span className="text-xs text-slate-600">—</span>
+  )
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -216,7 +308,7 @@ export default function BoletaDetalle() {
         <Link to="/boletas" className="mt-1 text-slate-400 hover:text-slate-100">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-bold text-slate-100">
             {inicial ? 'Lectura inicial' : 'Boleta'} {periodoCorto(boleta.periodo_mes)}
           </h1>
@@ -229,8 +321,13 @@ export default function BoletaDetalle() {
         </div>
         {/* Actions */}
         <div className="flex flex-wrap gap-2">
+          {guia.siguiente === 'datos' && (
+            <Button size="sm" onClick={() => { setActionError(''); setEditingDetalles(true) }}>
+              <Pencil className="h-4 w-4" /> Ingresar datos de la boleta
+            </Button>
+          )}
           {!boleta.lecturas_cerradas && (
-            <Button variant="secondary" size="sm" loading={cerrarLectMut.isPending}
+            <Button variant={variante('cerrar_lecturas')} size="sm" loading={cerrarLectMut.isPending}
               onClick={() => { setActionError(''); cerrarLectMut.mutate() }}>
               <Lock className="h-4 w-4" /> Cerrar lecturas
             </Button>
@@ -242,7 +339,7 @@ export default function BoletaDetalle() {
             </Button>
           )}
           {!inicial && boleta.estado === 'borrador' && !boleta.liquidaciones_cerradas && (
-            <Button size="sm" loading={validarItemsMut.isPending}
+            <Button variant={variante('corroborar')} size="sm" loading={validarItemsMut.isPending}
               disabled={itemsPendientes > 0}
               title={itemsPendientes > 0 ? 'Clasifica primero los ítems pendientes' : undefined}
               onClick={() => { setActionError(''); validarItemsMut.mutate() }}>
@@ -250,13 +347,13 @@ export default function BoletaDetalle() {
             </Button>
           )}
           {!inicial && boleta.estado === 'validada' && !boleta.liquidaciones_cerradas && (
-            <Button size="sm" loading={calcularMut.isPending}
+            <Button variant={variante('calcular')} size="sm" loading={calcularMut.isPending}
               onClick={() => { setActionError(''); calcularMut.mutate() }}>
-              <Calculator className="h-4 w-4" /> Calcular liquidaciones
+              <Calculator className="h-4 w-4" /> {liquidaciones.length > 0 ? 'Recalcular' : 'Calcular liquidaciones'}
             </Button>
           )}
           {liquidaciones.length > 0 && boleta.lecturas_cerradas && !boleta.liquidaciones_cerradas && (
-            <Button variant="secondary" size="sm" loading={cerrarLiqMut.isPending}
+            <Button variant={variante('cerrar_periodo')} size="sm" loading={cerrarLiqMut.isPending}
               onClick={() => { setActionError(''); cerrarLiqMut.mutate() }}>
               <Lock className="h-4 w-4" /> Cerrar período
             </Button>
@@ -268,13 +365,45 @@ export default function BoletaDetalle() {
             </Button>
           )}
           {boleta.liquidaciones_cerradas && !boleta.boleta_visible_usuarios && (
-            <Button variant="secondary" size="sm" loading={publicarMut.isPending}
+            <Button variant={variante('publicar')} size="sm" loading={publicarMut.isPending}
               onClick={() => { setActionError(''); publicarMut.mutate() }}>
               <Globe className="h-4 w-4" /> Publicar
             </Button>
           )}
         </div>
       </div>
+
+      {/* Guía de pasos del período */}
+      <Card>
+        <ol className="flex flex-wrap items-center gap-x-2 gap-y-2">
+          {guia.pasos.map((p, i) => {
+            const actual = p.clave === guia.siguiente && !p.hecho
+            return (
+              <li key={p.clave} className="flex items-center gap-2">
+                {i > 0 && <span className={`h-px w-4 sm:w-8 ${p.hecho || actual ? 'bg-primary-500/60' : 'bg-slate-700'}`} />}
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                  p.hecho ? 'bg-primary-600 text-white'
+                    : actual ? 'border-2 border-primary-400 text-primary-300'
+                    : 'border border-slate-600 text-slate-500'}`}>
+                  {p.hecho ? <Check className="h-3.5 w-3.5" /> : i + 1}
+                </span>
+                <span className={`text-sm ${actual ? 'font-semibold text-slate-100' : p.hecho ? 'text-slate-300' : 'text-slate-500'}`}>
+                  {p.titulo}{p.detalle && <span className="ml-1 text-xs text-slate-500">({p.detalle})</span>}
+                </span>
+              </li>
+            )
+          })}
+        </ol>
+        <p className={`mt-3 border-t border-slate-700 pt-3 text-sm ${guia.siguiente === 'listo' ? 'text-primary-300' : 'text-slate-300'}`}>
+          {guia.siguiente !== 'listo' && <span className="font-semibold text-slate-100">Siguiente paso: </span>}
+          {guia.ayuda}
+          {guia.esperaLector && (
+            <button onClick={() => setTab('lecturas')} className="ml-2 text-primary-400 underline underline-offset-2 hover:text-primary-300">
+              Ver lecturas
+            </button>
+          )}
+        </p>
+      </Card>
 
       {actionError && <Alert variant="error">{actionError}</Alert>}
 
@@ -327,10 +456,10 @@ export default function BoletaDetalle() {
       </div>}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-slate-700">
+      <div className="flex flex-wrap gap-1 border-b border-slate-700">
         {((inicial ? ['lecturas'] : ['resumen', 'lecturas', 'liquidaciones', 'boleta']) as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2.5 text-sm font-medium capitalize transition-colors ${
+            className={`px-3 py-2.5 text-sm sm:px-4 font-medium capitalize transition-colors ${
               tab === t ? 'border-b-2 border-primary-500 text-primary-400' : 'text-slate-400 hover:text-slate-100'
             }`}>
             {t === 'liquidaciones' && liquidaciones.length > 0 ? `${t} (${liquidaciones.length})` : t}
@@ -341,7 +470,7 @@ export default function BoletaDetalle() {
       {/* Resumen */}
       {tab === 'resumen' && (
         <Card padding={false}>
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-4 border-b border-slate-700 sm:px-5">
             <h3 className="text-sm font-semibold text-slate-300">Ítems de Detalle</h3>
             {!boleta.liquidaciones_cerradas && (
               <Button size="sm" variant="secondary" onClick={() => setEditingDetalles(true)}>
@@ -352,21 +481,21 @@ export default function BoletaDetalle() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-700 text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="px-5 py-3">Descripción</th>
-                <th className="px-5 py-3">Tipo</th>
-                <th className="px-5 py-3 text-right">Monto neto CLP</th>
+                <th className="px-3 py-3 sm:px-5">Descripción</th>
+                <th className="px-3 py-3 sm:px-5">Tipo</th>
+                <th className="px-3 py-3 text-right sm:px-5">Monto neto CLP</th>
               </tr>
             </thead>
             <tbody>
               {boleta.items_detalle.map((item) => (
                 <tr key={item.id} className="border-b border-slate-700/50">
-                  <td className="px-5 py-3 text-slate-200">{item.descripcion}</td>
-                  <td className="px-5 py-3">
+                  <td className="px-3 py-3 text-slate-200 [overflow-wrap:anywhere] sm:px-5">{item.descripcion}</td>
+                  <td className="px-3 py-3 sm:px-5">
                     <span className={`text-xs font-medium capitalize ${TIPO_COLOR[item.tipo_calculo]}`}>
                       {item.tipo_calculo}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-right font-mono text-slate-300">{clp(item.monto_neto_clp)}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-slate-300 sm:px-5">{clp(item.monto_neto_clp)}</td>
                 </tr>
               ))}
             </tbody>
@@ -421,6 +550,8 @@ export default function BoletaDetalle() {
               </p>
             )
           })()}
+          {/* Pantallas anchas: tabla */}
+          <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-700 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -431,95 +562,22 @@ export default function BoletaDetalle() {
                 <th className="px-5 py-3">Fecha y Hora</th>
                 <th className="px-5 py-3">Lector</th>
                 <th className="px-3 py-3">Foto</th>
-                {!boleta.lecturas_cerradas && !boleta.liquidaciones_cerradas && <th className="px-5 py-3" />}
+                {editableLecturas && <th className="px-5 py-3" />}
               </tr>
             </thead>
             <tbody>
               {lecturasSorted.map((l) => (
                 <tr key={l.id} className="border-b border-slate-700/50">
-                  <td className="px-5 py-3 font-medium text-slate-200">
-                    {parcelaMap[l.parcela_id]?.numero_parcela ?? `#${l.parcela_id}`}
-                  </td>
-                  {!inicial && (
-                    <td className="px-5 py-3 text-right font-mono text-slate-400">
-                      {editingAnterior === l.id ? (
-                        <span className="inline-flex items-center gap-1">
-                          <input type="number" value={anteriorValue} autoFocus
-                            onChange={(e) => setAnteriorValue(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') guardarAnterior(l); if (e.key === 'Escape') setEditingAnterior(null) }}
-                            className="w-28 rounded border border-primary-500 bg-slate-800 px-2 py-1 text-right font-mono text-slate-100 focus:outline-none" />
-                          <button onClick={() => guardarAnterior(l)} className="rounded p-1 text-green-400 hover:bg-green-500/20" title="Guardar"><Check className="h-3.5 w-3.5" /></button>
-                          <button onClick={() => setEditingAnterior(null)} className="rounded p-1 text-slate-400 hover:bg-slate-700" title="Cancelar"><X className="h-3.5 w-3.5" /></button>
-                        </span>
-                      ) : l.lectura_anterior_editable && !boleta.lecturas_cerradas ? (
-                        <button onClick={() => { setEditingAnterior(l.id); setAnteriorValue(l.lectura_anterior ? String(l.lectura_anterior) : '') }}
-                                title="Parcela sin período anterior: ingresa su lectura anterior"
-                                className="inline-flex items-center gap-1 rounded px-1 text-yellow-300 hover:bg-slate-700">
-                          {numero(l.lectura_anterior)} <Pencil className="h-3 w-3" />
-                        </button>
-                      ) : numero(l.lectura_anterior)}
-                    </td>
-                  )}
-                  <td className="px-5 py-3 text-right font-mono text-slate-300">
-                    {editingLectura === l.id ? (
-                      <input
-                        type="number"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const v = Number(editValue)
-                            if (v < l.lectura_anterior) { setActionError(`Lectura actual (${v}) no puede ser menor que la anterior (${l.lectura_anterior})`); return }
-                            setActionError(''); updateLecturaMut.mutate({ lecturaId: l.id, lecturaActual: v })
-                          }
-                          if (e.key === 'Escape') setEditingLectura(null)
-                        }}
-                        className="w-28 rounded border border-primary-500 bg-slate-800 px-2 py-1 text-right font-mono text-slate-100 focus:outline-none"
-                        autoFocus
-                      />
-                    ) : (
-                      numero(l.lectura_actual)
-                    )}
-                  </td>
+                  <td className="px-5 py-3 font-medium text-slate-200">{nombreParcela(l.parcela_id)}</td>
+                  {!inicial && <td className="px-5 py-3 text-right font-mono text-slate-400">{celdaAnterior(l)}</td>}
+                  <td className="px-5 py-3 text-right font-mono text-slate-300">{celdaActual(l)}</td>
                   {!inicial && <td className="px-5 py-3 text-right font-mono font-medium text-primary-400">{numero(l.kwh_consumidos)}</td>}
                   <td className="px-5 py-3 text-slate-400">{fechaHora(l.fecha_toma)}</td>
                   <td className="px-5 py-3 text-slate-400">{l.fecha_toma ? (usuarioMap[l.lector_id]?.nombre ?? 'Desconocido') : '—'}</td>
                   <td className="px-3 py-3">
-                    {l.tiene_foto ? (
-                      <button onClick={() => setFotoDe(l)} title="Ver foto del medidor"
-                              className="rounded p-1 text-primary-400 hover:bg-slate-700 hover:text-primary-300">
-                        <Camera className="h-4 w-4" />
-                      </button>
-                    ) : <span className="text-slate-600">—</span>}
+                    {l.tiene_foto ? botonFoto(l) : <span className="text-slate-600">—</span>}
                   </td>
-                  {!boleta.lecturas_cerradas && !boleta.liquidaciones_cerradas && (
-                    <td className="px-3 py-3">
-                      {editingLectura === l.id ? (
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => {
-                              const v = Number(editValue)
-                              if (v < l.lectura_anterior) { setActionError(`Lectura actual (${v}) no puede ser menor que la anterior (${l.lectura_anterior})`); return }
-                              setActionError(''); updateLecturaMut.mutate({ lecturaId: l.id, lecturaActual: v })
-                            }}
-                            className="rounded p-1 text-green-400 hover:bg-green-500/20"
-                            title="Guardar"
-                          ><Check className="h-3.5 w-3.5" /></button>
-                          <button
-                            onClick={() => setEditingLectura(null)}
-                            className="rounded p-1 text-slate-400 hover:bg-slate-700"
-                            title="Cancelar"
-                          ><X className="h-3.5 w-3.5" /></button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => { setEditingLectura(l.id); setEditValue(String(l.lectura_actual)) }}
-                          className="rounded p-1 text-slate-500 hover:text-slate-200 hover:bg-slate-700"
-                          title="Editar lectura"
-                        ><Pencil className="h-3.5 w-3.5" /></button>
-                      )}
-                    </td>
-                  )}
+                  {editableLecturas && <td className="px-3 py-3">{accionesLectura(l)}</td>}
                 </tr>
               ))}
               {lecturas.length === 0 && (
@@ -527,6 +585,45 @@ export default function BoletaDetalle() {
               )}
             </tbody>
           </table>
+          </div>
+          {/* Celular: lista apilada, una tarjeta por parcela */}
+          <ul className="divide-y divide-slate-700/50 md:hidden">
+            {lecturasSorted.map((l) => (
+              <li key={l.id} className="space-y-2 px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate font-medium text-slate-200">Parcela {nombreParcela(l.parcela_id)}</span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {l.tiene_foto && botonFoto(l)}
+                    {editableLecturas && accionesLectura(l)}
+                  </div>
+                </div>
+                <dl className={`grid gap-x-4 gap-y-2 text-sm ${inicial ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                  {!inicial && (
+                    <div className={editingAnterior === l.id ? 'col-span-2' : ''}>
+                      <dt className="text-xs text-slate-500">L. Anterior</dt>
+                      <dd className="font-mono text-slate-400">{celdaAnterior(l)}</dd>
+                    </div>
+                  )}
+                  <div>
+                    <dt className="text-xs text-slate-500">{inicial ? 'Lectura inicial' : 'L. Actual'}</dt>
+                    <dd className="font-mono text-slate-300">{celdaActual(l)}</dd>
+                  </div>
+                  {!inicial && (
+                    <div>
+                      <dt className="text-xs text-slate-500">kWh consumidos</dt>
+                      <dd className="font-mono font-medium text-primary-400">{numero(l.kwh_consumidos)}</dd>
+                    </div>
+                  )}
+                </dl>
+                <p className="break-words text-xs text-slate-400">
+                  {fechaHora(l.fecha_toma)} · {l.fecha_toma ? (usuarioMap[l.lector_id]?.nombre ?? 'Desconocido') : '—'}
+                </p>
+              </li>
+            ))}
+            {lecturas.length === 0 && (
+              <li className="px-4 py-8 text-center text-sm text-slate-500">Sin lecturas registradas para este período</li>
+            )}
+          </ul>
           <FotoMedidorModal lectura={fotoDe} onClose={() => setFotoDe(null)}
             titulo={`Medidor parcela ${fotoDe ? (parcelaMap[fotoDe.parcela_id]?.numero_parcela ?? fotoDe.parcela_id) : ''}`} />
         </Card>
@@ -592,15 +689,18 @@ export default function BoletaDetalle() {
       {tab === 'liquidaciones' && (
         <>
           {liquidaciones.length > 0 && (
-            <div className="flex items-center justify-between rounded-lg bg-primary-600/10 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-primary-600/10 px-4 py-3">
               <p className="text-sm text-primary-300">
-                {pagadas}/{liquidaciones.length} pagadas
+                {boleta.boleta_visible_usuarios
+                  ? <>{pagadas}/{liquidaciones.length} pagadas · los abonos se registran en <Link to="/cobranza" className="underline">Cobranza</Link></>
+                  : <>{liquidaciones.length} liquidaciones · los pagos se registran después de publicar</>}
               </p>
               <p className="font-mono font-bold text-primary-400">{clp(totalLiq)}</p>
             </div>
           )}
           <Card padding={false}>
-            <div className="overflow-x-auto">
+            {/* Pantallas anchas: tabla */}
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-700 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -614,26 +714,15 @@ export default function BoletaDetalle() {
                 </thead>
                 <tbody>
                   {liquidacionesSorted.map((liq) => (
-                    <tr key={liq.id} className={`border-b border-slate-700/50 ${liq.pagado ? 'opacity-60' : ''}`}>
-                      <td className="px-5 py-3 font-medium text-slate-200">
-                        {parcelaMap[liq.parcela_id]?.numero_parcela ?? `#${liq.parcela_id}`}
-                      </td>
+                    <tr key={liq.id} className="border-b border-slate-700/50">
+                      <td className="px-5 py-3 font-medium text-slate-200">{nombreParcela(liq.parcela_id)}</td>
                       <td className="px-5 py-3 text-right font-mono text-slate-400">{clp(liq.monto_energia_kwh)}</td>
                       <td className="px-5 py-3 text-right font-mono text-slate-400">{clp(liq.monto_prorrateo_variable)}</td>
                       <td className="px-5 py-3 text-right font-mono text-slate-400">{clp(liq.monto_cuota_fija)}</td>
                       <td className="px-5 py-3 text-right font-mono font-bold text-slate-100">{clp(liq.total_pagar_mes)}</td>
                       <td className="px-5 py-3 text-center">
-                        <button
-                          disabled={boleta.liquidaciones_cerradas}
-                          onClick={() => marcarPagoMut.mutate({ liqId: liq.id, pagado: !liq.pagado })}
-                          className={`rounded-full p-1.5 transition-colors ${
-                            liq.pagado
-                              ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                              : 'bg-slate-700 text-slate-500 hover:bg-slate-600'
-                          } disabled:opacity-40 disabled:cursor-not-allowed`}
-                        >
-                          {liq.pagado ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
-                        </button>
+                        {/* Derivado de la cuenta corriente de luz: los abonos se registran en Liquidaciones y cobranza */}
+                        {pagoLiquidacion(liq.total_pagar_mes, liq.monto_abonado)}
                       </td>
                     </tr>
                   ))}
@@ -652,6 +741,42 @@ export default function BoletaDetalle() {
                 )}
               </table>
             </div>
+            {/* Celular: lista apilada con el total al pie */}
+            <ul className="divide-y divide-slate-700/50 md:hidden">
+              {liquidacionesSorted.map((liq) => (
+                <li key={liq.id} className="space-y-2 px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate font-medium text-slate-200">Parcela {nombreParcela(liq.parcela_id)}</span>
+                    <span className="shrink-0 font-mono font-bold text-slate-100">{clp(liq.total_pagar_mes)}</span>
+                  </div>
+                  <dl className="grid grid-cols-3 gap-x-3 text-xs">
+                    {[
+                      { label: 'Energía', value: liq.monto_energia_kwh },
+                      { label: 'Variable', value: liq.monto_prorrateo_variable },
+                      { label: 'Fijo', value: liq.monto_cuota_fija },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="min-w-0">
+                        <dt className="text-slate-500">{label}</dt>
+                        <dd className="truncate font-mono text-slate-400">{clp(value)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="text-slate-500">Pago</span>
+                    {pagoLiquidacion(liq.total_pagar_mes, liq.monto_abonado)}
+                  </div>
+                </li>
+              ))}
+              {liquidaciones.length === 0 && (
+                <li className="px-4 py-8 text-center text-sm text-slate-500">Sin liquidaciones. Usa "Calcular" para generarlas.</li>
+              )}
+              {liquidaciones.length > 0 && (
+                <li className="flex items-center justify-between gap-2 bg-slate-700/30 px-4 py-3">
+                  <span className="font-semibold text-slate-300">TOTAL</span>
+                  <span className="font-mono font-bold text-primary-400">{clp(totalLiq)}</span>
+                </li>
+              )}
+            </ul>
           </Card>
         </>
       )}

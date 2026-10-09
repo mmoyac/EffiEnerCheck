@@ -328,21 +328,42 @@ export default function Usuarios() {
     </div>
   )
 
+  // Fragmentos compartidos por la tabla (escritorio) y la lista (celular)
+  const rolBadge = (u: Usuario) => <Badge color={ROLE_COLOR[u.rol?.nombre] ?? 'slate'}>{u.rol?.nombre}</Badge>
+  const cuentaBadge = (u: Usuario) => u.estado === 'pendiente'
+    ? <Badge color="yellow">Pendiente</Badge>
+    : <Badge color="green">Activa</Badge>
+  const parcelasTexto = (u: Usuario) =>
+    u.parcelas.length > 0 ? u.parcelas.map((p) => p.numero_parcela).join(', ') : '—'
+  const acciones = (u: Usuario) => (
+    <>
+      {u.estado === 'pendiente' && (
+        <Button size="sm" variant="ghost" title="Invitar a crear su clave (correo o WhatsApp)"
+                onClick={() => { setAviso(null); setInvitando(u) }}>
+          <Send className="h-3.5 w-3.5" /> Invitar
+        </Button>
+      )}
+      <Button size="sm" variant="ghost" title="Editar" onClick={() => openEdit(u)}>
+        <Pencil className="h-3.5 w-3.5" />
+      </Button>
+    </>
+  )
+
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-xl font-bold text-slate-100">Usuarios</h1>
           <p className="text-sm text-slate-500">
             {usuariosFiltrados.length} de {usuarios.length} usuarios
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {isSuperAdmin && condominios.length > 0 && (
             <select
               value={filtroCondominio}
               onChange={(e) => setFiltroCondominio(e.target.value)}
-              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
+              className="min-w-0 max-w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none"
             >
               <option value="">Todos los condominios</option>
               {condominios.map((c) => (
@@ -365,59 +386,70 @@ export default function Usuarios() {
       {aviso && <Alert variant={aviso.variante}>{aviso.texto}</Alert>}
 
       <Card padding={false}>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-700 text-left text-xs uppercase tracking-wide text-slate-500">
-              <th className="px-5 py-3">Nombre</th>
-              <th className="px-5 py-3">Email</th>
-              <th className="px-5 py-3">Rol</th>
-              <th className="px-5 py-3">Cuenta</th>
-              <th className="px-5 py-3">Condominio</th>
-              <th className="px-5 py-3">Parcelas</th>
-              <th className="px-5 py-3">Último acceso</th>
-              <th className="px-5 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {usuariosFiltrados.map((u) => (
-              <tr key={u.id} className={`border-b border-slate-700/50 hover:bg-slate-700/20 ${u.id === me?.id ? 'bg-primary-600/5' : ''}`}>
-                <td className="px-5 py-3">
-                  <div className="flex items-center gap-2">
-                    <UserCircle className="h-5 w-5 text-slate-500" />
-                    <span className="font-medium text-slate-200">{u.nombre}</span>
-                  </div>
-                </td>
-                <td className="px-5 py-3 text-slate-400">{u.email}{u.telefono && <span className="block text-xs text-slate-500">{formatearTelefono(u.telefono)}</span>}</td>
-                <td className="px-5 py-3">
-                  <Badge color={ROLE_COLOR[u.rol?.nombre] ?? 'slate'}>{u.rol?.nombre}</Badge>
-                </td>
-                <td className="px-5 py-3">
-                  {u.estado === 'pendiente'
-                    ? <Badge color="yellow">Pendiente</Badge>
-                    : <Badge color="green">Activa</Badge>}
-                </td>
-                <td className="px-5 py-3 text-slate-400 text-sm">{condominioNombre(u.condominio_id)}</td>
-                <td className="px-5 py-3 text-slate-400">
-                  {u.parcelas.length > 0 ? u.parcelas.map((p) => p.numero_parcela).join(', ') : '—'}
-                </td>
-                <td className="px-5 py-3 text-slate-500">{fecha(u.ultimo_login)}</td>
-                <td className="px-5 py-3">
-                  <div className="flex items-center justify-end gap-1">
-                    {u.estado === 'pendiente' && (
-                      <Button size="sm" variant="ghost" title="Invitar a crear su clave (correo o WhatsApp)"
-                              onClick={() => { setAviso(null); setInvitando(u) }}>
-                        <Send className="h-3.5 w-3.5" /> Invitar
-                      </Button>
-                    )}
-                    <Button size="sm" variant="ghost" title="Editar" onClick={() => openEdit(u)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </td>
+        {/* Escritorio: tabla */}
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-700 text-left text-xs uppercase tracking-wide text-slate-500">
+                <th className="px-5 py-3">Nombre</th>
+                <th className="px-5 py-3">Email</th>
+                <th className="px-5 py-3">Rol</th>
+                <th className="px-5 py-3">Cuenta</th>
+                <th className="px-5 py-3">Condominio</th>
+                <th className="px-5 py-3">Parcelas</th>
+                <th className="px-5 py-3">Último acceso</th>
+                <th className="px-5 py-3"></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {usuariosFiltrados.map((u) => (
+                <tr key={u.id} className={`border-b border-slate-700/50 hover:bg-slate-700/20 ${u.id === me?.id ? 'bg-primary-600/5' : ''}`}>
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-2">
+                      <UserCircle className="h-5 w-5 text-slate-500" />
+                      <span className="font-medium text-slate-200">{u.nombre}</span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3 text-slate-400">{u.email}{u.telefono && <span className="block text-xs text-slate-500">{formatearTelefono(u.telefono)}</span>}</td>
+                  <td className="px-5 py-3">{rolBadge(u)}</td>
+                  <td className="px-5 py-3">{cuentaBadge(u)}</td>
+                  <td className="px-5 py-3 text-slate-400 text-sm">{condominioNombre(u.condominio_id)}</td>
+                  <td className="px-5 py-3 text-slate-400">{parcelasTexto(u)}</td>
+                  <td className="px-5 py-3 text-slate-500">{fecha(u.ultimo_login)}</td>
+                  <td className="px-5 py-3">
+                    <div className="flex items-center justify-end gap-1">{acciones(u)}</div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Celular: lista apilada, una tarjeta por usuario */}
+        <ul className="divide-y divide-slate-700/50 md:hidden">
+          {usuariosFiltrados.map((u) => (
+            <li key={u.id} className={`space-y-2 px-4 py-3 text-sm ${u.id === me?.id ? 'bg-primary-600/5' : ''}`}>
+              <div className="flex items-start gap-2">
+                <UserCircle className="mt-0.5 h-5 w-5 shrink-0 text-slate-500" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-slate-200">{u.nombre}</p>
+                  <p className="truncate text-slate-400">{u.email}</p>
+                  {u.telefono && <p className="truncate text-xs text-slate-500">{formatearTelefono(u.telefono)}</p>}
+                </div>
+                <div className="flex shrink-0 items-center gap-1">{acciones(u)}</div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {rolBadge(u)}
+                {cuentaBadge(u)}
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                <span className="min-w-0 max-w-full truncate">Condominio: <span className="text-slate-400">{condominioNombre(u.condominio_id)}</span></span>
+                <span className="min-w-0 break-words">Parcelas: <span className="text-slate-400">{parcelasTexto(u)}</span></span>
+                <span>Último acceso: {fecha(u.ultimo_login)}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
       </Card>
 
       {invitando && (
