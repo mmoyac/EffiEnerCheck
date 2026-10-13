@@ -57,7 +57,7 @@ Al confirmar, la compra queda **pendiente con los números reservados por 15 min
 | `CONFIRMADO` | El proveedor confirmó el pago por el total esperado | Pagada |
 | `RECHAZADO` | Respuesta definitiva del proveedor, o cancelación anulada en el proveedor | Anulada, números libres |
 | `EXPIRADO` | Venció sin confirmación | Anulada, números libres. Si después llega aprobado, se aplica |
-| `EN_REVISION` | Aprobado pero no se pudo aplicar (monto distinto, números ya vendidos o rifa cerrada) | La administración lo resuelve en **Pagos por revisar** |
+| `EN_REVISION` | Aprobado pero no se pudo aplicar (monto distinto, números ya vendidos o rifa cerrada), **o pagado y anulado después por la administración** (devolución pendiente) | La administración lo resuelve en **Pagos por revisar**: devuelve el dinero en el panel de la pasarela y lo marca resuelto con una nota. El sistema nunca devuelve dinero por sí mismo |
 
 Una rifa **no se cierra** mientras tenga pagos `INICIADO`.
 

@@ -260,6 +260,12 @@ export interface CompraRifa {
   /** en_linea: su intención de pago (INICIADO = pago en curso) */
   intencion_pago_id: string | null
   pago_en_linea_estado: EstadoIntencion | null
+  /** Lo cobrado por la pasarela (con comisión) y su número de operación */
+  pago_en_linea_total: number | null
+  pago_en_linea_pasarela: string | null
+  pago_en_linea_operacion: string | null
+  /** Pagada en línea y anulada después: la devolución se hace en la pasarela */
+  devolucion: 'pendiente' | 'resuelta' | null
   puede_anular: boolean
   puede_adjuntar_voucher: boolean
 }

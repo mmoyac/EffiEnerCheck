@@ -67,7 +67,9 @@ function mensaje(pago: IntencionPago, agotado: boolean): string {
     case 'RECHAZADO':
       return `${pago.motivo ?? 'La pasarela no aprobó el pago'}. No se te cobró y los números quedaron libres.`
     case 'EN_REVISION':
-      return 'Recibimos tu pago, pero no pudimos aplicarlo automáticamente. La administración lo revisará y te contactará.'
+      return pago.motivo?.includes('anulada después de pagada')
+        ? 'La administración anuló esta compra después de tu pago. Te devolverá el dinero por la misma pasarela; ante dudas, contáctala.'
+        : 'Recibimos tu pago, pero no pudimos aplicarlo automáticamente. La administración lo revisará y te contactará.'
     case 'EXPIRADO':
       return 'No recibimos la confirmación a tiempo y los números se liberaron. Si la pasarela te cobró, el pago se aplicará igual en cuanto lo confirme.'
     default:

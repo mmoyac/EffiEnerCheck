@@ -33,7 +33,11 @@ function quien(c: CompraRifa): string {
 }
 
 function EstadoPago({ c }: { c: CompraRifa }) {
-  if (c.anulada) return <Badge color="slate">Anulada</Badge>
+  if (c.anulada) {
+    if (c.devolucion === 'pendiente') return <Badge color="red" dot>Anulada · devolución pendiente</Badge>
+    if (c.devolucion === 'resuelta') return <Badge color="slate">Anulada · devolución resuelta</Badge>
+    return <Badge color="slate">Anulada</Badge>
+  }
   if (c.medio_pago === 'gasto_comun') return <Badge color="purple">Gasto común</Badge>
   if (c.pagada) return <Badge color="green" dot>{MEDIO_PAGO_TEXTO[c.medio_pago]} · pagada</Badge>
   if (c.medio_pago === 'en_linea') {
@@ -145,6 +149,16 @@ export function ComprasLista({ rifaId, compras, mostrarParcela = false, puedeCon
                 {c.puede_anular && (
                   anulando === c.id ? (
                     <>
+                      {c.medio_pago === 'en_linea' && c.pagada && (
+                        <div className="w-full">
+                          <Alert variant="warning">
+                            Esta compra se pagó en línea ({clp(c.pago_en_linea_total)} en {c.pago_en_linea_pasarela}
+                            {c.pago_en_linea_operacion ? `, operación ${c.pago_en_linea_operacion}` : ''}). Anularla libera los números
+                            pero <b>no devuelve el dinero</b>: haz la devolución en el panel de la pasarela. Quedará en «Pagos por revisar»
+                            hasta que la marques resuelta.
+                          </Alert>
+                        </div>
+                      )}
                       <Button size="sm" variant="ghost" onClick={() => setAnulando(null)} disabled={anularMut.isPending}>No</Button>
                       <Button size="sm" variant="danger" loading={anularMut.isPending} onClick={() => anularMut.mutate(c.id)}>Sí, anular</Button>
                     </>

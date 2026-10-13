@@ -142,6 +142,12 @@ class CompraRifaResponse(BaseModel):
     # en_linea: id y estado de su intención de pago (INICIADO = pago en curso)
     intencion_pago_id: UUID | None = None
     pago_en_linea_estado: str | None = None
+    # Lo cobrado por la pasarela (incluye la comisión) y su número de operación, para avisos y devoluciones
+    pago_en_linea_total: int | None = None
+    pago_en_linea_pasarela: str | None = None
+    pago_en_linea_operacion: str | None = None
+    # Compra pagada en línea y anulada después: la devolución se hace en la pasarela (pendiente | resuelta)
+    devolucion: Literal["pendiente", "resuelta"] | None = None
     # Lo que el usuario que consulta puede hacer con la compra ahora
     puede_anular: bool
     puede_adjuntar_voucher: bool

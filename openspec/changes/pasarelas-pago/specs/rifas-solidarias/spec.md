@@ -82,3 +82,17 @@ El sistema NO DEBE (SHALL NOT) cerrar una rifa mientras tenga intenciones de pag
 
 - **WHEN** la administración cierra una rifa con un pago en línea en curso
 - **THEN** el sistema responde `409` con "Hay 1 pago en línea en curso; espera a que termine"
+
+### Requirement: Anulación de una compra pagada en línea
+
+La administración DEBE (SHALL) poder anular una compra `en_linea` ya pagada mientras la rifa esté abierta. Antes de confirmar, la aplicación DEBE (SHALL) advertir que anular no devuelve el dinero, con el total cobrado, la pasarela y el número de operación. Al anularla, el sistema DEBE (SHALL) liberar sus números y dejar su intención de pago `EN_REVISION` con el motivo de devolución, para que aparezca en los pagos por revisar hasta que la administración la marque resuelta. El sistema NO DEBE (SHALL NOT) devolver el dinero por sí mismo: la devolución se hace en la pasarela.
+
+#### Scenario: Anular una compra pagada en línea
+
+- **WHEN** la administración anula la compra R4-009, pagada en línea por $1.009 en Khipu con la operación vrlhqjzgqrmv
+- **THEN** los números quedan libres, la compra se muestra «Anulada · devolución pendiente» y el pago aparece en los pagos por revisar con el motivo «Compra R4-009 anulada después de pagada: devolver $1.009 en Khipu (operación vrlhqjzgqrmv)»
+
+#### Scenario: Devolución resuelta
+
+- **WHEN** la administración marca resuelto ese pago con una nota
+- **THEN** la compra se muestra «Anulada · devolución resuelta» y el pago deja de aparecer en los pagos por revisar

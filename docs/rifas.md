@@ -38,7 +38,7 @@ Admin crea la rifa (premios, precio, cantidad de números, datos para transferir
 | Teléfono | Se proponen los teléfonos de los residentes de la parcela (editables). Se normalizan a `56XXXXXXXXX`. |
 | Comprobante | Enlace `wa.me` con el mensaje listo: la portería toca «Enviar» en WhatsApp. El sistema no envía mensajes. Botón «Imprimir» opcional (formato de impresora térmica). |
 | Agradecimiento | Tras comprar desde el portal, el comunero ve «¡Gracias por tu aporte!» con el comprobante (datos que devolvió el servidor) y qué sigue: datos para transferir y pago pendiente, o cargo en un próximo gasto común. Puede compartirlo (hoja nativa del celular o WhatsApp), guardarlo (imprimir/PDF), comprar más o volver. |
-| Anular | Solo con la rifa abierta. El admin anula cualquiera; el vecino, lo que compró él desde el portal si no está pagado. **La portería no anula.** |
+| Anular | Solo con la rifa abierta. El admin anula cualquiera; el vecino, lo que compró él desde el portal si no está pagado. **La portería no anula.** Una compra **pagada en línea** se puede anular, pero el dinero no se devuelve solo: el portal lo advierte y el pago queda en **Pagos por revisar** («devolución pendiente») hasta que el admin lo devuelva en la pasarela y lo marque resuelto. |
 | Privacidad | La grilla del vecino muestra qué números están tomados, no de quién. Los vouchers se guardan fuera del estático público y solo los ven el staff y los usuarios de esa parcela. |
 | Editar | Nombre, beneficiario, descripción, premios y datos para transferir, mientras esté abierta. El precio se bloquea con el primer número vendido. La cantidad puede crecer, pero no bajar del mayor número vendido. |
 | Reabrir | Solo si ninguna imputación está marcada como cargada. Borra las imputaciones. |

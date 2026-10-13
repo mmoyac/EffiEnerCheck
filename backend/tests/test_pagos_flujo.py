@@ -463,3 +463,29 @@ async def test_compra_en_linea_no_se_confirma_ni_anula_a_mano_y_bloquea_el_cierr
     r = await c.post(f"{base}/cerrar", headers=cab_admin)
     assert r.status_code == 200, r.text
     assert r.json()["imputaciones"] == []  # lo pagado en línea no se imputa al gasto común
+
+
+async def test_anular_compra_pagada_en_linea_deja_devolucion_pendiente(tx, falso):
+    """Anular libera los números pero no devuelve el dinero: el pago queda en revisión hasta resolverlo."""
+    c, s = tx
+    rifa, compra, pago = await _iniciar(c, s, falso)
+    falso.estado = "APROBADO"
+    await flujo.confirmar(s, pago["intencion_id"], "prueba")
+    cab = await cabecera(s, ADMIN)
+
+    r = await c.post(f"/api/v1/rifas/{rifa['id']}/compras/{compra['id']}/anular", headers=cab)
+    assert r.status_code == 200, r.text
+    anulada = next(x for x in r.json()["compras"] if x["id"] == compra["id"])
+    assert anulada["anulada"] is True and anulada["devolucion"] == "pendiente"
+    assert anulada["pago_en_linea_total"] == 4159 and anulada["pago_en_linea_operacion"] == "OP-1"
+    assert await _numeros(s, rifa["id"]) == []
+
+    i = await _intencion(s, pago["intencion_id"])
+    assert i.estado == "EN_REVISION"
+    assert i.motivo == f"Compra {compra['folio']} anulada después de pagada: devolver $4.159 en Flow (operación OP-1)"
+    assert str(i.id) in [p["id"] for p in (await c.get("/api/v1/pagos/revision", headers=cab)).json()]
+
+    r = await c.post(f"/api/v1/pagos/{i.id}/resolver", headers=cab, json={"nota": "Devuelto en Flow el 14/10"})
+    assert r.status_code == 200
+    detalle = (await c.get(f"/api/v1/rifas/{rifa['id']}", headers=cab)).json()
+    assert next(x for x in detalle["compras"] if x["id"] == compra["id"])["devolucion"] == "resuelta"

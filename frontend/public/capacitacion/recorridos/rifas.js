@@ -423,7 +423,7 @@
       },
       {
         titulo: 'Pagos por revisar',
-        texto: 'Si una pasarela aprueba un pago que no se puede aplicar (por ejemplo, porque esos números ya se vendieron), aparece en <b>Pagos por revisar</b>. Resuélvelo con el comunero (otros números o la devolución en la pasarela) y toca <b>Marcar resuelto</b> con una nota.',
+        texto: 'Si una pasarela aprueba un pago que no se puede aplicar (por ejemplo, porque esos números ya se vendieron), aparece en <b>Pagos por revisar</b>. También aparece si <b>anulas una compra ya pagada en línea</b>: anular libera los números pero <b>no devuelve el dinero</b>. Haz la devolución en el panel de la pasarela y toca <b>Marcar resuelto</b> con una nota.',
         pantalla: () => ui.escritorio({
           activo: 'Pasarelas de pago',
           contenido: `<p class="s-h1">${ui.icono('alerta', 's-amarillo')} Pagos por revisar</p>

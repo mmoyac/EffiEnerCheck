@@ -178,7 +178,20 @@ def _puede_adjuntar_voucher(compra: CompraRifa, user: Usuario) -> bool:
     return _es_staff(user) or _es_autor_portal(compra, user)
 
 
+def _clp(monto: int) -> str:
+    return f"${monto:,}".replace(",", ".")
+
+
+def _devolucion(compra: CompraRifa) -> str | None:
+    """Compra pagada en línea y anulada después: su pago queda en revisión hasta que se devuelva."""
+    i = compra.intencion_pago
+    if not (compra.anulada and compra.pagada and i is not None and i.estado == "EN_REVISION"):
+        return None
+    return "resuelta" if i.resuelta_at else "pendiente"
+
+
 def _compra_response(compra: CompraRifa, rifa: Rifa, user: Usuario) -> CompraRifaResponse:
+    intencion = compra.intencion_pago
     return CompraRifaResponse(
         id=compra.id,
         rifa_id=compra.rifa_id,
@@ -201,7 +214,11 @@ def _compra_response(compra: CompraRifa, rifa: Rifa, user: Usuario) -> CompraRif
         anulada_at=compra.anulada_at,
         anulada_por_nombre=compra.anulada_por.nombre if compra.anulada_por else None,
         intencion_pago_id=compra.intencion_pago_id,
-        pago_en_linea_estado=compra.intencion_pago.estado if compra.intencion_pago else None,
+        pago_en_linea_estado=intencion.estado if intencion else None,
+        pago_en_linea_total=intencion.total if intencion else None,
+        pago_en_linea_pasarela=intencion.pasarela.nombre_visible if intencion else None,
+        pago_en_linea_operacion=intencion.transaccion_proveedor if intencion else None,
+        devolucion=_devolucion(compra),
         puede_anular=_puede_anular(compra, rifa, user),
         puede_adjuntar_voucher=_puede_adjuntar_voucher(compra, user),
     )
@@ -227,7 +244,7 @@ def _compras_stmt(rifa_id: int):
             selectinload(CompraRifa.parcela),
             selectinload(CompraRifa.usuario),
             selectinload(CompraRifa.anulada_por),
-            selectinload(CompraRifa.intencion_pago),
+            selectinload(CompraRifa.intencion_pago).selectinload(IntencionPago.pasarela),
         )
         .where(CompraRifa.rifa_id == rifa_id)
         .order_by(CompraRifa.created_at.desc())
@@ -786,12 +803,33 @@ async def anular_compra(
     compra.anulada_at = _ahora()
     compra.anulada_por = current_user
 
+    # Pagada en línea: anular libera los números pero NO devuelve el dinero, que está en la pasarela. El pago
+    # pasa a «Pagos por revisar» hasta que la administración lo devuelva y lo marque resuelto.
+    devolucion = None
+    intencion = compra.intencion_pago
+    if compra.medio_pago == "en_linea" and compra.pagada and intencion is not None and intencion.estado == "CONFIRMADO":
+        intencion = (
+            await db.execute(
+                select(IntencionPago).options(selectinload(IntencionPago.pasarela))
+                .where(IntencionPago.id == intencion.id)
+                .with_for_update().execution_options(populate_existing=True)
+            )
+        ).scalar_one()
+        operacion = f" (operación {intencion.transaccion_proveedor})" if intencion.transaccion_proveedor else ""
+        intencion.estado = "EN_REVISION"
+        intencion.motivo = (
+            f"Compra {compra.folio_texto} anulada después de pagada: devolver {_clp(intencion.total)} "
+            f"en {intencion.pasarela.nombre_visible}{operacion}"
+        )
+        devolucion = {"intencion_pago_id": str(intencion.id), "total": intencion.total}
+
     await registrar_auditoria(
         db, usuario_id=current_user.id, condominio_id=rifa.condominio_id, accion="ANULAR_COMPRA_RIFA",
         detalles={
             "rifa_id": rifa.id, "compra_id": compra.id, "folio": compra.folio_texto,
             "parcela_id": compra.parcela_id, "numeros": compra.numeros, "monto": compra.monto,
             "medio_pago": compra.medio_pago, "pagada": compra.pagada, "canal": compra.canal,
+            **({"devolucion_pendiente": devolucion} if devolucion else {}),
         },
         ip_address=_ip(request),
     )
