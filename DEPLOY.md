@@ -145,6 +145,29 @@ Las invitaciones y "¿Olvidaste tu clave?" se envían por correo con [Resend](ht
 
 > Plan gratuito de Resend: alrededor de 3.000 correos al mes y 100 al día. Alcanza de sobra para invitar a los 69 vecinos de una vez.
 
+### 3.2 Pagos en línea (pasarelas)
+
+Las credenciales de Flow y Khipu se guardan cifradas en la base con `PAGOS_CLAVE_MAESTRA`. Sin esa variable el backend **no arranca**.
+
+1. [Servidor] Genera la clave:
+   ```sh
+   python3 -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())"
+   ```
+2. [Dokploy] Pégala en el Environment como `PAGOS_CLAVE_MAESTRA=` y deja `URL_PUBLICA_PAGOS` vacía. Presiona **Deploy**.
+3. Guarda la clave también en tu gestor de claves. Los respaldos de la base traen las credenciales cifradas: sin esta clave, al restaurar habría que volver a cargarlas en cada pasarela.
+4. [Portal] Como super admin, en **Pasarelas de pago**: crea la pasarela del condominio, **Probar conexión** y **Activar**. Una de producción solo se activa con una prueba exitosa posterior al último cambio de credenciales.
+5. En la rifa, marca **Pago en línea** entre las formas de pago.
+
+**Rotar la clave maestra** (si se filtró o por política):
+
+```sh
+docker exec enercheck_backend python -m app.db.rotar_clave_pagos --nueva <clave nueva en base64>
+```
+
+Recifra todas las credenciales con la clave nueva. Después, reemplaza `PAGOS_CLAVE_MAESTRA` en el Environment y presiona **Deploy**.
+
+Detalle de cada proveedor, ambientes y pruebas en [docs/pagos-en-linea.md](docs/pagos-en-linea.md).
+
 > No conectes el servicio a GitHub. Dokploy no debe construir nada.
 
 ## 4. GitHub (una vez)

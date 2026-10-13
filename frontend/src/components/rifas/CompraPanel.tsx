@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AxiosError } from 'axios'
-import { Banknote, Landmark, Receipt, Ticket } from 'lucide-react'
+import { Banknote, CreditCard, Landmark, Receipt, Ticket } from 'lucide-react'
 import { rifasApi } from '../../api/rifas'
+import { irAPasarela, pagosApi } from '../../api/pagos'
 import { Alert } from '../ui/Alert'
 import { Button } from '../ui/Button'
 import { Modal } from '../ui/Modal'
@@ -17,7 +18,8 @@ import type { CompraRifa, MedioPago, ParcelaVenta, RifaDetalle } from '../../typ
 interface Props {
   rifa: RifaDetalle
   /**
-   * portal: el vecino compra a nombre de sus parcelas (transferencia o gasto común).
+   * portal: el comunero compra a nombre de sus parcelas: pago en línea (pasarelas) o gasto común; sin
+   *   pasarela disponible, transferencia manual con voucher, igual que en portería.
    * porteria / administracion: venta a nombre de cualquier parcela, con efectivo y comprador libre.
    */
   modo: 'portal' | 'porteria' | 'administracion'
@@ -32,7 +34,21 @@ const MEDIOS: { valor: MedioPago; icono: typeof Banknote; ayuda: string }[] = [
   { valor: 'efectivo', icono: Banknote, ayuda: 'Pagado ahora' },
   { valor: 'transferencia', icono: Landmark, ayuda: 'A la cuenta de la comunidad' },
   { valor: 'gasto_comun', icono: Receipt, ayuda: 'Se carga en el gasto común' },
+  { valor: 'en_linea', icono: CreditCard, ayuda: 'Tarjeta o transferencia · con costo adicional' },
 ]
+
+/**
+ * Espejo de services/rifas_pago.medios_permitidos (el servidor rechaza el resto con 422).
+ * Portal: en línea si hay pasarela; si no, transferencia manual. Staff: los de la rifa, salvo en línea.
+ */
+function mediosDelCanal(aceptados: MedioPago[], esStaff: boolean, hayPasarela: boolean): MedioPago[] {
+  if (esStaff) return aceptados.filter((m) => m !== 'en_linea')
+  const permitidos: MedioPago[] = []
+  if (aceptados.includes('en_linea') && hayPasarela) permitidos.push('en_linea')
+  else if (aceptados.includes('en_linea') || aceptados.includes('transferencia')) permitidos.push('transferencia')
+  if (aceptados.includes('gasto_comun')) permitidos.push('gasto_comun')
+  return permitidos
+}
 
 const errorMsg = (err: unknown) => {
   const detail = (err as AxiosError<{ detail: unknown }>)?.response?.data?.detail
@@ -44,13 +60,38 @@ const errorMsg = (err: unknown) => {
 export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false }: Props) {
   const qc = useQueryClient()
   const esStaff = modo !== 'portal'
-  // Las que acepta la rifa; el efectivo, además, solo en portería o administración
-  const medios = MEDIOS.filter((m) => rifa.medios_pago.includes(m.valor) && (esStaff || m.valor !== 'efectivo'))
-  const medioInicial: MedioPago = medios[0]?.valor ?? 'transferencia'
+  const aceptaEnLinea = !esStaff && rifa.medios_pago.includes('en_linea')
 
   const [parcelaId, setParcelaId] = useState<number | null>(parcelas.length === 1 ? parcelas[0].id : null)
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set())
+  const [pasarelaId, setPasarelaId] = useState<number | null>(null)
+
+  // Pasarelas para el monto elegido (con al menos un número, para saber si hay alguna disponible)
+  const montoCotizado = Math.max(seleccion.size, 1) * rifa.precio_numero
+  const { data: opciones = [], isFetched: opcionesListas } = useQuery({
+    queryKey: ['pagos-disponibles', montoCotizado],
+    queryFn: () => pagosApi.disponibles(montoCotizado),
+    enabled: aceptaEnLinea,
+    placeholderData: (anteriores) => anteriores,
+  })
+  const disponibles = opciones.filter((o) => o.disponible)
+  const hayPasarela = disponibles.length > 0
+
+  // Las que acepta la rifa, según el canal (el efectivo, solo en portería o administración)
+  const permitidos = mediosDelCanal(rifa.medios_pago, esStaff, hayPasarela).filter((m) => esStaff || m !== 'efectivo')
+  const medios = MEDIOS.filter((m) => permitidos.includes(m.valor))
+  const medioInicial: MedioPago = medios[0]?.valor ?? 'transferencia'
   const [medioPago, setMedioPago] = useState<MedioPago>(medioInicial)
+  // Al saber si hay pasarela, la forma elegida puede dejar de estar disponible
+  useEffect(() => {
+    if (!permitidos.includes(medioPago)) setMedioPago(medioInicial)
+  }, [permitidos.join(','), opcionesListas]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Una sola pasarela: se elige sola; si la elegida deja de estar disponible, se desmarca
+  useEffect(() => {
+    if (disponibles.length === 1) setPasarelaId(disponibles[0].pasarela_id)
+    else if (pasarelaId != null && !disponibles.some((o) => o.pasarela_id === pasarelaId)) setPasarelaId(null)
+  }, [disponibles.map((o) => o.pasarela_id).join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
+  const opcionElegida = medioPago === 'en_linea' ? disponibles.find((o) => o.pasarela_id === pasarelaId) ?? null : null
   const [comprador, setComprador] = useState('')
   const [telefono, setTelefono] = useState('')
   const [voucher, setVoucher] = useState<Blob | null>(null)
@@ -98,7 +139,8 @@ export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false
   const elegidos = [...seleccion].sort((a, b) => a - b)
   const total = elegidos.length * rifa.precio_numero
   const telefonoNormalizado = normalizarTelefono(telefono)
-  const voucherObligatorio = modo === 'porteria' && medioPago === 'transferencia'
+  // En portería siempre; en el portal, la transferencia manual es el respaldo de la pasarela y también lo exige
+  const voucherObligatorio = modo !== 'administracion' && medioPago === 'transferencia'
 
   const faltante = !parcelaId
     ? 'Elige la parcela'
@@ -106,7 +148,19 @@ export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false
       ? 'Revisa el teléfono'
       : voucherObligatorio && !voucher
         ? 'Falta la foto del voucher'
-        : null
+        : medioPago === 'en_linea' && !opcionElegida
+          ? 'Elige cómo pagar'
+          : null
+
+  // Con una sola pasarela no hay nada más que elegir: «Pago en línea» abre directo el resumen con «Ir a pagar»
+  const elegirMedio = (valor: MedioPago) => {
+    setMedioPago(valor)
+    if (valor === 'en_linea' && disponibles.length === 1 && elegidos.length > 0 && parcelaId) {
+      setPasarelaId(disponibles[0].pasarela_id)
+      setError('')
+      setConfirmando(true)
+    }
+  }
 
   const reiniciar = () => {
     setSeleccion(new Set())
@@ -130,10 +184,16 @@ export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false
           medio_pago: medioPago,
           comprador_nombre: esStaff ? comprador.trim() || null : null,
           telefono: telefonoNormalizado ?? null,
+          pasarela_id: medioPago === 'en_linea' ? opcionElegida?.pasarela_id ?? null : null,
         },
         medioPago === 'transferencia' ? voucher : null,
       ),
-    onSuccess: ({ rifa: detalle, compra }) => {
+    onSuccess: ({ rifa: detalle, compra, pago }) => {
+      if (pago) {
+        // Números reservados: el comunero termina de pagar en la pasarela y vuelve a /pagos/:id/resultado
+        irAPasarela(pago.redireccion)
+        return
+      }
       qc.setQueryData(['rifa', rifa.id], detalle)
       qc.invalidateQueries({ queryKey: ['rifas'] })
       qc.invalidateQueries({ queryKey: ['rifa-caja', rifa.id] })
@@ -142,10 +202,16 @@ export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false
       onVendida?.(compra)
     },
     onError: (err: unknown) => {
-      setError(errorMsg(err))
-      setConfirmando(false)
-      // Un 409 significa que alguien tomó un número: se refresca la grilla
-      if ((err as AxiosError)?.response?.status === 409) qc.invalidateQueries({ queryKey: ['rifa', rifa.id] })
+      const msg = errorMsg(err)
+      setError(msg)
+      // Números tomados por otro: se cierra el resumen y se refresca la grilla. Cualquier otro error se
+      // muestra dentro del resumen, donde el usuario está mirando (arriba del panel quedaba fuera de la vista).
+      if (msg.startsWith('Números no disponibles')) {
+        setConfirmando(false)
+        qc.invalidateQueries({ queryKey: ['rifa', rifa.id] })
+      } else if ((err as AxiosError)?.response?.status === 409) {
+        qc.invalidateQueries({ queryKey: ['rifa', rifa.id] })
+      }
     },
   })
 
@@ -217,7 +283,7 @@ export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false
                 type="button"
                 role="radio"
                 aria-checked={medioPago === valor}
-                onClick={() => setMedioPago(valor)}
+                onClick={() => elegirMedio(valor)}
                 className={`flex min-h-[64px] flex-col items-center justify-center gap-0.5 rounded-xl border-2 px-2 py-2 text-center transition-colors ${
                   medioPago === valor
                     ? 'border-primary-500 bg-primary-600/15 text-slate-100'
@@ -244,6 +310,43 @@ export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false
             {!esStaff && (
               <p className="text-xs text-slate-400">La compra queda pendiente hasta que la administración confirme la transferencia.</p>
             )}
+          </div>
+        )}
+
+        {medioPago === 'en_linea' && (
+          <div className="space-y-2">
+            {disponibles.length > 1 && <p className="text-sm font-medium text-slate-300">¿Con qué quieres pagar?</p>}
+            <div className="space-y-2" role="radiogroup" aria-label="Pasarela de pago">
+              {opciones.map((o) => {
+                const elegida = o.pasarela_id === pasarelaId
+                return (
+                  <button
+                    key={o.pasarela_id}
+                    type="button"
+                    role="radio"
+                    aria-checked={elegida}
+                    disabled={!o.disponible}
+                    onClick={() => setPasarelaId(o.pasarela_id)}
+                    className={`flex w-full items-center justify-between gap-3 rounded-xl border-2 px-3 py-3 text-left transition-colors disabled:opacity-50 ${
+                      elegida ? 'border-primary-500 bg-primary-600/15' : 'border-slate-700 bg-slate-800 hover:border-slate-500'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-100">{o.nombre_visible}</p>
+                      <p className="text-xs text-slate-400">
+                        {o.disponible ? `Comisión ${clp(o.comision)} incluida` : o.motivo}
+                      </p>
+                    </div>
+                    {o.disponible && elegidos.length > 0 && (
+                      <span className="shrink-0 font-mono text-sm font-bold text-slate-100">{clp(o.total)}</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-slate-400">
+              Pagar en línea tiene un costo adicional que cobra la pasarela. Tus números quedan reservados 15 minutos mientras pagas.
+            </p>
           </div>
         )}
 
@@ -300,7 +403,7 @@ export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false
           <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-slate-100">
-                {elegidos.length} {elegidos.length === 1 ? 'número' : 'números'} · {clp(total)}
+                {elegidos.length} {elegidos.length === 1 ? 'número' : 'números'} · {clp(opcionElegida?.total ?? total)}
               </p>
               <p className="truncate text-xs text-slate-400">{faltante ?? elegidos.join(', ')}</p>
             </div>
@@ -311,8 +414,9 @@ export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false
         </div>
       )}
 
-      <Modal open={confirmando} onClose={() => setConfirmando(false)} title="Confirmar compra" size="sm">
+      <Modal open={confirmando} onClose={() => { setConfirmando(false); setError('') }} title="Confirmar compra" size="sm">
         <div className="space-y-4">
+          {error && <Alert variant="error">{error}</Alert>}
           <div className="space-y-2 rounded-xl bg-slate-700/40 p-4 text-sm">
             <div className="flex justify-between gap-3">
               <span className="text-slate-400">Parcela</span>
@@ -330,25 +434,45 @@ export function CompraPanel({ rifa, modo, parcelas, onVendida, barraFija = false
             </div>
             <div className="flex justify-between gap-3">
               <span className="text-slate-400">Pago</span>
-              <span className="text-slate-200">{MEDIO_PAGO_TEXTO[medioPago]}</span>
+              <span className="text-right text-slate-200">
+                {opcionElegida ? `${MEDIO_PAGO_TEXTO[medioPago]} · ${opcionElegida.nombre_visible}` : MEDIO_PAGO_TEXTO[medioPago]}
+              </span>
             </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-slate-400">{elegidos.length} × {clp(rifa.precio_numero)}</span>
-              <span className="font-mono text-lg font-bold text-primary-400">{clp(total)}</span>
-            </div>
+            {opcionElegida ? (
+              <>
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-400">{elegidos.length} × {clp(rifa.precio_numero)}</span>
+                  <span className="font-mono text-slate-200">{clp(total)}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-400">Comisión de la pasarela</span>
+                  <span className="font-mono text-slate-200">{clp(opcionElegida.comision)}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-400">Total a pagar</span>
+                  <span className="font-mono text-lg font-bold text-primary-400">{clp(opcionElegida.total)}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-400">{elegidos.length} × {clp(rifa.precio_numero)}</span>
+                <span className="font-mono text-lg font-bold text-primary-400">{clp(total)}</span>
+              </div>
+            )}
           </div>
           <p className="text-xs text-slate-400">
             {medioPago === 'efectivo' && 'Recibe el dinero antes de confirmar.'}
             {medioPago === 'transferencia' && 'Queda pendiente hasta que la administración confirme la transferencia.'}
             {medioPago === 'gasto_comun' && 'El monto se cargará en el gasto común de la parcela cuando se cierre la rifa.'}
-            {!esStaff && ' Puedes anular la compra mientras la rifa siga abierta y no esté pagada.'}
+            {medioPago === 'en_linea' && `Te llevaremos a ${opcionElegida?.nombre_visible ?? 'la pasarela'} para pagar. Si no completas el pago en 15 minutos, los números se liberan.`}
+            {!esStaff && medioPago !== 'en_linea' && ' Puedes anular la compra mientras la rifa siga abierta y no esté pagada.'}
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setConfirmando(false)} disabled={comprarMut.isPending}>
               Cancelar
             </Button>
             <Button loading={comprarMut.isPending} onClick={() => comprarMut.mutate()}>
-              Comprar
+              {medioPago === 'en_linea' ? 'Ir a pagar' : 'Comprar'}
             </Button>
           </div>
         </div>

@@ -22,6 +22,8 @@ import MisRifas from './pages/comunero/Rifas'
 import Rifas from './pages/admin/Rifas'
 import RifaDetalle from './pages/admin/RifaDetalle'
 import VentaRifa from './pages/porteria/VentaRifa'
+import Pasarelas from './pages/admin/Pasarelas'
+import ResultadoPago from './pages/pagos/Resultado'
 
 function RoleHome() {
   const role = useRole()
@@ -86,6 +88,8 @@ export default function App() {
           <Route path="/mis-rifas/:id" element={<MisRifas />} />
           <Route path="/porteria" element={<VentaRifa />} />
         </Route>
+        {/* Vuelta desde la pasarela de pago (núcleo: sirve a cualquier módulo que cobre en línea) */}
+        <Route path="/pagos/:id/resultado" element={<ResultadoPago />} />
       </Route>
 
       {/* Admin / Comunero con AppLayout */}
@@ -96,6 +100,7 @@ export default function App() {
           <Route path="/condominios" element={<Condominios />} />
           <Route path="/usuarios" element={<Usuarios />} />
           <Route path="/parcelas" element={<Parcelas />} />
+          <Route path="/pasarelas" element={<Pasarelas />} />
           <Route element={<ModuloRoute modulo="energia" />}>
             <Route path="/boletas" element={<Boletas />} />
             <Route path="/boletas/:id" element={<BoletaDetalle />} />

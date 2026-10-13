@@ -1,17 +1,20 @@
+import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import ARRAY, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, text
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 
 if TYPE_CHECKING:
+    from .pago import IntencionPago
     from .parcela import Parcela
     from .usuario import Usuario
 
 # Formas de pago de una compra
-MEDIOS_PAGO = ("efectivo", "transferencia", "gasto_comun")
+MEDIOS_PAGO = ("efectivo", "transferencia", "gasto_comun", "en_linea")
 # Quién registró la compra: el propio vecino, la portería o la administración
 CANALES = ("portal", "porteria", "administracion")
 
@@ -21,7 +24,7 @@ class Rifa(Base):
     __tablename__ = "rifas"
     __table_args__ = (
         CheckConstraint(
-            "cardinality(medios_pago) > 0 AND medios_pago <@ ARRAY['efectivo','transferencia','gasto_comun']::varchar[]",
+            "cardinality(medios_pago) > 0 AND medios_pago <@ ARRAY['efectivo','transferencia','gasto_comun','en_linea']::varchar[]",
             name="ck_rifas_medios_pago",
         ),
     )
@@ -79,12 +82,17 @@ class CompraRifa(Base):
     monto: Mapped[int] = mapped_column(Integer, nullable=False)
     medio_pago: Mapped[str] = mapped_column(String, nullable=False)
     # efectivo: pagada al registrar | transferencia: al confirmar | gasto_comun: nunca (se imputa)
+    # en_linea: al confirmarse su intención de pago (services/rifas_pago.py)
     pagada: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     pagada_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     pago_confirmado_por_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuarios.id"))
     # Archivo en /app/privado/vouchers (nunca en el estático público /uploads)
     voucher_archivo: Mapped[Optional[str]] = mapped_column(String)
     voucher_mime: Mapped[Optional[str]] = mapped_column(String)
+    # Pago en línea vigente de la compra (medio_pago = en_linea)
+    intencion_pago_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("intenciones_pago.id"), index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     anulada: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     anulada_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
@@ -94,6 +102,7 @@ class CompraRifa(Base):
     parcela: Mapped["Parcela"] = relationship("Parcela")
     usuario: Mapped["Usuario"] = relationship("Usuario", foreign_keys=[usuario_id])
     anulada_por: Mapped[Optional["Usuario"]] = relationship("Usuario", foreign_keys=[anulada_por_id])
+    intencion_pago: Mapped[Optional["IntencionPago"]] = relationship("IntencionPago")
     numeros_vigentes: Mapped[List["RifaNumero"]] = relationship(
         "RifaNumero", back_populates="compra", cascade="all, delete-orphan"
     )

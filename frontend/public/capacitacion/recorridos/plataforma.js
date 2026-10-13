@@ -32,7 +32,7 @@
       {
         icono: 'maletin',
         nombre: 'Administración',
-        texto: 'La administración del condominio, sea de la comunidad o externa. Carga las boletas, calcula, publica y cobra la luz, y gestiona rifas, usuarios y parcelas.',
+        texto: 'La administración del condominio, sea de la comunidad o externa. Carga las boletas, calcula, publica y cobra la luz, y gestiona rifas, usuarios y parcelas. Si la comunidad lo decide, sus rifas también se pueden pagar en línea.',
         modulos: ['nucleo', 'energia', 'rifas'],
       },
       {

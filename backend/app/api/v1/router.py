@@ -8,7 +8,9 @@ from app.api.v1.endpoints import (
     lecturas,
     liquidaciones,
     menus,
+    pagos,
     parcelas,
+    pasarelas,
     rifas,
     portal,
     sitio,
@@ -23,6 +25,8 @@ api_router.include_router(usuarios.router)
 api_router.include_router(condominios.router)
 api_router.include_router(parcelas.router)
 api_router.include_router(menus.router)
+api_router.include_router(pasarelas.router)  # núcleo: pagos en línea de la plataforma
+api_router.include_router(pagos.router)  # incluye el retorno y el webhook públicos de los proveedores
 api_router.include_router(sitio.router)  # público: landing (sin login)
 api_router.include_router(portal.router)  # público: marca y manifiesto de la app según el dominio
 

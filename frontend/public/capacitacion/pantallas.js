@@ -57,6 +57,7 @@ window.Capacitacion = window.Capacitacion || { modulos: [], plataforma: null }
     ruta: '<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
     billetera: '<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
     alerta: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    tarjeta: '<rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>',
     calculadora: '<rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"/>',
   }
   /** Ícono en línea; decorativo salvo que se le dé un título. */
@@ -107,7 +108,7 @@ window.Capacitacion = window.Capacitacion || { modulos: [], plataforma: null }
     { grupo: null, items: [['panel', 'Dashboard']] },
     { grupo: 'Energía', items: [['documento', 'Boletas'], ['medidor', 'Lecturas'], ['calculadora', 'Cobranza']] },
     { grupo: 'Comunidad', items: [['ticket', 'Rifas']] },
-    { grupo: 'Administración', items: [['usuarios', 'Usuarios'], ['ubicacion', 'Parcelas']] },
+    { grupo: 'Administración', items: [['usuarios', 'Usuarios'], ['ubicacion', 'Parcelas'], ['tarjeta', 'Pasarelas de pago']] },
   ]
 
   /** Pantalla de escritorio de la administración: menú lateral + contenido. */
@@ -116,7 +117,7 @@ window.Capacitacion = window.Capacitacion || { modulos: [], plataforma: null }
       <div class="s-side-grupo">
         ${grupo ? `<p class="s-side-titulo">${grupo}</p>` : ''}
         ${items.map(([ic, label]) => `
-          <span class="s-side-item ${label === activo ? 'activo' : ''}" data-t="menu-${label.toLowerCase()}">${icono(ic)} ${label}</span>`).join('')}
+          <span class="s-side-item ${label === activo ? 'activo' : ''}" data-t="menu-${label.toLowerCase().split(' ')[0]}">${icono(ic)} ${label}</span>`).join('')}
       </div>`).join('')
     return `
       <div class="sim sim-esc">
@@ -222,6 +223,53 @@ window.Capacitacion = window.Capacitacion || { modulos: [], plataforma: null }
     efectivo: ['billete', 'Efectivo', 'Pagado ahora'],
     transferencia: ['banco', 'Transferencia', 'A la cuenta de la comunidad'],
     gasto_comun: ['boleta', 'Gasto común', 'Se carga en el gasto común'],
+    en_linea: ['tarjeta', 'Pago en línea', 'Tarjeta o transferencia · con costo adicional'],
+  }
+
+  // Pasarelas de pago ficticias de la comunidad (la comisión la paga el comunero)
+  const PASARELAS = [
+    { id: 'tarjeta', nombre: 'Tarjeta o Webpay', pct: 3.8 },
+    { id: 'khipu', nombre: 'Transferencia bancaria', pct: 1.5 },
+  ]
+  const conComision = (monto, pct) => Math.ceil(monto / (1 - pct / 100))
+
+  /** Elección de la pasarela, con la comisión y el total de cada una. */
+  function pasarelas({ numeros, elegida = null }) {
+    const monto = numeros.length * DATOS.rifa.precio
+    return `
+      <div class="s-campo">
+        <p class="s-label">¿Con qué quieres pagar?</p>
+        ${PASARELAS.map((p) => {
+          const total = conComision(monto, p.pct)
+          return `
+          <div class="s-fila-card ${p.id === elegida ? 's-fila-activa' : ''}" data-t="pasarela-${p.id}">
+            <div><p class="s-fuerte">${p.nombre}</p><p class="s-chico">Comisión ${clp(total - monto)} incluida</p></div>
+            <div class="s-der"><p class="s-mono">${clp(total)}</p></div>
+          </div>`
+        }).join('')}
+        <p class="s-chico">Pagar en línea tiene un costo adicional que cobra la pasarela. Tus números quedan reservados 15 minutos mientras pagas.</p>
+      </div>`
+  }
+
+  /** Pantalla de resultado al volver de la pasarela. */
+  function resultadoPago({ numeros, pasarela = 'tarjeta' }) {
+    const p = PASARELAS.find((x) => x.id === pasarela)
+    const monto = numeros.length * DATOS.rifa.precio
+    const total = conComision(monto, p.pct)
+    return `
+      <div class="s-gracias">
+        <div class="s-gracias-ico">${icono('check')}</div>
+        <p class="s-h1 s-centro">Pago aprobado</p>
+        <p class="s-muted s-centro">Tu pago quedó registrado. Ya puedes ver tu compra.</p>
+      </div>
+      <div class="s-caja s-resumen" data-t="detalle-pago">
+        <p><span>Concepto</span><b>Números ${numeros.join(', ')}</b></p>
+        <p><span>Pasarela</span><b>${p.nombre}</b></p>
+        <p><span>N° de operación</span><b class="s-mono">000123</b></p>
+        <p><span>Comisión</span><b class="s-mono">${clp(total - monto)}</b></p>
+        <p><span>Total</span><b class="s-total">${clp(total)}</b></p>
+      </div>
+      <div class="s-botones"><span class="s-btn s-btn-prim" data-t="ver-compras">Ver mis compras</span></div>`
   }
   function medios({ opciones, activo }) {
     return `
@@ -259,8 +307,16 @@ window.Capacitacion = window.Capacitacion || { modulos: [], plataforma: null }
       </div>`
   }
 
-  function modalConfirmar({ parcela, numeros, medio, comprador = '', nota }) {
+  function modalConfirmar({ parcela, numeros, medio, comprador = '', nota, pasarela = null }) {
     const n = numeros.length
+    const p = pasarela && PASARELAS.find((x) => x.id === pasarela)
+    const monto = n * DATOS.rifa.precio
+    const total = p ? conComision(monto, p.pct) : monto
+    const filasTotal = p
+      ? `<p><span>${n} × ${clp(DATOS.rifa.precio)}</span><b class="s-mono">${clp(monto)}</b></p>
+            <p><span>Comisión de la pasarela</span><b class="s-mono">${clp(total - monto)}</b></p>
+            <p><span>Total a pagar</span><b class="s-total">${clp(total)}</b></p>`
+      : `<p><span>${n} × ${clp(DATOS.rifa.precio)}</span><b class="s-total">${clp(monto)}</b></p>`
     return `
       <div class="s-velo">
         <div class="s-modal">
@@ -269,11 +325,11 @@ window.Capacitacion = window.Capacitacion || { modulos: [], plataforma: null }
             <p><span>Parcela</span><b>${parcela}</b></p>
             ${comprador ? `<p><span>Comprador</span><b>${comprador}</b></p>` : ''}
             <p><span>Números</span><b class="s-mono">${numeros.join(', ')}</b></p>
-            <p><span>Pago</span><b>${MEDIOS[medio][1]}</b></p>
-            <p><span>${n} × ${clp(DATOS.rifa.precio)}</span><b class="s-total">${clp(n * DATOS.rifa.precio)}</b></p>
+            <p><span>Pago</span><b>${MEDIOS[medio][1]}${p ? ` · ${p.nombre}` : ''}</b></p>
+            ${filasTotal}
           </div>
           <p class="s-chico">${nota}</p>
-          <div class="s-acciones"><span class="s-btn s-btn-ghost">Cancelar</span><span class="s-btn s-btn-prim" data-t="comprar">Comprar</span></div>
+          <div class="s-acciones"><span class="s-btn s-btn-ghost">Cancelar</span><span class="s-btn s-btn-prim" data-t="comprar">${p ? 'Ir a pagar' : 'Comprar'}</span></div>
         </div>
       </div>`
   }
@@ -332,6 +388,6 @@ window.Capacitacion = window.Capacitacion || { modulos: [], plataforma: null }
   C.ui = {
     icono, clp, DATOS, celular, escritorio, campo, login, avisoRifa, misLiquidaciones, encabezadoRifa, premios,
     grilla, medios, datosTransferencia, voucher, barra, modalConfirmar, tarjetaComprobante, agradecimiento,
-    pestanas, badge,
+    pestanas, badge, pasarelas, resultadoPago, conComision,
   }
 })(window.Capacitacion)

@@ -1,8 +1,9 @@
 """
 Rifas solidarias: módulo aparte de la boleta eléctrica.
 
-Lo recaudado NO participa de las liquidaciones ni del Motor EnerCheck: se paga en efectivo o por
-transferencia, o se imputa al gasto común (que se cobra en Comunidad Feliz).
+Lo recaudado NO participa de las liquidaciones ni del Motor EnerCheck: se paga en efectivo, por
+transferencia o en línea (pasarelas de pago, services/rifas_pago.py), o se imputa al gasto común (que se
+cobra en Comunidad Feliz).
 Ver openspec/changes/rifas-solidarias/design.md.
 """
 import csv
@@ -18,7 +19,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -32,6 +33,7 @@ from app.core.dependencies import (
     TenantId,
     get_db,
 )
+from app.models.pago import IntencionPago
 from app.models.parcela import Parcela
 from app.models.rifa import CompraRifa, ImputacionRifa, Rifa, RifaNumero
 from app.models.usuario import Usuario
@@ -44,6 +46,7 @@ from app.schemas.rifa import (
     CompraRifaResponse,
     ImputacionRifaResponse,
     MarcarImputacionRequest,
+    PagoIniciadoResponse,
     ParcelaVentaResponse,
     RifaCreate,
     RifaDetalleResponse,
@@ -51,6 +54,10 @@ from app.schemas.rifa import (
     RifaUpdate,
     TelefonoSugeridoResponse,
 )
+from app.schemas.pago import RedireccionResponse
+from app.services import rifas_pago
+from app.services.pagos import flujo
+from app.services.pagos.pasarelas import cotizar, pasarelas_ofrecibles
 
 router = APIRouter(prefix="/rifas", tags=["rifas"])
 
@@ -151,11 +158,18 @@ def _es_autor_portal(compra: CompraRifa, user: Usuario) -> bool:
 def _puede_anular(compra: CompraRifa, rifa: Rifa, user: Usuario) -> bool:
     if compra.anulada or rifa.estado != "abierta":
         return False
+    if compra.medio_pago == "en_linea":
+        # Mientras el pago está en curso nadie la anula; después, solo la administración
+        return _es_admin(user) and not _pago_en_curso(compra)
     if _es_admin(user):
         return True
     # La portería no anula (el efectivo no se "des-registra" sin la administración).
     # El vecino anula lo que compró él desde el portal, mientras no esté pagado.
     return _es_autor_portal(compra, user) and not compra.pagada
+
+
+def _pago_en_curso(compra: CompraRifa) -> bool:
+    return compra.intencion_pago is not None and compra.intencion_pago.estado == "INICIADO"
 
 
 def _puede_adjuntar_voucher(compra: CompraRifa, user: Usuario) -> bool:
@@ -186,6 +200,8 @@ def _compra_response(compra: CompraRifa, rifa: Rifa, user: Usuario) -> CompraRif
         anulada=compra.anulada,
         anulada_at=compra.anulada_at,
         anulada_por_nombre=compra.anulada_por.nombre if compra.anulada_por else None,
+        intencion_pago_id=compra.intencion_pago_id,
+        pago_en_linea_estado=compra.intencion_pago.estado if compra.intencion_pago else None,
         puede_anular=_puede_anular(compra, rifa, user),
         puede_adjuntar_voucher=_puede_adjuntar_voucher(compra, user),
     )
@@ -211,6 +227,7 @@ def _compras_stmt(rifa_id: int):
             selectinload(CompraRifa.parcela),
             selectinload(CompraRifa.usuario),
             selectinload(CompraRifa.anulada_por),
+            selectinload(CompraRifa.intencion_pago),
         )
         .where(CompraRifa.rifa_id == rifa_id)
         .order_by(CompraRifa.created_at.desc())
@@ -588,21 +605,61 @@ async def comprar_numeros(
     elif not parcela.activa:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="La parcela no está activa")
 
-    if data.medio_pago not in rifa.medios_pago:
+    # La transferencia manual del portal es el respaldo del pago en línea: vale si la rifa acepta cualquiera de los dos
+    respaldo_portal = canal == "portal" and data.medio_pago == "transferencia" and "en_linea" in rifa.medios_pago
+    if data.medio_pago not in rifa.medios_pago and not respaldo_portal:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Esta rifa no acepta pagos con {_MEDIO_PAGO_TEXTO[data.medio_pago].lower()}",
         )
+
+    monto = len(numeros) * rifa.precio_numero
+    disponibles = []
+    if canal == "portal" and "en_linea" in rifa.medios_pago:
+        disponibles = [
+            p for p in await pasarelas_ofrecibles(db, rifa.condominio_id) if cotizar(p, monto)[2] is None
+        ]
+    if data.medio_pago not in rifas_pago.medios_permitidos(rifa, canal, bool(disponibles)):
+        if data.medio_pago == "en_linea" and canal != "portal":
+            detalle = "El pago en línea lo hace el comunero desde el portal"
+        elif data.medio_pago == "en_linea":
+            detalle = "No hay una pasarela de pago disponible: paga por transferencia"
+        elif data.medio_pago == "transferencia" and canal == "portal":
+            detalle = "Esta rifa se paga en línea desde el portal; la transferencia manual se registra en la portería"
+        else:
+            detalle = "Esa forma de pago no está disponible"
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detalle)
+
     if data.medio_pago != "transferencia" and voucher_datos:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="El voucher solo corresponde a pagos por transferencia",
         )
-    if canal == "porteria" and data.medio_pago == "transferencia" and not voucher_datos:
+    if canal in ("porteria", "portal") and data.medio_pago == "transferencia" and not voucher_datos:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Adjunta la foto del voucher de la transferencia",
         )
+
+    pasarela = None
+    if data.medio_pago == "en_linea":
+        pasarela = next((p for p in disponibles if p.id == data.pasarela_id), None)
+        if pasarela is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Elige una pasarela de pago disponible"
+            )
+        # Una sola intención en curso por persona y rifa: nadie bloquea números sin pagar
+        en_curso = await db.scalar(select(exists().where(
+            IntencionPago.estado == "INICIADO",
+            IntencionPago.usuario_id == current_user.id,
+            IntencionPago.concepto == rifas_pago.CONSUMIDOR.concepto,
+            IntencionPago.referencia_id.in_(select(CompraRifa.id).where(CompraRifa.rifa_id == rifa.id)),
+        )))
+        if en_curso:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ya tienes un pago en línea en curso en esta rifa: termínalo o espera a que venza",
+            )
 
     vendidos = set(await _numeros_vendidos(rifa.id, db))
     tomados = sorted(n for n in numeros if n in vendidos)
@@ -625,7 +682,7 @@ async def comprar_numeros(
             comprador_nombre=data.comprador_nombre,
             telefono=data.telefono,
             numeros=sorted(numeros),
-            monto=len(numeros) * rifa.precio_numero,
+            monto=monto,
             medio_pago=data.medio_pago,
             pagada=pagada,
             pagada_at=_ahora() if pagada else None,
@@ -637,6 +694,19 @@ async def comprar_numeros(
         db.add(compra)
         await db.flush()
 
+        intencion = None
+        if pasarela is not None:
+            # La compra queda pendiente con sus números reservados mientras dure la intención
+            try:
+                intencion = await flujo.crear_intencion(
+                    db, pasarela=pasarela, usuario_id=current_user.id, email=current_user.email,
+                    concepto=rifas_pago.CONSUMIDOR.concepto, referencia_id=compra.id,
+                    descripcion=rifas_pago.descripcion(rifa, numeros), monto=compra.monto,
+                )
+            except flujo.PagoInvalido as exc:
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+            compra.intencion_pago_id = intencion.id
+
         await registrar_auditoria(
             db, usuario_id=current_user.id, condominio_id=rifa.condominio_id, accion="COMPRAR_RIFA",
             detalles={
@@ -644,6 +714,7 @@ async def comprar_numeros(
                 "parcela_id": parcela.id, "numeros": sorted(numeros), "monto": compra.monto,
                 "medio_pago": data.medio_pago, "canal": canal, "comprador_nombre": data.comprador_nombre,
                 "voucher": voucher_archivo,
+                **({"intencion_pago_id": str(intencion.id), "pasarela_id": pasarela.id} if intencion else {}),
             },
             ip_address=_ip(request),
         )
@@ -663,10 +734,27 @@ async def comprar_numeros(
         _borrar_voucher(voucher_archivo)
         raise
 
+    pago = None
+    if intencion is not None:
+        intencion_id = intencion.id
+        try:
+            # Ya con commit: la llamada al proveedor no ocurre con la rifa bloqueada
+            redireccion = await flujo.lanzar(db, intencion_id)
+        except flujo.PagoNoIniciado as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"{exc}. Tus números quedaron libres: intenta de nuevo o elige otra forma de pago",
+            )
+        pago = PagoIniciadoResponse(
+            intencion_id=intencion_id,
+            redireccion=RedireccionResponse(url=redireccion.url, metodo=redireccion.metodo, campos=redireccion.campos),
+        )
+
     compra = await _get_compra_o_404(rifa, compra.id, db)
     return CompraCreadaResponse(
         rifa=await _detalle(rifa, current_user, db),
         compra=_compra_response(compra, rifa, current_user),
+        pago=pago,
     )
 
 
@@ -685,6 +773,8 @@ async def anular_compra(
     _exigir_abierta(rifa)
     if compra.anulada:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="La compra ya está anulada")
+    if _pago_en_curso(compra):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El pago en línea de esta compra está en curso")
     if not _puede_anular(compra, rifa, current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -721,6 +811,8 @@ async def confirmar_pago(
     """Confirma una transferencia. Funciona también con la rifa cerrada."""
     rifa = await _get_rifa_o_404(rifa_id, tenant_id, db)
     compra = await _get_compra_o_404(rifa, compra_id, db)
+    if compra.medio_pago == "en_linea":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Los pagos en línea se confirman solos con la pasarela")
     if compra.medio_pago != "transferencia":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Solo se confirman pagos por transferencia")
     if compra.anulada:
@@ -819,6 +911,15 @@ async def cerrar_rifa(
 ):
     rifa = await _get_rifa_o_404(rifa_id, tenant_id, db, for_update=True)
     _exigir_abierta(rifa)
+
+    en_curso = await db.scalar(
+        select(func.count()).select_from(IntencionPago)
+        .join(CompraRifa, CompraRifa.intencion_pago_id == IntencionPago.id)
+        .where(CompraRifa.rifa_id == rifa.id, IntencionPago.estado == "INICIADO")
+    )
+    if en_curso:
+        plural = "pagos en línea en curso; espera a que terminen" if en_curso > 1 else "pago en línea en curso; espera a que termine"
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Hay {en_curso} {plural}")
 
     # Solo lo comprado con gasto común se imputa; efectivo y transferencia se pagan por fuera
     por_parcela = (
@@ -942,7 +1043,9 @@ def _csv(encabezado: list[str], filas: list[list], nombre: str) -> Response:
     )
 
 
-_MEDIO_PAGO_TEXTO = {"efectivo": "Efectivo", "transferencia": "Transferencia", "gasto_comun": "Gasto común"}
+_MEDIO_PAGO_TEXTO = {
+    "efectivo": "Efectivo", "transferencia": "Transferencia", "gasto_comun": "Gasto común", "en_linea": "Pago en línea",
+}
 _CANAL_TEXTO = {"portal": "Portal", "porteria": "Portería", "administracion": "Administración"}
 
 

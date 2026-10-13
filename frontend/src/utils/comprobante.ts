@@ -5,11 +5,13 @@ export const MEDIO_PAGO_TEXTO: Record<MedioPago, string> = {
   efectivo: 'Efectivo',
   transferencia: 'Transferencia',
   gasto_comun: 'Gasto común',
+  en_linea: 'Pago en línea',
 }
 
 export function estadoPagoTexto(c: Pick<CompraRifa, 'medio_pago' | 'pagada'>): string {
   if (c.medio_pago === 'gasto_comun') return 'Se cargará en el gasto común'
   if (c.pagada) return 'Pagado'
+  if (c.medio_pago === 'en_linea') return 'Pago en línea en curso'
   return 'Pendiente de confirmación de la transferencia'
 }
 

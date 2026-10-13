@@ -15,6 +15,7 @@ MENUS = [
     {"id": 7, "label": "Cobranza",      "path": "/cobranza",      "icon": "calculator",  "orden": 7, "modulo": "energia"},
     {"id": 8, "label": "Auditoría",     "path": "/auditoria",     "icon": "shield",      "orden": 8, "modulo": None},
     {"id": 9, "label": "Rifas",         "path": "/rifas",         "icon": "ticket",      "orden": 9, "modulo": "rifas"},
+    {"id": 10, "label": "Pasarelas de pago", "path": "/pasarelas", "icon": "credit-card", "orden": 10, "modulo": None},
 ]
 
 # rol_id: 1=super_admin | 2=admin_condominio | 3=lector | 4=comunero
@@ -42,6 +43,8 @@ MENU_ROLES = [
     {"menu_id": 8, "rol_id": 1},
     # Rifas — super_admin y admin_condominio (el comunero entra desde su portal)
     {"menu_id": 9, "rol_id": 1}, {"menu_id": 9, "rol_id": 2},
+    # Pasarelas de pago — super_admin las administra; admin_condominio las ve y resuelve los pagos en revisión
+    {"menu_id": 10, "rol_id": 1}, {"menu_id": 10, "rol_id": 2},
 ]
 
 

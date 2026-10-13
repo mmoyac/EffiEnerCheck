@@ -1,6 +1,6 @@
 # Rifas solidarias
 
-Módulo para organizar colectas con rifa dentro del condominio, por ejemplo para ayudar a un vecino. Los números se venden **en la portería** o los compran los vecinos **desde el portal**. Lo recaudado se paga en efectivo, por transferencia a la cuenta de la comunidad o se **imputa al gasto común**, que se cobra en Comunidad Feliz. La rifa no toca la boleta eléctrica, las liquidaciones ni el Motor EnerCheck.
+Módulo para organizar colectas con rifa dentro del condominio, por ejemplo para ayudar a un vecino. Los números se venden **en la portería** o los compran los vecinos **desde el portal**. Lo recaudado se paga en efectivo, por transferencia a la cuenta de la comunidad, **en línea** con una pasarela de pago ([pagos-en-linea.md](pagos-en-linea.md)) o se **imputa al gasto común**, que se cobra en Comunidad Feliz. La rifa no toca la boleta eléctrica, las liquidaciones ni el Motor EnerCheck.
 
 Spec: [`openspec/changes/rifas-solidarias/specs/rifas-solidarias/spec.md`](../openspec/changes/rifas-solidarias/specs/rifas-solidarias/spec.md) (pasa a `openspec/specs/rifas-solidarias/` al archivar el cambio).
 
@@ -10,8 +10,9 @@ Spec: [`openspec/changes/rifas-solidarias/specs/rifas-solidarias/spec.md`](../op
 Admin crea la rifa (premios, precio, cantidad de números, datos para transferir)  → abierta
 → Portería vende: parcela → números → comprador → forma de pago → (voucher) → teléfono
      ↳ comprobante: WhatsApp con el mensaje listo, o folio en pantalla / impreso
-→ Vecinos compran desde /mis-rifas (transferencia o gasto común)
-     ↳ pantalla de agradecimiento: folio, números, total y qué sigue según el pago
+→ Vecinos compran desde /mis-rifas (pago en línea o gasto común; sin pasarela, transferencia con voucher)
+     ↳ pago en línea: números reservados 15 min → pasarela → /pagos/<id>/resultado
+     ↳ otras formas: pantalla de agradecimiento con folio, números, total y qué sigue según el pago
 → Admin confirma las transferencias revisando el voucher
 → Admin cierra la rifa → cerrada + una imputación al gasto común por parcela
 → Admin descarga el CSV, lo carga en Comunidad Feliz y marca cada imputación como cargada
@@ -23,8 +24,9 @@ Admin crea la rifa (premios, precio, cantidad de números, datos para transferir
 | Forma | Quién puede usarla | Estado |
 |-------|--------------------|--------|
 | Efectivo | Portería y administración | Pagada al registrar. Suma en la **caja** del día. |
-| Transferencia | Todos | Pendiente hasta que el admin la confirma. En portería exige **foto del voucher**; en el portal el voucher es opcional y se puede adjuntar después. |
+| Transferencia | Portería y administración. El comunero, solo si no hay pasarela disponible | Pendiente hasta que el admin la confirma. En portería y en el portal exige **foto del voucher**. |
 | Gasto común | Todos | Al cerrar la rifa genera una **imputación** por parcela para cargar en Comunidad Feliz. |
+| Pago en línea | Solo el comunero desde el portal | Se confirma sola cuando la pasarela confirma el pago. El comunero paga además la comisión de la pasarela. Ver [pagos-en-linea.md](pagos-en-linea.md). |
 
 ## Reglas
 

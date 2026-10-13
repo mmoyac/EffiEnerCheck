@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { AxiosError } from 'axios'
 import { CheckCircle2, Image as ImageIcon, Paperclip } from 'lucide-react'
@@ -35,6 +36,13 @@ function EstadoPago({ c }: { c: CompraRifa }) {
   if (c.anulada) return <Badge color="slate">Anulada</Badge>
   if (c.medio_pago === 'gasto_comun') return <Badge color="purple">Gasto común</Badge>
   if (c.pagada) return <Badge color="green" dot>{MEDIO_PAGO_TEXTO[c.medio_pago]} · pagada</Badge>
+  if (c.medio_pago === 'en_linea') {
+    return c.pago_en_linea_estado === 'EN_REVISION'
+      ? <Badge color="red" dot>Pago en línea en revisión</Badge>
+      : c.intencion_pago_id
+        ? <Link to={`/pagos/${c.intencion_pago_id}/resultado`} className="hover:opacity-80"><Badge color="yellow" dot>Pago en línea en curso · ver</Badge></Link>
+        : <Badge color="yellow" dot>Pago en línea en curso</Badge>
+  }
   return <Badge color="yellow" dot>Transferencia por confirmar</Badge>
 }
 

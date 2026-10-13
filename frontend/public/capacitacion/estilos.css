@@ -259,6 +259,7 @@ a.tarjeta:hover { transform: translateY(-2px); border-color: var(--acento); }
 .s-badge-amarillo { background: rgb(234 179 8 / .15); color: #facc15; }
 .s-badge-morado { background: rgb(168 85 247 / .15); color: #c084fc; }
 .s-badge-gris { background: #334155; color: #cbd5e1; }
+.s-badge-azul { background: rgb(59 130 246 / .15); color: #60a5fa; }
 .s-chip { display: inline-flex; align-items: center; gap: 4px; padding: 5px 11px; border-radius: 999px; background: #334155; color: #e2e8f0; font-size: 12px; font-weight: 500; }
 .s-chip.activo { background: #16a34a; color: #fff; }
 .s-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
@@ -299,6 +300,8 @@ a.tarjeta:hover { transform: translateY(-2px); border-color: var(--acento); }
 .s-aviso { display: flex; align-items: center; gap: 10px; padding: 14px; border-radius: 14px; border: 1px solid rgb(34 197 94 / .4); background: rgb(22 163 74 / .1); }
 .s-aviso .ico { width: 22px; height: 22px; }
 .s-fila-card { display: flex; justify-content: space-between; align-items: center; padding: 14px; border-radius: 14px; background: #1e293b; }
+.s-campo .s-fila-card { margin-bottom: 8px; border: 2px solid #334155; }
+.s-fila-card.s-fila-activa { border-color: #22c55e; background: rgb(22 163 74 / .15); }
 
 .s-grilla { display: grid; grid-template-columns: repeat(var(--cols), 1fr); gap: 6px; }
 .s-num { display: grid; place-items: center; aspect-ratio: 1; border-radius: 10px; background: #334155; color: #f1f5f9; font-family: var(--mono); font-weight: 600; font-size: 14px; transition: background .2s, transform .2s; }

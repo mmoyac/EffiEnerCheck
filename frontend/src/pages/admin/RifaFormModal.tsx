@@ -7,7 +7,9 @@ import { Alert } from '../../components/ui/Alert'
 import type { MedioPago, Rifa, RifaCreate } from '../../types'
 import { MEDIO_PAGO_TEXTO } from '../../utils/comprobante'
 
-const TODOS_LOS_MEDIOS: MedioPago[] = ['efectivo', 'transferencia', 'gasto_comun']
+const TODOS_LOS_MEDIOS: MedioPago[] = ['efectivo', 'transferencia', 'gasto_comun', 'en_linea']
+// El pago en línea se activa a mano: exige una pasarela configurada para el condominio
+const MEDIOS_POR_DEFECTO: MedioPago[] = ['efectivo', 'transferencia', 'gasto_comun']
 
 interface Props {
   open: boolean
@@ -35,7 +37,7 @@ export function RifaFormModal({ open, onClose, onSubmit, loading, error, rifa, c
   const [precio, setPrecio] = useState('')
   const [cantidad, setCantidad] = useState('')
   const [condominioId, setCondominioId] = useState('')
-  const [medios, setMedios] = useState<MedioPago[]>(TODOS_LOS_MEDIOS)
+  const [medios, setMedios] = useState<MedioPago[]>(MEDIOS_POR_DEFECTO)
 
   useEffect(() => {
     if (!open) return
@@ -47,7 +49,7 @@ export function RifaFormModal({ open, onClose, onSubmit, loading, error, rifa, c
     setPrecio(rifa ? String(rifa.precio_numero) : '')
     setCantidad(rifa ? String(rifa.cantidad_numeros) : '')
     setCondominioId('')
-    setMedios(rifa?.medios_pago ?? TODOS_LOS_MEDIOS)
+    setMedios(rifa?.medios_pago ?? MEDIOS_POR_DEFECTO)
   }, [open, rifa])
 
   const precioNum = Number(precio)
@@ -148,6 +150,17 @@ export function RifaFormModal({ open, onClose, onSubmit, loading, error, rifa, c
           {medios.length === 0
             ? <p className="text-xs text-red-400">Elige al menos una forma de pago.</p>
             : <p className="text-xs text-slate-500">Las compras ya hechas conservan su forma de pago; solo las nuevas usan esta lista.</p>}
+          {medios.includes('en_linea') && (
+            <p className="text-xs text-slate-500">
+              Pago en línea: el comunero paga desde el portal con las pasarelas activas del condominio (con costo adicional).
+              Si no hay ninguna disponible, ve la transferencia manual con voucher.
+            </p>
+          )}
+          {medios.includes('en_linea') && !datosTransferencia.trim() && (
+            <p className="text-xs text-yellow-400">
+              Sin datos de transferencia: si la pasarela no está disponible, el comunero no tendrá a dónde transferir.
+            </p>
+          )}
         </fieldset>
 
         <div className="flex flex-col gap-1">

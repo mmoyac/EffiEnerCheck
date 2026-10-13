@@ -17,8 +17,8 @@
   const PRECIO = DATOS.rifa.precio
 
   // ---- Camino 3: el comunero desde su portal ---------------------------------------------------
-  const MEDIOS_PORTAL = ['transferencia', 'gasto_comun']
-  const detalleComunero = ({ seleccion = [], medio = null, capas = '' } = {}) =>
+  const MEDIOS_PORTAL = ['en_linea', 'gasto_comun']
+  const detalleComunero = ({ seleccion = [], medio = null, pasarela = null, capas = '' } = {}) =>
     ui.celular({
       rol: 'Comunero',
       cabExtra: `<span class="s-chip">${ui.icono('ticket')} Rifas</span>`,
@@ -29,8 +29,12 @@
           <p class="s-fuerte">Elige tus números</p>
           ${ui.grilla({ seleccion, mios: [6] })}
           ${seleccion.length > 1 ? ui.medios({ opciones: MEDIOS_PORTAL, activo: medio }) : ''}
+          ${medio === 'en_linea' ? ui.pasarelas({ numeros: seleccion, elegida: pasarela }) : ''}
         </div>`,
-      capas: ui.barra({ numeros: seleccion, faltante: seleccion.length > 1 && !medio ? 'Elige la forma de pago' : '' }) + capas,
+      capas: ui.barra({
+        numeros: seleccion,
+        faltante: seleccion.length > 1 && !medio ? 'Elige la forma de pago' : medio === 'en_linea' && !pasarela ? 'Elige cómo pagar' : '',
+      }) + capas,
     })
 
   const comunero = {
@@ -69,34 +73,46 @@
       },
       {
         titulo: 'Forma de pago',
-        texto: 'Elige cómo pagar: <b>transferencia</b> a la cuenta de la comunidad o <b>gasto común</b>, que se cobra después junto a tu gasto común. Cada rifa define qué formas acepta.',
+        texto: 'Elige cómo pagar: <b>pago en línea</b> (tarjeta, Webpay o transferencia desde tu banco, con un costo adicional) o <b>gasto común</b>, que se cobra después junto a tu gasto común. El pago en línea aparece <b>solo si tu comunidad decidió usarlo</b>, y cada rifa define qué formas acepta.',
         pantalla: () => detalleComunero({ seleccion: [7, 12] }),
-        toque: 'medio-gasto_comun',
+        toque: 'medio-en_linea',
+      },
+      {
+        titulo: 'Elegir con qué pagar',
+        texto: 'Si tu comunidad tiene más de una pasarela, ves cada una con su <b>comisión</b> y su <b>total</b>: la comisión la cobra la pasarela y se suma al valor de los números. Si hay una sola, al tocar «Pago en línea» pasas directo al resumen.',
+        pantalla: () => detalleComunero({ seleccion: [7, 12], medio: 'en_linea' }),
+        toque: 'pasarela-tarjeta',
       },
       {
         titulo: 'Confirmar',
         texto: 'Con los números y la forma de pago elegidos, toca <b>Confirmar</b>.',
-        pantalla: () => detalleComunero({ seleccion: [7, 12], medio: 'gasto_comun' }),
+        pantalla: () => detalleComunero({ seleccion: [7, 12], medio: 'en_linea', pasarela: 'tarjeta' }),
         toque: 'confirmar',
       },
       {
-        titulo: 'Revisar y comprar',
-        texto: 'Revisa la parcela, los números, la forma de pago y el total. Si todo está bien, toca <b>Comprar</b>.',
+        titulo: 'Revisar e ir a pagar',
+        texto: 'Revisa los números, la comisión y el <b>total a pagar</b>. Al tocar <b>Ir a pagar</b>, tus números quedan <b>reservados 15 minutos</b> y pasas a la página de la pasarela.',
         pantalla: () => detalleComunero({
-          seleccion: [7, 12], medio: 'gasto_comun',
-          capas: ui.modalConfirmar({ parcela: '14', numeros: [7, 12], medio: 'gasto_comun', nota: 'El monto se cargará en el gasto común de la parcela cuando se cierre la rifa. Puedes anular la compra mientras la rifa siga abierta y no esté pagada.' }),
+          seleccion: [7, 12], medio: 'en_linea', pasarela: 'tarjeta',
+          capas: ui.modalConfirmar({ parcela: '14', numeros: [7, 12], medio: 'en_linea', pasarela: 'tarjeta', nota: 'Te llevaremos a Tarjeta o Webpay para pagar. Si no completas el pago en 15 minutos, los números se liberan.' }),
         }),
         toque: 'comprar',
       },
       {
-        titulo: '¡Gracias por tu aporte!',
-        texto: 'Listo. Ves tu <b>folio</b>, tus números y <b>qué sigue</b>. Con gasto común no pagas nada ahora. Puedes <b>compartir</b> el comprobante por WhatsApp o guardarlo.',
+        titulo: 'Pago aprobado',
+        texto: 'Pagas en la pasarela y vuelves solo al portal. Ves el <b>resultado</b> con el número de operación. Si la pasarela todavía no confirma (una transferencia puede tardar unos minutos), la pantalla se actualiza sola.',
+        pantalla: () => ui.celular({ rol: 'Comunero', contenido: ui.resultadoPago({ numeros: [7, 12] }) }),
+        toque: 'ver-compras',
+      },
+      {
+        titulo: 'Si eliges gasto común',
+        texto: 'Con gasto común no pagas nada ahora: ves tu <b>folio</b>, tus números y <b>qué sigue</b>. Puedes <b>compartir</b> el comprobante por WhatsApp o guardarlo.',
         pantalla: () => ui.celular({ rol: 'Comunero', contenido: ui.agradecimiento({ folio: 'R1-015', numeros: [7, 12], parcela: '14', medio: 'gasto_comun' }) }),
         toque: 'compartir',
       },
       {
-        titulo: 'Si pagas por transferencia',
-        texto: 'Si eliges transferencia, la pantalla te muestra los <b>datos para transferir</b>. La compra queda <b>pendiente</b> hasta que la administración confirme que llegó el dinero.',
+        titulo: 'Si no hay pago en línea',
+        texto: 'Si tu comunidad <b>no usa pago en línea</b> (o la pasarela no está disponible en ese momento), en su lugar aparece <b>transferencia</b>: transfieres a la cuenta de la comunidad y adjuntas la <b>foto del voucher</b>. La compra queda <b>pendiente</b> hasta que la administración confirme que llegó el dinero.',
         pantalla: () => ui.celular({ rol: 'Comunero', contenido: ui.agradecimiento({ folio: 'R1-015', numeros: [7, 12], parcela: '14', medio: 'transferencia' }) }),
         enfoque: 'que-sigue',
       },
@@ -289,7 +305,7 @@
     rol: 'Administración',
     icono: 'maletin',
     titulo: 'En la administración',
-    resumen: 'La administración registra la compra desde su menú de Rifas y confirma los pagos por transferencia.',
+    resumen: 'La administración registra la compra desde su menú de Rifas, confirma los pagos por transferencia y revisa los pagos en línea.',
     dispositivo: 'escritorio',
     pagos: MEDIOS_STAFF,
     pasos: [
@@ -351,6 +367,73 @@
         texto: 'La compra queda <b>pagada</b>. Al <b>cerrar la rifa</b>, las compras con gasto común generan un cargo por parcela para cargar en Comunidad Feliz. El sorteo se hace fuera del sistema, con la lista de compradores.',
         pantalla: () => comprasAdmin(true),
       },
+      {
+        titulo: 'Pago en línea: lo decide la comunidad',
+        texto: `El pago en línea es <b>opcional</b> y se usa <b>solo si la comunidad lo decide</b> (por ejemplo, en asamblea o por acuerdo del comité).
+          La pasarela es una cuenta <b>de la propia comunidad</b> en Flow, Khipu u otro proveedor, con su contrato y su comisión, que paga el comunero
+          que elige pagar así. Si la comunidad no lo aprueba, todo sigue funcionando con efectivo, transferencia y gasto común.
+          Con el acuerdo y la cuenta abierta, pide al equipo de EFFIComunidad que la configure.`,
+        pantalla: () => ui.escritorio({
+          activo: 'Pasarelas de pago',
+          contenido: `<p class="s-h1">${ui.icono('tarjeta', 's-verde')} Pasarelas de pago</p>
+            <p class="s-muted">Las configura el equipo de la plataforma. Aquí ves cuáles están activas y su comisión.</p>
+            <div class="s-caja" data-t="decision">
+              <p class="s-fuerte">${ui.icono('usuarios', 's-verde')} Antes de usar pago en línea</p>
+              <p class="s-texto">1. La comunidad decide usarlo y acepta que el comunero pague la comisión.</p>
+              <p class="s-texto">2. La comunidad abre su cuenta en la pasarela (Flow, Khipu u otra).</p>
+              <p class="s-texto">3. El equipo de EFFIComunidad la configura y la prueba.</p>
+              <p class="s-texto">4. La administración marca <b>Pago en línea</b> en cada rifa que lo acepte.</p>
+            </div>
+            <p class="s-muted">Tu comunidad aún no tiene pasarelas de pago.</p>`,
+        }),
+        enfoque: 'decision',
+      },
+      {
+        titulo: 'Activarlo en la rifa',
+        texto: 'Con la pasarela lista, el pago en línea se habilita <b>rifa por rifa</b>: al crear o editar la rifa, marca <b>Pago en línea</b> en las formas de pago. Deja también los <b>datos para transferir</b>: si la pasarela no está disponible, el comunero verá la transferencia manual con voucher.',
+        pantalla: () => ui.escritorio({
+          activo: 'Rifas',
+          contenido: `<p class="s-h1">Editar rifa</p>
+            <div class="s-campo"><p class="s-label">Formas de pago aceptadas</p>
+              <div class="s-chips">
+                <span class="s-chip activo">${ui.icono('billete')} Efectivo</span>
+                <span class="s-chip activo">${ui.icono('banco')} Transferencia</span>
+                <span class="s-chip activo">${ui.icono('boleta')} Gasto común</span>
+                <span class="s-chip" data-t="marcar-en-linea">${ui.icono('tarjeta')} Pago en línea</span>
+              </div>
+              <p class="s-chico">Pago en línea: el comunero paga desde el portal con las pasarelas activas de la comunidad (con costo adicional).</p>
+            </div>
+            <div class="s-campo"><p class="s-label">Datos para transferir</p><p class="s-pre s-caja">${DATOS.rifa.transferencia}</p></div>`,
+        }),
+        toque: 'marcar-en-linea',
+      },
+      {
+        titulo: 'Pagos en línea',
+        texto: 'Lo que los comuneros pagan <b>en línea</b> se confirma solo, sin voucher. En <b>Pasarelas de pago</b> ves las pasarelas de tu comunidad y su comisión (las configura el equipo de EFFIComunidad).',
+        pantalla: () => ui.escritorio({
+          activo: 'Pasarelas de pago',
+          contenido: `<p class="s-h1">${ui.icono('tarjeta', 's-verde')} Pasarelas de pago</p>
+            <p class="s-muted">Las configura el equipo de la plataforma. Aquí ves cuáles están activas y su comisión.</p>
+            <div class="s-fila-card"><div><p class="s-fuerte">Tarjeta o Webpay</p><p class="s-chico">Flow · 3,8 %</p></div>
+              <div class="s-der">${ui.badge('Producción', 'azul')} ${ui.badge('● Activa', 'verde')}</div></div>
+            <div class="s-fila-card"><div><p class="s-fuerte">Transferencia bancaria</p><p class="s-chico">Khipu · 1,5 %</p></div>
+              <div class="s-der">${ui.badge('Producción', 'azul')} ${ui.badge('● Activa', 'verde')}</div></div>`,
+        }),
+        enfoque: 'menu-pasarelas',
+      },
+      {
+        titulo: 'Pagos por revisar',
+        texto: 'Si una pasarela aprueba un pago que no se puede aplicar (por ejemplo, porque esos números ya se vendieron), aparece en <b>Pagos por revisar</b>. Resuélvelo con el comunero (otros números o la devolución en la pasarela) y toca <b>Marcar resuelto</b> con una nota.',
+        pantalla: () => ui.escritorio({
+          activo: 'Pasarelas de pago',
+          contenido: `<p class="s-h1">${ui.icono('alerta', 's-amarillo')} Pagos por revisar</p>
+            <div class="s-card"><div class="s-entre"><p class="s-fuerte">Ana Soto</p><b class="s-mono">${clp(ui.conComision(2 * PRECIO, 3.8))}</b></div>
+              <p class="s-chico">${DATOS.rifa.nombre} – números 7, 12</p>
+              <p class="s-texto s-amarillo">Pago aprobado sin aplicar: números ya vendidos a otra compra: 12</p>
+              <div class="s-acciones"><span class="s-btn s-btn-sec s-btn-sm" data-t="resolver">Marcar resuelto</span></div></div>`,
+        }),
+        toque: 'resolver',
+      },
     ],
   }
 
@@ -366,10 +449,11 @@
     caminosTitulo: 'Hay 3 maneras de comprar un número',
     pagos: [
       { medio: 'efectivo', nombre: 'Efectivo', quien: 'Portería y administración', estado: 'Queda pagado al momento.' },
-      { medio: 'transferencia', nombre: 'Transferencia', quien: 'Los tres caminos', estado: 'Queda pendiente hasta que la administración confirma que llegó el dinero. En portería se exige la foto del voucher.' },
+      { medio: 'transferencia', nombre: 'Transferencia', quien: 'Portería y administración. El comunero, solo si no hay pago en línea', estado: 'Queda pendiente hasta que la administración confirma que llegó el dinero. Se exige la foto del voucher.' },
       { medio: 'gasto_comun', nombre: 'Gasto común', quien: 'Los tres caminos', estado: 'No se paga en el momento: al cerrar la rifa se carga en un próximo gasto común de la parcela.' },
+      { medio: 'en_linea', nombre: 'Pago en línea', quien: 'El comunero desde su portal, solo si la comunidad decidió usarlo', estado: 'Con tarjeta, Webpay o transferencia desde el banco, más la comisión de la pasarela. Queda pagado en cuanto la pasarela lo confirma.' },
     ],
-    notaPagos: 'Cada rifa define qué formas de pago acepta, así que puede que no veas las tres.',
+    notaPagos: 'Cada rifa define qué formas de pago acepta, así que puede que no las veas todas. El pago en línea es opcional: existe solo si la comunidad decide usarlo y abre su cuenta en una pasarela.',
     recorridos: [porteria, administracion, comunero],
   })
 })(window.Capacitacion)

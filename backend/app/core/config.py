@@ -42,5 +42,14 @@ class Settings(BaseSettings):
     # Portal al que apuntan los enlaces cuando el usuario no tiene condominio o este no tiene portal_url
     PORTAL_URL_POR_DEFECTO: str = "http://localhost:3000"
 
+    # Pagos en línea (cambio pasarelas-pago). Clave maestra de las credenciales de las pasarelas:
+    # 32 bytes en base64; obligatoria en producción (app/arranque.py). Rotarla: python -m app.db.rotar_clave_pagos
+    PAGOS_CLAVE_MAESTRA: str = ""
+    # Solo desarrollo: base pública (túnel cloudflared) que reemplaza la de la URL de notificación del
+    # proveedor, porque los webhooks no llegan a localhost. En producción, vacía.
+    URL_PUBLICA_PAGOS: str = ""
+    # Conciliación en segundo plano (services/pagos/conciliacion.py); los tests la apagan
+    PAGOS_CONCILIACION: bool = True
+
 
 settings = Settings()

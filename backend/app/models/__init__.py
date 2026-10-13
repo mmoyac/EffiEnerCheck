@@ -7,6 +7,7 @@ from .condominio_modulo import CondominioDominio, CondominioModulo
 from .cuenta_luz import MovimientoLuz
 from .lectura import LecturaParcela
 from .liquidacion import LiquidacionParcela
+from .pago import IntencionPago, PasarelaPago
 from .parcela import Parcela
 from .rifa import CompraRifa, ImputacionRifa, Rifa, RifaNumero
 from .rol import Rol
@@ -33,4 +34,6 @@ __all__ = [
     "CompraRifa",
     "RifaNumero",
     "ImputacionRifa",
+    "PasarelaPago",
+    "IntencionPago",
 ]

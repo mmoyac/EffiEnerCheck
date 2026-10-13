@@ -211,6 +211,7 @@ Table rifas {
   beneficiario varchar
   descripcion text
   premios "text[]" [note: 'En orden: el primero es el 1.º premio']
+  medios_pago "varchar[]" [note: 'Formas aceptadas (al menos una): efectivo | transferencia | gasto_comun | en_linea']
   datos_transferencia text
   precio_numero integer [note: 'CLP por número']
   cantidad_numeros integer [note: 'Números del 1 al N']
@@ -232,12 +233,13 @@ Table compras_rifa {
   telefono varchar [note: '56XXXXXXXXX; destino del comprobante']
   numeros "integer[]" [note: 'Números originales; se conservan si se anula']
   monto integer [note: 'Congelado al comprar']
-  medio_pago varchar [note: 'efectivo | transferencia | gasto_comun']
+  medio_pago varchar [note: 'efectivo | transferencia | gasto_comun | en_linea']
   pagada boolean [default: false]
   pagada_at timestamp
   pago_confirmado_por_id integer [ref: > usuarios.id]
   voucher_archivo varchar [note: 'En /app/privado/vouchers (no público)']
   voucher_mime varchar
+  intencion_pago_id uuid [ref: > intenciones_pago.id, note: 'Pago en línea vigente (medio_pago = en_linea)']
   created_at timestamp
   anulada boolean [default: false]
   anulada_at timestamp
@@ -271,4 +273,56 @@ Table imputaciones_rifa {
   indexes {
     (rifa_id, parcela_id) [unique]
   }
+}
+
+// Pagos en línea: base común de la plataforma (cambio pasarelas-pago)
+Table pasarelas_pago {
+  id integer [primary key]
+  condominio_id integer [ref: > condominios.id]
+  proveedor varchar [note: 'flow | khipu | ... (services/pagos/proveedores)']
+  nombre_visible varchar
+  ambiente varchar [note: 'integracion | produccion']
+  credenciales_cifradas bytea [note: 'AES-256-GCM con PAGOS_CLAVE_MAESTRA; AAD condominio:<id>:pasarela:<id>. Nunca sale por la API']
+  credenciales_at timestamp
+  comision_porcentaje "numeric(7,4)" [default: 0, note: 'Con IVA incluido (hasta 4 decimales, p. ej. Khipu 0,69 % + IVA = 0,8211); la paga el comunero']
+  comision_fija integer [default: 0]
+  orden integer [default: 0]
+  activa boolean [default: false]
+  prueba_at timestamp
+  prueba_ok boolean
+  prueba_mensaje varchar
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table intenciones_pago {
+  id uuid [primary key]
+  condominio_id integer [ref: > condominios.id]
+  pasarela_id integer [ref: > pasarelas_pago.id]
+  usuario_id integer [ref: > usuarios.id]
+  concepto varchar [note: 'Qué se paga: rifa_compra (services/pagos/consumidores.py)']
+  referencia_id integer [note: 'Id del concepto (compras_rifa.id)']
+  descripcion varchar
+  monto integer [note: 'Lo adeudado']
+  comision integer
+  total integer [note: 'monto + comision: lo que cobra la pasarela']
+  estado varchar [note: 'INICIADO | CONFIRMADO | RECHAZADO | EXPIRADO | EN_REVISION']
+  vence_at timestamp [note: '15 minutos']
+  orden_comercio varchar(26) [unique, note: 'UUID en base32 sin relleno']
+  token_proveedor varchar
+  transaccion_proveedor varchar
+  email_pagador varchar [note: 'Solo para enviarlo; se borra al terminar']
+  autorizacion varchar
+  ultimos_digitos varchar(4)
+  medio varchar
+  monto_confirmado integer
+  respuesta_proveedor jsonb [note: 'Filtrada: sin RUT, nombre, correo ni cuenta']
+  motivo text
+  consultado_at timestamp
+  confirmado_at timestamp
+  resuelta_at timestamp
+  resuelta_por_id integer [ref: > usuarios.id]
+  nota_resolucion text
+  created_at timestamp
+  updated_at timestamp
 }

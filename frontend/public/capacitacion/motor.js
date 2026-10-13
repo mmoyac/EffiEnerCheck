@@ -14,8 +14,8 @@
   const movimientoReducido = window.matchMedia('(prefers-reduced-motion: reduce)')
   const reducido = () => movimientoReducido.matches
   const modulos = () => [...C.modulos].sort((a, b) => a.orden - b.orden)
-  const NOMBRE_PAGO = { efectivo: 'Efectivo', transferencia: 'Transferencia', gasto_comun: 'Gasto común' }
-  const ICONO_PAGO = { efectivo: 'billete', transferencia: 'banco', gasto_comun: 'boleta' }
+  const NOMBRE_PAGO = { efectivo: 'Efectivo', transferencia: 'Transferencia', gasto_comun: 'Gasto común', en_linea: 'Pago en línea' }
+  const ICONO_PAGO = { efectivo: 'billete', transferencia: 'banco', gasto_comun: 'boleta', en_linea: 'tarjeta' }
 
   const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
 

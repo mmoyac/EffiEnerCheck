@@ -1,12 +1,16 @@
 from datetime import datetime
+from uuid import UUID
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 
+from app.schemas.pago import RedireccionResponse
 from app.utils.telefono import normalizar_telefono
 
-MedioPago = Literal["efectivo", "transferencia", "gasto_comun"]
-MEDIOS_PAGO: list[str] = ["efectivo", "transferencia", "gasto_comun"]
+MedioPago = Literal["efectivo", "transferencia", "gasto_comun", "en_linea"]
+# Orden del catálogo; en_linea (pasarelas de pago) la activa la administración en cada rifa
+MEDIOS_PAGO: list[str] = ["efectivo", "transferencia", "gasto_comun", "en_linea"]
+MEDIOS_POR_DEFECTO: list[str] = ["efectivo", "transferencia", "gasto_comun"]
 
 
 def _medios_validos(v: list[str] | None) -> list[str] | None:
@@ -38,7 +42,7 @@ class RifaCreate(BaseModel):
     datos_transferencia: str | None = None
     precio_numero: PositiveInt
     cantidad_numeros: PositiveInt
-    medios_pago: list[MedioPago] = Field(default_factory=lambda: list(MEDIOS_PAGO))
+    medios_pago: list[MedioPago] = Field(default_factory=lambda: list(MEDIOS_POR_DEFECTO))
 
     @field_validator("premios")
     @classmethod
@@ -100,6 +104,8 @@ class CompraRifaRequest(BaseModel):
     medio_pago: MedioPago
     comprador_nombre: str | None = None
     telefono: str | None = None
+    # Solo en_linea: la pasarela elegida (GET /pagos/disponibles)
+    pasarela_id: int | None = None
 
     @field_validator("comprador_nombre")
     @classmethod
@@ -133,6 +139,9 @@ class CompraRifaResponse(BaseModel):
     anulada: bool
     anulada_at: datetime | None
     anulada_por_nombre: str | None
+    # en_linea: id y estado de su intención de pago (INICIADO = pago en curso)
+    intencion_pago_id: UUID | None = None
+    pago_en_linea_estado: str | None = None
     # Lo que el usuario que consulta puede hacer con la compra ahora
     puede_anular: bool
     puede_adjuntar_voucher: bool
@@ -159,10 +168,17 @@ class RifaDetalleResponse(RifaResponse):
     imputaciones: list[ImputacionRifaResponse]
 
 
+class PagoIniciadoResponse(BaseModel):
+    """Pago en línea recién iniciado: el navegador sigue la redirección hacia la pasarela."""
+    intencion_id: UUID
+    redireccion: RedireccionResponse
+
+
 class CompraCreadaResponse(BaseModel):
     """Respuesta de una compra: el detalle actualizado y la compra recién creada (para el comprobante)."""
     rifa: RifaDetalleResponse
     compra: CompraRifaResponse
+    pago: PagoIniciadoResponse | None = None
 
 
 class MarcarImputacionRequest(BaseModel):

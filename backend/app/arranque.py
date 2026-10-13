@@ -26,6 +26,7 @@ from app.core.security import CLAVES_CONOCIDAS, hash_password, verify_password
 from app.db.seeds.menus import seed_menus
 from app.db.seeds.roles import seed_roles
 from app.db.session import AsyncSessionLocal, engine
+from app.services.pagos.cifrado import ClaveMaestraInvalida, leer_clave
 from app.services.sitio import ContenidoSitioInvalido, cargar_contenidos
 from app.models.rol import Rol
 from app.models.usuario import Usuario
@@ -50,6 +51,12 @@ def validar_configuracion() -> None:
         errores.append("DEBUG debe ser false (con true se registran las consultas SQL)")
     if not settings.GEMINI_API_KEY:
         errores.append("falta GEMINI_API_KEY (OCR de boletas)")
+    try:
+        leer_clave()
+    except ClaveMaestraInvalida as exc:
+        errores.append(f"{exc} (credenciales de las pasarelas de pago)")
+    if settings.URL_PUBLICA_PAGOS:
+        errores.append("URL_PUBLICA_PAGOS debe quedar vacía en producción (es solo para el túnel de desarrollo)")
     if errores:
         raise ArranqueError("Configuración inválida para producción:\n  - " + "\n  - ".join(errores))
 

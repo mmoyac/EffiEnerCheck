@@ -213,7 +213,7 @@ export interface SinLecturaAnterior {
 // --- Rifas solidarias (independientes de la boleta eléctrica) ---
 
 export type EstadoRifa = 'abierta' | 'cerrada'
-export type MedioPago = 'efectivo' | 'transferencia' | 'gasto_comun'
+export type MedioPago = 'efectivo' | 'transferencia' | 'gasto_comun' | 'en_linea'
 export type CanalCompra = 'portal' | 'porteria' | 'administracion'
 
 export interface Rifa {
@@ -257,6 +257,9 @@ export interface CompraRifa {
   anulada: boolean
   anulada_at: string | null
   anulada_por_nombre: string | null
+  /** en_linea: su intención de pago (INICIADO = pago en curso) */
+  intencion_pago_id: string | null
+  pago_en_linea_estado: EstadoIntencion | null
   puede_anular: boolean
   puede_adjuntar_voucher: boolean
 }
@@ -286,6 +289,8 @@ export interface RifaDetalle extends Rifa {
 export interface CompraCreada {
   rifa: RifaDetalle
   compra: CompraRifa
+  /** Solo en pagos en línea: el navegador sigue la redirección hacia la pasarela */
+  pago: PagoIniciado | null
 }
 
 export interface CompraRifaInput {
@@ -294,6 +299,8 @@ export interface CompraRifaInput {
   medio_pago: MedioPago
   comprador_nombre?: string | null
   telefono?: string | null
+  /** Solo en_linea: la pasarela elegida */
+  pasarela_id?: number | null
 }
 
 export interface ParcelaVenta {
@@ -326,3 +333,116 @@ export interface RifaCreate {
 }
 
 export type RifaUpdate = Partial<Omit<RifaCreate, 'condominio_id'>>
+
+// ---------------------------------------------------------------------------
+// Pagos en línea (cambio pasarelas-pago)
+// ---------------------------------------------------------------------------
+
+export type AmbientePasarela = 'integracion' | 'produccion'
+export type EstadoIntencion = 'INICIADO' | 'CONFIRMADO' | 'RECHAZADO' | 'EXPIRADO' | 'EN_REVISION'
+
+export interface CampoCredencial {
+  nombre: string
+  etiqueta: string
+  secreto: boolean
+}
+
+export interface ProveedorPago {
+  proveedor: string
+  nombre: string
+  campos_credenciales: CampoCredencial[]
+  requiere_email: boolean
+  monto_minimo: number
+}
+
+export interface Pasarela {
+  id: number
+  condominio_id: number
+  proveedor: string
+  proveedor_nombre: string
+  nombre_visible: string
+  ambiente: AmbientePasarela
+  /** Decimal serializado como texto, p. ej. "3.80" */
+  comision_porcentaje: string
+  comision_fija: number
+  orden: number
+  activa: boolean
+  /** Nunca vienen los valores: solo si están cargadas */
+  credenciales_cargadas: boolean
+  credenciales_at: string | null
+  prueba_at: string | null
+  prueba_ok: boolean | null
+  prueba_mensaje: string | null
+  prueba_vigente: boolean
+  tiene_pagos: boolean
+}
+
+export interface PasarelaInput {
+  condominio_id: number
+  proveedor: string
+  nombre_visible: string
+  ambiente: AmbientePasarela
+  credenciales: Record<string, string>
+  comision_porcentaje: string
+  comision_fija: number
+  orden: number
+}
+
+export type PasarelaUpdate = Partial<Pick<PasarelaInput, 'nombre_visible' | 'ambiente' | 'comision_porcentaje' | 'comision_fija' | 'orden'>>
+
+export interface PruebaPasarela {
+  ok: boolean
+  mensaje: string
+  pasarela: Pasarela
+}
+
+export interface OpcionPago {
+  pasarela_id: number
+  nombre_visible: string
+  proveedor: string
+  comision_porcentaje: string
+  comision_fija: number
+  monto: number
+  comision: number
+  total: number
+  disponible: boolean
+  motivo: string | null
+}
+
+export interface Redireccion {
+  url: string
+  metodo: 'GET' | 'POST'
+  campos: Record<string, string>
+}
+
+export interface PagoIniciado {
+  intencion_id: string
+  redireccion: Redireccion
+}
+
+export interface IntencionPago {
+  id: string
+  estado: EstadoIntencion
+  concepto: string
+  descripcion: string
+  monto: number
+  comision: number
+  total: number
+  pasarela_nombre: string
+  vence_at: string
+  created_at: string
+  confirmado_at: string | null
+  numero_operacion: string | null
+  autorizacion: string | null
+  ultimos_digitos: string | null
+  medio: string | null
+  motivo: string | null
+  volver_a: string | null
+}
+
+export interface IntencionRevision extends IntencionPago {
+  usuario_nombre: string
+  monto_confirmado: number | null
+  resuelta_at: string | null
+  nota_resolucion: string | null
+}

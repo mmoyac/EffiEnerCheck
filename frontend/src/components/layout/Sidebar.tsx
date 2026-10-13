@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, Users, MapPin,
-  FileText, Activity, Calculator, Shield, Ticket,
+  FileText, Activity, Calculator, Shield, Ticket, CreditCard,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { menusApi } from '../../api/menus'
@@ -20,6 +20,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   'calculator':  Calculator,
   'shield':      Shield,
   'ticket':      Ticket,
+  'credit-card': CreditCard,
 }
 
 function MenuItemLink({ item }: { item: MenuItem }) {

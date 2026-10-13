@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import os
 from contextlib import asynccontextmanager
 
@@ -9,6 +11,7 @@ from sqlalchemy import text
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.db.session import engine
+from app.services.pagos.conciliacion import bucle as conciliar_pagos
 from app.services.sitio import cargar_contenidos
 
 # En producción la documentación interactiva no se publica (el repositorio y el sitio son públicos)
@@ -20,7 +23,13 @@ _docs = not settings.es_produccion
 async def lifespan(_: FastAPI):
     # Falla temprano si un archivo de contenido de la landing no cumple el esquema
     cargar_contenidos()
+    # Conciliación de pagos en línea cada 2 min (un solo worker a la vez, por candado de PostgreSQL)
+    conciliacion = asyncio.create_task(conciliar_pagos()) if settings.PAGOS_CONCILIACION else None
     yield
+    if conciliacion:
+        conciliacion.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await conciliacion
 
 
 app = FastAPI(

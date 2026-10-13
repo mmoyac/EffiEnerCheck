@@ -30,7 +30,8 @@ createRoot(document.getElementById('root')!).render(
           <TemaCondominio />
           <App />
         </AuthProvider>
-        <ReactQueryDevtools initialIsOpen={false} />
+        {/* Solo en desarrollo. A la izquierda: a la derecha tapaba el botón Confirmar de la barra fija del celular */}
+        <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
       </QueryClientProvider>
     </BrowserRouter>
   </StrictMode>,

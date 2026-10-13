@@ -48,6 +48,8 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://enercheck:ci-postgres@localhost:5432/enercheck
       SECRET_KEY: ci-secreto-desechable-de-integracion-continua
       ENTORNO: desarrollo
+      # Clave maestra desechable para cifrar credenciales de pasarelas en las pruebas (no es un secreto)
+      PAGOS_CLAVE_MAESTRA: Y2ktY2xhdmUtZGVzZWNoYWJsZS1kZS1wYWdvcy0zMmI=
     defaults:
       run:
         working-directory: backend

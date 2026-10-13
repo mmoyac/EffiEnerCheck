@@ -46,7 +46,9 @@ EnerCheck/
 │   │   │       ├── lecturas.py          # CRUD lecturas de remarcadores
 │   │   │       ├── liquidaciones.py     # Calcular (Motor EnerCheck) + consulta + PDF del período
 │   │   │       ├── menus.py             # GET /menus/me → navegación según rol
+│   │   │       ├── pagos.py             # Pagos en línea: opciones, estado, consulta, revisión + retorno/webhook PÚBLICOS
 │   │   │       ├── parcelas.py          # CRUD parcelas del condominio
+│   │   │       ├── pasarelas.py         # Pasarelas de pago por condominio (escritura solo super_admin)
 │   │   │       ├── rifas.py             # Rifas: venta, pagos, voucher, caja, cierre, imputaciones, CSV
 │   │   │       ├── sitio.py             # GET /sitio: contenido PÚBLICO de la landing (resuelve el condominio por dominio)
 │   │   │       └── usuarios.py          # CRUD usuarios + invitaciones ({id}/invitacion e invitaciones masivas)
@@ -74,6 +76,8 @@ EnerCheck/
 │   │   │   ├── enercheck.py             # Motor EnerCheck — fórmulas de distribución
 │   │   │   ├── reporte_liquidaciones.py # PDF del período (fpdf2): boleta, una fila por parcela y cuadre
 │   │   │   ├── enlaces.py               # Enlaces de acceso de un solo uso (invitación 7 d, recuperación 1 h)
+│   │   │   ├── pagos/                   # Pagos en línea: cifrado, proveedores/ (flow, khipu), flujo, conciliación, consumidores
+│   │   │   ├── rifas_pago.py            # Consumidor de pagos de las rifas + medios_permitidos() por canal
 │   │   │   ├── correo.py                # Correo transaccional vía Resend (HTTP); nunca lanza
 │   │   │   ├── claves.py                # asignar_clave(): política + hash + cierra sesiones
 │   │   │   └── ocr.py                   # extraer_datos_boleta() → llama Gemini Vision
@@ -366,11 +370,25 @@ El cargo de luz se cobra en el gasto común; el comunero abona a su deuda total 
 - **Un movimiento nunca se borra:** se anula (`anulado`, `anulado_por`, `anulado_en`, `motivo_anulacion`). Auditoría `REGISTRAR_ABONO_LUZ` / `ANULAR_ABONO_LUZ`, con el saldo antes y después. Un saldo inicial corregido anula al anterior.
 - **Pantallas:** `/cobranza` (`Cobranza.tsx`, opción «Cobranza» del menú) es de la administración; `/liquidaciones` (`MiLiquidacion`) es del comunero. Cada una redirige a la otra si entra el rol equivocado. La migración `menu_cobranza` renombró la opción del menú.
 
+## Pagos en línea (`services/pagos/`, `endpoints/pagos.py`, `endpoints/pasarelas.py`)
+
+Base común de la plataforma para cobrar con Flow, Khipu u otros (cambio `pasarelas-pago`). Detalle en [docs/pagos-en-linea.md](docs/pagos-en-linea.md).
+
+- **Pasarelas** por condominio: las administra solo el `super_admin`; el `admin_condominio` las ve. Credenciales cifradas con AES-256-GCM (`PAGOS_CLAVE_MAESTRA`, AAD `condominio:<id>:pasarela:<id>`): **nunca** salen por la API ni a la auditoría.
+- **El resultado lo decide siempre el backend consultando al proveedor.** Retorno y webhook (públicos) solo identifican la intención, que se busca en la base antes de llamar al proveedor.
+- **Nunca llamar al proveedor con una transacción abierta:** commit → llamada → `SELECT … FOR UPDATE` de la intención. Todo pasa por `flujo.confirmar()`, el único camino de confirmación (idempotente).
+- Solo se rechaza con una respuesta definitiva del proveedor o tras anular el cobro en él. Un estado desconocido = pendiente.
+- **Proveedor nuevo** = un `Adaptador` en `services/pagos/proveedores/` + registro. **Concepto nuevo** (algo que se cobra) = un `Consumidor` en `services/pagos/consumidores.py`.
+- Comisión a cargo del pagador: `total = ⌈(monto + fija) / (1 − %/100)⌉`.
+- Conciliación cada 2 min en el `lifespan` con `pg_try_advisory_lock` (`PAGOS_CONCILIACION=false` la apaga).
+- Tests con `httpx.MockTransport` (adaptadores) y un adaptador falso (flujo): nunca la red.
+
 ## Rifas solidarias (`backend/app/api/v1/endpoints/rifas.py`)
 
 Módulo **aparte** de la boleta: nada de lo recaudado entra a `liquidaciones_parcelas` ni al Motor EnerCheck. No mezclar. Detalle en [docs/rifas.md](docs/rifas.md).
 
-- **Formas de pago** por compra: `efectivo` (solo portería/admin; pagada al registrar), `transferencia` (pendiente hasta `confirmar-pago`) y `gasto_comun` (al cerrar genera `ImputacionRifa` por parcela, que se carga a mano en **Comunidad Feliz**). El `canal` (`portal`/`porteria`/`administracion`) lo decide el servidor según el rol.
+- **Formas de pago** por compra: `efectivo` (solo portería/admin; pagada al registrar), `transferencia` (pendiente hasta `confirmar-pago`), `gasto_comun` (al cerrar genera `ImputacionRifa` por parcela, que se carga a mano en **Comunidad Feliz**) y `en_linea` (pasarela; se paga sola al confirmarse su intención). El `canal` (`portal`/`porteria`/`administracion`) lo decide el servidor según el rol.
+- **Por canal** (`rifas_pago.medios_permitidos`, espejo en `CompraPanel`): el comunero paga `en_linea` o `gasto_comun`; sin pasarela disponible, `transferencia` con voucher obligatorio. Portería y administración: lo de la rifa salvo `en_linea`. Una compra `en_linea` en curso reserva sus números, no se anula ni se confirma a mano y bloquea el cierre de la rifa.
 - **Unicidad**: `UNIQUE (rifa_id, numero)` en `rifa_numeros` + `SELECT ... FOR UPDATE` sobre la rifa (que también protege el contador `ultimo_folio`). Al anular se **borran** las filas de `rifa_numeros`; la `CompraRifa` queda `anulada=True` con sus `numeros`. La portería no anula.
 - **Folio** `R{rifa_id}-{folio:03d}` correlativo por rifa; no se reutiliza.
 - **Vouchers** en `/app/privado/vouchers` (volumen `privado_data`), **nunca** en `/app/uploads`, que se sirve como estático público. Se entregan solo por `GET .../compras/{cid}/voucher` (staff o usuarios de la parcela). `POST /compras` es multipart (`datos` JSON + `voucher`); en transferencias de portería el voucher es obligatorio.
@@ -509,6 +527,8 @@ ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 GEMINI_API_KEY=...
 SITIO_POR_DEFECTO=1-9   # RUT cuyo sitio muestra la landing en localhost
+PAGOS_CLAVE_MAESTRA=... # 32 bytes en base64: cifra las credenciales de las pasarelas (obligatoria en producción)
+URL_PUBLICA_PAGOS=      # Solo dev: túnel (cloudflared) para recibir webhooks de Flow/Khipu
 ```
 
 **Frontend** (`.env` en `frontend/`):
