@@ -118,4 +118,4 @@ Un módulo nuevo implementa el contrato `Consumidor` de `services/pagos/consumid
 
 ## Producción
 
-`PAGOS_CLAVE_MAESTRA` es obligatoria (el arranque falla sin ella) y `URL_PUBLICA_PAGOS` debe quedar vacía. Para rotar la clave: `python -m app.db.rotar_clave_pagos --nueva <clave>`. Ver [DEPLOY.md §3.2](../DEPLOY.md).
+Sin `PAGOS_CLAVE_MAESTRA` el backend arranca, pero no se pueden crear pasarelas (se configura cuando la comunidad decide usar pago en línea). Si está mal escrita, el arranque falla. `URL_PUBLICA_PAGOS` debe quedar vacía. En producción solo se ofrecen pasarelas de ambiente **Producción**: para probar, usa la cuenta real con un monto bajo. Para rotar la clave: `python -m app.db.rotar_clave_pagos --nueva <clave>`. Ver [DEPLOY.md §3.2](../DEPLOY.md).

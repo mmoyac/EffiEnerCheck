@@ -66,12 +66,20 @@ async def test_rotar_conserva_los_valores(db):
         descifrar(p.credenciales_cifradas, aad(1, p.id), actual)
 
 
-def test_produccion_exige_la_clave_maestra(monkeypatch):
+def test_produccion_y_la_clave_maestra(monkeypatch):
     monkeypatch.setattr(settings, "SECRET_KEY", "x" * 40)
     monkeypatch.setattr(settings, "DEBUG", False)
     monkeypatch.setattr(settings, "GEMINI_API_KEY", "clave")
     monkeypatch.setattr(settings, "URL_PUBLICA_PAGOS", "")
+
+    # Sin clave: arranca (los pagos en línea son opcionales), pero no se pueden guardar credenciales
     monkeypatch.setattr(settings, "PAGOS_CLAVE_MAESTRA", "")
+    arranque.validar_configuracion()
+    with pytest.raises(ClaveMaestraInvalida):
+        cifrar(CREDENCIALES, aad(1, 2))
+
+    # Mal escrita: no arranca
+    monkeypatch.setattr(settings, "PAGOS_CLAVE_MAESTRA", "no-es-una-clave")
     with pytest.raises(arranque.ArranqueError, match="PAGOS_CLAVE_MAESTRA"):
         arranque.validar_configuracion()
 

@@ -3,7 +3,7 @@ import json
 from datetime import timedelta
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.models.auditoria import AuditoriaLog
 from app.models.condominio import Condominio
@@ -198,3 +198,15 @@ async def test_comision_con_tres_o_mas_decimales(tx):
     assert r.json()["comision_porcentaje"] == "0.8210"
     r = await c.patch(f"/api/v1/pasarelas/{r.json()['id']}", headers=cab, json={"comision_porcentaje": "0.82110"})
     assert r.status_code == 200 and r.json()["comision_porcentaje"] == "0.8211"
+
+
+async def test_sin_clave_maestra_no_se_guardan_credenciales(tx, monkeypatch):
+    """Los pagos en línea son opcionales: sin PAGOS_CLAVE_MAESTRA el backend funciona, pero ninguna
+    credencial se guarda (ni cifrada ni en claro)."""
+    from app.core.config import settings
+    c, s = tx
+    monkeypatch.setattr(settings, "PAGOS_CLAVE_MAESTRA", "")
+    antes = await s.scalar(select(func.count()).select_from(PasarelaPago))
+    r = await crear_pasarela(c, await cabecera(s, SUPER))
+    assert r.status_code == 422 and "PAGOS_CLAVE_MAESTRA" in r.json()["detail"]
+    assert await s.scalar(select(func.count()).select_from(PasarelaPago)) == antes

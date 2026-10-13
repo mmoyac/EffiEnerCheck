@@ -147,7 +147,9 @@ Las invitaciones y "¿Olvidaste tu clave?" se envían por correo con [Resend](ht
 
 ### 3.2 Pagos en línea (pasarelas)
 
-Las credenciales de Flow y Khipu se guardan cifradas en la base con `PAGOS_CLAVE_MAESTRA`. Sin esa variable el backend **no arranca**.
+El pago en línea es **opcional**: se habilita solo si la comunidad lo decide. Las credenciales de Flow y Khipu se guardan cifradas en la base con `PAGOS_CLAVE_MAESTRA`. Sin esa variable el backend arranca igual, pero el portal no deja crear pasarelas. Si la variable está mal escrita (no son 32 bytes en base64), el backend **no arranca**.
+
+Cuando la comunidad decida usarlo:
 
 1. [Servidor] Genera la clave:
    ```sh
@@ -155,7 +157,7 @@ Las credenciales de Flow y Khipu se guardan cifradas en la base con `PAGOS_CLAVE
    ```
 2. [Dokploy] Pégala en el Environment como `PAGOS_CLAVE_MAESTRA=` y deja `URL_PUBLICA_PAGOS` vacía. Presiona **Deploy**.
 3. Guarda la clave también en tu gestor de claves. Los respaldos de la base traen las credenciales cifradas: sin esta clave, al restaurar habría que volver a cargarlas en cada pasarela.
-4. [Portal] Como super admin, en **Pasarelas de pago**: crea la pasarela del condominio, **Probar conexión** y **Activar**. Una de producción solo se activa con una prueba exitosa posterior al último cambio de credenciales.
+4. [Portal] Como super admin, en **Pasarelas de pago**: crea la pasarela del condominio con el ambiente **Producción** y la key de la cuenta **real** del proveedor (en producción nunca se ofrece al comunero una pasarela de integración). **Probar conexión** y **Activar**. Una de producción solo se activa con una prueba exitosa posterior al último cambio de credenciales.
 5. En la rifa, marca **Pago en línea** entre las formas de pago.
 
 **Rotar la clave maestra** (si se filtró o por política):

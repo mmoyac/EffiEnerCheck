@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     PORTAL_URL_POR_DEFECTO: str = "http://localhost:3000"
 
     # Pagos en línea (cambio pasarelas-pago). Clave maestra de las credenciales de las pasarelas:
-    # 32 bytes en base64; obligatoria en producción (app/arranque.py). Rotarla: python -m app.db.rotar_clave_pagos
+    # 32 bytes en base64. Vacía = no se pueden crear pasarelas; mal escrita, producción no arranca (app/arranque.py). Rotarla: python -m app.db.rotar_clave_pagos
     PAGOS_CLAVE_MAESTRA: str = ""
     # Solo desarrollo: base pública (túnel cloudflared) que reemplaza la de la URL de notificación del
     # proveedor, porque los webhooks no llegan a localhost. En producción, vacía.

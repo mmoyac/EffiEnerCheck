@@ -527,7 +527,7 @@ ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 GEMINI_API_KEY=...
 SITIO_POR_DEFECTO=1-9   # RUT cuyo sitio muestra la landing en localhost
-PAGOS_CLAVE_MAESTRA=... # 32 bytes en base64: cifra las credenciales de las pasarelas (obligatoria en producción)
+PAGOS_CLAVE_MAESTRA=... # 32 bytes en base64: cifra las credenciales de las pasarelas (vacía = no se pueden crear pasarelas)
 URL_PUBLICA_PAGOS=      # Solo dev: túnel (cloudflared) para recibir webhooks de Flow/Khipu
 ```
 

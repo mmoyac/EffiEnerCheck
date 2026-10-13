@@ -90,6 +90,18 @@ def _resumen(p: PasarelaPago) -> dict:
     }
 
 
+def _exigir_clave_maestra() -> None:
+    """Sin PAGOS_CLAVE_MAESTRA (pagos en línea aún no habilitados en el servidor) no se guarda nada."""
+    try:
+        cifrado.leer_clave()
+    except cifrado.ClaveMaestraInvalida as exc:
+        log.error("Pasarelas: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El servidor no tiene configurada la clave para guardar credenciales (PAGOS_CLAVE_MAESTRA)",
+        )
+
+
 def _guardar(p: PasarelaPago, credenciales: dict[str, str]) -> None:
     try:
         guardar_credenciales(p, credenciales)
@@ -149,6 +161,7 @@ async def crear(
 ):
     if data.proveedor not in REGISTRO:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Proveedor desconocido")
+    _exigir_clave_maestra()
     if not await db.get(Condominio, data.condominio_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Condominio no encontrado")
 

@@ -37,7 +37,7 @@ Cada condominio DEBE (SHALL) poder tener varias pasarelas de pago, cada una con 
 
 ### Requirement: Credenciales cifradas y nunca expuestas
 
-Las credenciales de una pasarela DEBEN (SHALL) guardarse cifradas con AES-256-GCM, con una clave maestra de entorno y un dato asociado que las amarra a su condominio y su pasarela. La API NO DEBE (SHALL NOT) devolver nunca los valores de las credenciales: solo informa si están cargadas, y se pueden reemplazar enteras. La auditoría NO DEBE (SHALL NOT) registrar los valores. En producción, el sistema NO DEBE (SHALL NOT) arrancar sin la clave maestra. DEBE (SHALL) existir un comando para rotar la clave maestra que recifra todas las credenciales.
+Las credenciales de una pasarela DEBEN (SHALL) guardarse cifradas con AES-256-GCM, con una clave maestra de entorno y un dato asociado que las amarra a su condominio y su pasarela. La API NO DEBE (SHALL NOT) devolver nunca los valores de las credenciales: solo informa si están cargadas, y se pueden reemplazar enteras. La auditoría NO DEBE (SHALL NOT) registrar los valores. Sin clave maestra, el sistema NO DEBE (SHALL NOT) guardar credenciales (los pagos en línea son opcionales y el resto del sistema funciona); con una clave maestra mal formada, el arranque en producción DEBE (SHALL) fallar. DEBE (SHALL) existir un comando para rotar la clave maestra que recifra todas las credenciales.
 
 #### Scenario: Credenciales en la respuesta
 
@@ -49,10 +49,15 @@ Las credenciales de una pasarela DEBEN (SHALL) guardarse cifradas con AES-256-GC
 - **WHEN** el texto cifrado de las credenciales de una pasarela se copia en la base a otra pasarela
 - **THEN** el sistema no logra descifrarlas y trata la pasarela como sin credenciales válidas
 
-#### Scenario: Producción sin clave maestra
+#### Scenario: Sin clave maestra
 
-- **WHEN** el backend arranca en producción sin la clave maestra de pagos
-- **THEN** el arranque falla con un mensaje que nombra la variable faltante
+- **WHEN** el servidor no tiene la clave maestra de pagos y el `super_admin` intenta crear una pasarela
+- **THEN** el sistema responde `422` nombrando la variable faltante y no guarda la pasarela ni sus credenciales
+
+#### Scenario: Clave maestra mal formada en producción
+
+- **WHEN** el backend arranca en producción con una clave maestra que no son 32 bytes en base64
+- **THEN** el arranque falla con un mensaje que nombra la variable
 
 #### Scenario: Auditoría del cambio de credenciales
 

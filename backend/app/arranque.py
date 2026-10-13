@@ -51,10 +51,15 @@ def validar_configuracion() -> None:
         errores.append("DEBUG debe ser false (con true se registran las consultas SQL)")
     if not settings.GEMINI_API_KEY:
         errores.append("falta GEMINI_API_KEY (OCR de boletas)")
-    try:
-        leer_clave()
-    except ClaveMaestraInvalida as exc:
-        errores.append(f"{exc} (credenciales de las pasarelas de pago)")
+    # Pagos en línea: son opcionales (solo si la comunidad lo decide). Sin la clave maestra el backend
+    # arranca, pero el portal no deja guardar credenciales de pasarelas. Con una clave mal escrita, no arranca.
+    if not settings.PAGOS_CLAVE_MAESTRA:
+        print("  ! sin PAGOS_CLAVE_MAESTRA: no se pueden configurar pasarelas de pago (DEPLOY.md §3.2)")
+    else:
+        try:
+            leer_clave()
+        except ClaveMaestraInvalida as exc:
+            errores.append(f"{exc} (credenciales de las pasarelas de pago)")
     if settings.URL_PUBLICA_PAGOS:
         errores.append("URL_PUBLICA_PAGOS debe quedar vacía en producción (es solo para el túnel de desarrollo)")
     if errores:
