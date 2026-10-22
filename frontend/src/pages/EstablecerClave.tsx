@@ -23,11 +23,12 @@ type Estado =
  * Se lee una vez y se borra de la barra de direcciones (spec acceso-por-enlace).
  */
 export default function EstablecerClave() {
-  const [token] = useState(() => {
-    const t = window.location.hash.slice(1)
-    if (t) window.history.replaceState(null, '', window.location.pathname)
-    return t
-  })
+  // El inicializador solo lee: en desarrollo StrictMode lo ejecuta dos veces, y si borrara el # aquí
+  // la segunda vez leería un token vacío. La barra se limpia en un efecto.
+  const [token] = useState(() => window.location.hash.slice(1))
+  useEffect(() => {
+    if (window.location.hash) window.history.replaceState(null, '', window.location.pathname)
+  }, [])
   const [estado, setEstado] = useState<Estado>({ fase: 'verificando' })
   const [clave, setClave] = useState('')
   const [repetida, setRepetida] = useState('')
