@@ -6,8 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.audit import registrar_auditoria
-from app.core.dependencies import AdminRequired, AnyRoleRequired, LectorRequired, TenantId, get_db
+from app.core.dependencies import AdminRequired, AnyRoleRequired, LectorRequired, SuperAdminRequired, TenantId, get_db
 from app.models.boleta import BoletaItemDetalle, BoletaMaestra
+from app.models.condominio import Condominio
 from app.models.usuario import Usuario
 from app.schemas.boleta import (
     BoletaMaestraCreate,
@@ -15,6 +16,7 @@ from app.schemas.boleta import (
     BoletaMaestraResponse,
     BoletaMaestraUpdate,
     BoletaMaestraDetallesUpdate,
+    BoletaMatrizCalculoUpdate,
     LecturaInicialCreate,
 )
 from app.services import fotos_lectura
@@ -200,9 +202,15 @@ async def crear_boleta(
             hoy = datetime.date.today()
             periodo = datetime.date(hoy.year, hoy.month, 1)
 
+    condominio = await db.get(Condominio, effective_cid)
+    if not condominio:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Condominio no encontrado")
+
     boleta = BoletaMaestra(
         condominio_id=effective_cid,
         periodo_mes=periodo,
+        # El período nace con la matriz por defecto del condominio (cambio matriz-calculo-luz)
+        matriz_calculo=condominio.matriz_calculo_luz,
         url_imagen_boleta=data.url_imagen_boleta,
         total_kwh_compania=data.total_kwh_compania,
         monto_neto_electricidad_consumida=data.monto_neto_electricidad_consumida,
@@ -464,6 +472,7 @@ async def get_boleta(
             periodo_mes=boleta.periodo_mes,
             url_imagen_boleta=boleta.url_imagen_boleta if boleta.boleta_visible_usuarios else None,
             estado=boleta.estado,
+            matriz_calculo=boleta.matriz_calculo,
         )
     return boleta
 
@@ -736,6 +745,45 @@ async def actualizar_detalles_boleta(
         detalles={
             "boleta_id": boleta_id,
             "estado_revertido_a_borrador": estado_revertido,
+            "liquidaciones_descartadas": descartadas,
+        },
+    )
+    await db.commit()
+    return await _get_boleta_o_404(boleta.id, db)
+
+
+@router.put("/{boleta_id}/matriz-calculo", response_model=BoletaMaestraResponse)
+async def cambiar_matriz_calculo(
+    boleta_id: int,
+    data: BoletaMatrizCalculoUpdate,
+    current_user: Annotated[Usuario, Depends(SuperAdminRequired)],
+    db: DB,
+):
+    """
+    El super_admin elige la matriz con que se liquida este período (cambio matriz-calculo-luz). Solo con el
+    período abierto: lo calculado con la matriz anterior se descarta y hay que volver a calcular.
+    """
+    boleta = await _get_boleta_o_404(boleta_id, db)
+    exigir_periodo_regular(boleta)
+
+    if boleta.liquidaciones_cerradas:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El período está cerrado. Reábrelo para cambiar la matriz de cálculo.",
+        )
+    if boleta.matriz_calculo == data.matriz_calculo:
+        return boleta
+
+    anterior = boleta.matriz_calculo
+    boleta.matriz_calculo = data.matriz_calculo
+    descartadas = await descartar_liquidaciones(db, boleta.id)
+    await registrar_auditoria(
+        db, usuario_id=current_user.id, condominio_id=boleta.condominio_id,
+        accion="CAMBIAR_MATRIZ_CALCULO",
+        detalles={
+            "boleta_id": boleta_id,
+            "antes": anterior,
+            "despues": data.matriz_calculo,
             "liquidaciones_descartadas": descartadas,
         },
     )

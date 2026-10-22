@@ -19,6 +19,14 @@ prorratea según el consumo, igual que los ítems variables: es el criterio de l
 planilla con que la administración liquidaba (cambio diferencial-por-consumo).
 Si nadie registró consumo, el diferencial y los variables van a la cuota fija, para que el total cuadre.
 
+MATRIZ DE CÁLCULO (cambio matriz-calculo-luz; la del período está en boleta.matriz_calculo)
+  fijo_y_variable → lo descrito arriba.
+  cargo_fijo      → los ítems 'variable' también van en partes iguales: la cuota fija es
+                    (Σ ítems_fijo + Σ ítems_variable) / total_parcelas_activas, y cada parcela paga
+                    además su consumo a (emisión − cargo fijo total) / Σ kwh_remarcadores (energía +
+                    diferencial). El prorrateo variable queda en 0. Es la planilla «nuevo cálculo» de
+                    Santa Laura, pero con el precio del kWh despejado para cuadrar con la emisión.
+
 Clasificación de los ítems:
   fijo        → se reparte en partes iguales entre las parcelas activas
   variable    → se prorratea según los kWh de cada parcela
@@ -53,6 +61,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.matrices import CARGO_FIJO
 from app.models.boleta import BoletaMaestra
 from app.models.lectura import LecturaParcela
 from app.models.liquidacion import LiquidacionParcela
@@ -157,6 +166,9 @@ async def calcular_liquidaciones_boleta(
     suma_items_variable: float = sum(
         i.monto_neto_clp for i in boleta.items_detalle if i.tipo_calculo == "variable"
     )
+    # Matriz cargo_fijo: todo el desglose va parejo. El valor_kwh no cambia (depende de la suma de ambos).
+    if boleta.matriz_calculo == CARGO_FIJO:
+        suma_items_fijo, suma_items_variable = suma_items_fijo + suma_items_variable, 0.0
 
     # El valor del kWh se calcula a la inversa para garantizar que el total recaudado 
     # cuadre exactamente con el Total Emisión de la boleta.
@@ -179,7 +191,14 @@ async def calcular_liquidaciones_boleta(
 
     # El diferencial se prorratea por consumo junto con los ítems variables (cambio
     # diferencial-por-consumo). Sin consumo registrado no hay a quién prorratear: todo va a la cuota fija.
-    if suma_kwh_remarcadores > 0:
+    # Con la matriz cargo_fijo no hay variables: el diferencial va en el precio del consumo,
+    # que queda en (emisión − cargo fijo total) / Σ kwh_remarcadores.
+    valor_kwh_cobro: float = valor_kwh
+    if suma_kwh_remarcadores > 0 and boleta.matriz_calculo == CARGO_FIJO:
+        valor_kwh_cobro = valor_kwh + monto_diferencial / suma_kwh_remarcadores
+        monto_a_prorratear = 0.0
+        fijo_a_repartir = suma_items_fijo
+    elif suma_kwh_remarcadores > 0:
         monto_a_prorratear = suma_items_variable + monto_diferencial
         fijo_a_repartir = suma_items_fijo
     else:
@@ -204,7 +223,7 @@ async def calcular_liquidaciones_boleta(
         (lecturas_por_parcela[p.id].kwh_consumidos if p.id in lecturas_por_parcela else 0.0)
         for p in parcelas_activas
     ]
-    energia_exacta = [valor_kwh * k for k in kwh]
+    energia_exacta = [valor_kwh_cobro * k for k in kwh]
     variable_exacta = [
         monto_a_prorratear * (k / suma_kwh_remarcadores) if suma_kwh_remarcadores > 0 else 0.0
         for k in kwh

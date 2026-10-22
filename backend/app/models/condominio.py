@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING, List, Optional
 from sqlalchemy import Boolean, CheckConstraint, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.matrices import CHECK_SQL, FIJO_Y_VARIABLE
+
 from .base import Base
 
 if TYPE_CHECKING:
@@ -18,6 +20,7 @@ class Condominio(Base):
     __tablename__ = "condominios"
     __table_args__ = (
         CheckConstraint("color_primario ~ '^#[0-9A-F]{6}$'", name="ck_condominios_color_primario"),
+        CheckConstraint(CHECK_SQL.format(col="matriz_calculo_luz"), name="ck_condominios_matriz_calculo_luz"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -30,6 +33,10 @@ class Condominio(Base):
     portal_url: Mapped[Optional[str]] = mapped_column(String)
     logo_url: Mapped[Optional[str]] = mapped_column(String)
     color_primario: Mapped[Optional[str]] = mapped_column(String(7))  # #RRGGBB en mayúsculas
+    # Matriz con que se liquida la luz por defecto; cada período la copia al crearse (core/matrices.py)
+    matriz_calculo_luz: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=FIJO_Y_VARIABLE, server_default=FIJO_Y_VARIABLE
+    )
     created_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -24,6 +24,7 @@ from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.matrices import FIJO_Y_VARIABLE
 from app.core.audit import registrar_auditoria
 from app.core.modulos import MODULOS
 from app.db.cargar_residentes import _orden_natural
@@ -76,6 +77,7 @@ async def exportar(db: AsyncSession, condominio_nombre: str) -> dict:
             "direccion": condominio.direccion,
             "plan_suscripcion": condominio.plan_suscripcion,
             "color_primario": condominio.color_primario,
+            "matriz_calculo_luz": condominio.matriz_calculo_luz,
             "modulos": sorted(m.modulo for m in condominio.modulos),
         },
         "parcelas": [
@@ -138,6 +140,7 @@ async def importar(
             direccion=c["direccion"],
             plan_suscripcion=c["plan_suscripcion"],
             color_primario=c["color_primario"],
+            matriz_calculo_luz=c.get("matriz_calculo_luz", FIJO_Y_VARIABLE),
             portal_url=portal_url,
             activo=True,
             modulos=[],

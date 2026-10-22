@@ -14,6 +14,7 @@ export interface Parcela {
 }
 
 import type { Modulo } from '../config/modulos'
+import type { MatrizCalculo } from '../config/matrices'
 
 export interface Usuario {
   id: number
@@ -77,6 +78,8 @@ export interface BoletaMaestra {
   tipo: TipoPeriodo
   lecturas_cerradas: boolean
   liquidaciones_cerradas: boolean
+  /** Matriz de cálculo del período (copiada del condominio; solo el super_admin la cambia) */
+  matriz_calculo: MatrizCalculo
   total_kwh_compania: number | null
   monto_neto_electricidad_consumida: number | null
   monto_total_emision: number | null

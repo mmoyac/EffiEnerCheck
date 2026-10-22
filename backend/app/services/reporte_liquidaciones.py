@@ -8,14 +8,20 @@ from zoneinfo import ZoneInfo
 
 from fpdf import FPDF
 
+from app.core.matrices import CARGO_FIJO
 from app.utils.format import periodo_label
 
+_MATRICES = {"fijo_y_variable": "Fijo y variable", "cargo_fijo": "Cargo fijo + consumo"}
 _TIPOS = {"fijo": "Fijo", "variable": "Variable", "informativo": "Informativo", "pendiente": "Sin clasificar"}
 
 
 def _clp(monto: float) -> str:
     texto = f"{round(monto):,}".replace(",", ".")
     return f"-${texto[1:]}" if texto.startswith("-") else f"${texto}"
+
+
+def _precio(valor: float) -> str:
+    return f"${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def _num(valor: float) -> str:
@@ -86,6 +92,10 @@ def generar_pdf(condominio: str, boleta, filas: list[dict]) -> bytes:
     suma_variable = sum(i.monto_neto_clp for i in items if i.tipo_calculo == "variable")
     emision = boleta.monto_total_emision or 0
     valor_kwh = (emision - suma_fijo - suma_variable) / kwh_compania if kwh_compania else 0
+    cargo_fijo = boleta.matriz_calculo == CARGO_FIJO
+    # Con la matriz cargo_fijo el consumo se cobra a (emisión − cargo fijo total) / kWh de las parcelas
+    valor_kwh_cobro = ((emision - suma_fijo - suma_variable) / kwh_parcelas if cargo_fijo and kwh_parcelas
+                       else valor_kwh)
 
     def dato(etiqueta: str, valor: str):
         pdf.set_font("Helvetica", size=9)
@@ -93,11 +103,14 @@ def generar_pdf(condominio: str, boleta, filas: list[dict]) -> bytes:
         pdf.set_font("Helvetica", "B", 9)
         pdf.cell(0, 5, valor, new_x="LMARGIN", new_y="NEXT")
 
+    dato("Matriz de cálculo", _MATRICES.get(boleta.matriz_calculo, boleta.matriz_calculo))
     dato("Total emisión de la boleta", _clp(emision))
     dato("kWh de la compañía", f"{_num(kwh_compania)} kWh")
     dato("kWh registrados por las parcelas", f"{_num(kwh_parcelas)} kWh")
     dato("Diferencial (no registrado)", f"{_num(kwh_compania - kwh_parcelas)} kWh · {_clp((kwh_compania - kwh_parcelas) * valor_kwh)}")
-    dato("Valor del kWh", f"${valor_kwh:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+    dato("Valor del kWh", _precio(valor_kwh))
+    if cargo_fijo:
+        dato("Precio del kWh de consumo", f"{_precio(valor_kwh_cobro)} (incluye el diferencial)")
     pdf.ln(2)
 
     # Desglose de cargos
@@ -112,8 +125,11 @@ def generar_pdf(condominio: str, boleta, filas: list[dict]) -> bytes:
             pdf.cell(0, 4.5, _clp(item.monto_neto_clp), align="R", new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", "I", 7.5)
         pdf.set_text_color(90)
-        pdf.multi_cell(0, 4, "Fijo: partes iguales entre las parcelas. Variable y diferencial: según el consumo de cada "
-                             "parcela. Energía: kWh de la parcela por el valor del kWh.", new_x="LMARGIN", new_y="NEXT")
+        criterio = ("Cargo fijo: todos los cargos fijos y variables en partes iguales entre las parcelas. "
+                    "Consumo: kWh de la parcela por el precio del kWh de consumo." if cargo_fijo else
+                    "Fijo: partes iguales entre las parcelas. Variable y diferencial: según el consumo de cada "
+                    "parcela. Energía: kWh de la parcela por el valor del kWh.")
+        pdf.multi_cell(0, 4, criterio, new_x="LMARGIN", new_y="NEXT")
         pdf.set_text_color(0)
         pdf.ln(2)
 

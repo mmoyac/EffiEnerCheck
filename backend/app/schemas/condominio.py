@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.core.matrices import FIJO_Y_VARIABLE, MatrizCalculo
 from app.core.modulos import MODULOS, validar_modulos
 from app.utils.dominio import normalizar_dominio
 
@@ -60,6 +61,7 @@ class CondominioCreate(_Parametrizacion):
     portal_url: str | None = None
     dominios_sitio: list[str] = []
     color_primario: str | None = None
+    matriz_calculo_luz: MatrizCalculo = FIJO_Y_VARIABLE
 
 
 class CondominioUpdate(_Parametrizacion):
@@ -72,6 +74,7 @@ class CondominioUpdate(_Parametrizacion):
     portal_url: str | None = None
     dominios_sitio: list[str] | None = None
     color_primario: str | None = None  # null explícito = volver al color por defecto
+    matriz_calculo_luz: MatrizCalculo | None = None  # rige para los períodos que se creen después
 
 
 class CondominioResponse(BaseModel):
@@ -89,6 +92,7 @@ class CondominioResponse(BaseModel):
     dominios_sitio: list[str]
     logo_url: str | None
     color_primario: str | None
+    matriz_calculo_luz: str
 
 
 MODULOS_POR_DEFECTO = list(MODULOS)

@@ -7,6 +7,16 @@ export const clp = (amount: number | null | undefined): string => {
   }).format(amount)
 }
 
+/** Precio por kWh: pesos con hasta 2 decimales ($156,25) */
+export const precioKwh = (amount: number | null | undefined): string => {
+  if (amount == null) return '—'
+  return new Intl.NumberFormat('es-CL', {
+    style: 'currency',
+    currency: 'CLP',
+    maximumFractionDigits: 2,
+  }).format(amount)
+}
+
 export const numero = (amount: number | null | undefined): string => {
   if (amount == null) return '—'
   return new Intl.NumberFormat('es-CL').format(amount)

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { MATRICES, type MatrizCalculo } from '../../config/matrices'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Building2, Plus, Pencil, Check, X, Upload, Trash2, AlertTriangle } from 'lucide-react'
 import {
@@ -200,6 +201,7 @@ function CondominioForm({
   const [portalUrl, setPortalUrl] = useState(initial?.portal_url ?? '')
   const [dominios, setDominios] = useState((initial?.dominios_sitio ?? []).join('\n'))
   const [color, setColor] = useState<string | null>(initial?.color_primario ?? null)
+  const [matriz, setMatriz] = useState<MatrizCalculo>(initial?.matriz_calculo_luz ?? 'fijo_y_variable')
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -217,6 +219,7 @@ function CondominioForm({
       portal_url: portalUrl.trim() || null,
       dominios_sitio: dominios.split(/[\n,]/).map((d) => d.trim()).filter(Boolean),
       color_primario: color,
+      matriz_calculo_luz: matriz,
     })
   }
 
@@ -241,6 +244,17 @@ function CondominioForm({
         dominios={dominios} setDominios={setDominios}
         color={color} setColor={setColor}
       />
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-slate-300">Matriz de cálculo de la luz</label>
+        <select value={matriz} onChange={(e) => setMatriz(e.target.value as MatrizCalculo)}
+          className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:border-primary-500 focus:outline-none">
+          {MATRICES.map((m) => <option key={m.valor} value={m.valor}>{m.nombre}</option>)}
+        </select>
+        <p className="text-xs text-slate-500">
+          {MATRICES.find((m) => m.valor === matriz)?.detalle} Rige para los períodos que se creen después; la de
+          un período abierto se cambia en su detalle.
+        </p>
+      </div>
       {initial && <LogoCondominio condominio={initial} />}
       <div className="flex justify-end gap-2 pt-1">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={loading}>

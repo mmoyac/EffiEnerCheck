@@ -358,6 +358,8 @@ total_pagar   = monto_energia + prorrateo_var + cuota_fija
 El motor es **idempotente**: hace `DELETE FROM liquidaciones WHERE boleta_id = X` antes de insertar. Se puede llamar múltiples veces sin duplicar datos.
 
 El endpoint `POST /liquidaciones/calcular/{boleta_id}` puede ejecutarse con `lecturas_cerradas = False` (permite recalcular tras correcciones de lecturas).
+**Matriz de cálculo** (cambio `matriz-calculo-luz`, `core/matrices.py`): cada período tiene `boletas_maestras.matriz_calculo`, copiada al crearlo de `condominios.matriz_calculo_luz`. Las define solo el `super_admin` (la del período con `PUT /boletas/{id}/matriz-calculo`, solo si no está cerrado; descarta las liquidaciones, auditoría `CAMBIAR_MATRIZ_CALCULO`). `fijo_y_variable` = las fórmulas de arriba. `cargo_fijo` = los ítems `variable` también van parejos (cargo fijo) y la energía con el diferencial se cobra por kWh a `(emisión − cargo fijo total) / Σ kWh remarcadores`; `monto_prorrateo_variable` queda en 0. Ambas cuadran al peso. Espejo en `frontend/src/config/matrices.ts`.
+
 
 ---
 

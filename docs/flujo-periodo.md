@@ -334,6 +334,17 @@ Por la misma razón, **las liquidaciones calculadas se descartan** cuando cambia
 
 Un ítem de monto **negativo** —descuento, nota de crédito, abono— se reparte con el mismo criterio de su `tipo_calculo`, reduciendo la cuota correspondiente. Las fórmulas del motor no cambian.
 
+### Matriz de cálculo
+
+Cada período se liquida con una de dos matrices. La copia del condominio al crearse y solo el `super_admin` la cambia, en el detalle del período y mientras no esté cerrado (cambiarla descarta lo calculado; auditoría `CAMBIAR_MATRIZ_CALCULO`). La matriz por defecto del condominio se define en Condominios.
+
+| Matriz | Cargo parejo | Según consumo |
+|--------|--------------|---------------|
+| `fijo_y_variable` (Fijo y variable) | ítems `fijo` | energía, ítems `variable` y diferencial |
+| `cargo_fijo` (Cargo fijo + consumo) | ítems `fijo` **y** `variable` | energía y diferencial, a `(emisión − cargo fijo total) / Σ kWh remarcadores` |
+
+Con `cargo_fijo` la liquidación tiene dos componentes: cargo fijo y consumo (el prorrateo variable es 0). Las dos cuadran al peso con la emisión.
+
 ---
 
 ## La invariante que nunca puede romperse

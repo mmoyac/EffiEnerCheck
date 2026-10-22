@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.core.matrices import MatrizCalculo
+
 EstadoBoleta = Literal["borrador", "validada", "publicada"]
 # fijo/variable entran al reparto; informativo es la exclusión deliberada del
 # administrador; pendiente marca lo que el OCR creó y aún nadie ha juzgado.
@@ -87,6 +89,10 @@ class BoletaMaestraDetallesUpdate(BaseModel):
     items_detalle: list[BoletaItemDetalleCreate] = []
 
 
+class BoletaMatrizCalculoUpdate(BaseModel):
+    matriz_calculo: MatrizCalculo
+
+
 class BoletaMaestraResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -97,6 +103,7 @@ class BoletaMaestraResponse(BaseModel):
     boleta_visible_usuarios: bool
     estado: str
     tipo: str = "regular"   # regular | lectura_inicial
+    matriz_calculo: str = "fijo_y_variable"
     lecturas_cerradas: bool
     liquidaciones_cerradas: bool
     total_kwh_compania: float | None
@@ -117,3 +124,4 @@ class BoletaMaestraComuneroResponse(BaseModel):
     # La URL solo se expone si boleta_visible_usuarios es True
     url_imagen_boleta: str | None
     estado: str
+    matriz_calculo: str = "fijo_y_variable"

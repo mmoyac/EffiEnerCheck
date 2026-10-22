@@ -12,7 +12,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Spinner } from '../../components/ui/Spinner'
 import { Alert } from '../../components/ui/Alert'
 import { Modal } from '../../components/ui/Modal'
-import { clp, kwh, numero, periodoCorto, fecha, fechaHora } from '../../utils/format'
+import { clp, kwh, numero, periodoCorto, fecha, fechaHora, precioKwh } from '../../utils/format'
 import { useAuth, useModulo } from '../../hooks/useAuth'
 import { Header } from '../../components/layout/Header'
 import { FotoMedidorModal } from '../../components/FotoMedidorModal'
@@ -196,8 +196,24 @@ export default function MiLiquidacion() {
                       </div>
                     )}
 
-                    {/* Desglose */}
+                    {/* Desglose. Matriz cargo_fijo: dos componentes, cargo fijo parejo y consumo (cambio matriz-calculo-luz) */}
                     <div className="space-y-2 rounded-xl bg-slate-700/40 p-4">
+                      {boletaActiva.matriz_calculo === 'cargo_fijo' ? (<>
+                      <div className="flex items-center justify-between gap-2 text-sm">
+                        <span className="flex min-w-0 items-center gap-2 text-slate-400">
+                          <Zap className="h-3.5 w-3.5 shrink-0 text-yellow-400" />
+                          <span className="truncate">
+                            Consumo{lectura && lectura.kwh_consumidos > 0 && liq.monto_energia_kwh != null
+                              && <> ({kwh(lectura.kwh_consumidos)} × {precioKwh(liq.monto_energia_kwh / lectura.kwh_consumidos)})</>}
+                          </span>
+                        </span>
+                        <span className="shrink-0 font-mono text-slate-300">{clp(liq.monto_energia_kwh)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="flex items-center gap-2 text-slate-400"><DollarSign className="h-3.5 w-3.5 text-purple-400" />Cargo fijo</span>
+                        <span className="font-mono text-slate-300">{clp(liq.monto_cuota_fija)}</span>
+                      </div>
+                      </>) : (<>
                       <div className="flex items-center justify-between text-sm">
                         <span className="flex items-center gap-2 text-slate-400"><Zap className="h-3.5 w-3.5 text-yellow-400" />Energía (kWh)</span>
                         <span className="font-mono text-slate-300">{clp(liq.monto_energia_kwh)}</span>
@@ -210,6 +226,7 @@ export default function MiLiquidacion() {
                         <span className="flex items-center gap-2 text-slate-400"><DollarSign className="h-3.5 w-3.5 text-purple-400" />Cuota fija</span>
                         <span className="font-mono text-slate-300">{clp(liq.monto_cuota_fija)}</span>
                       </div>
+                      </>)}
                       <div className="mt-3 flex items-center justify-between border-t border-slate-600 pt-3">
                         <span className="font-semibold text-slate-100">Total a pagar</span>
                         <span className="font-mono text-xl font-bold text-primary-400">{clp(liq.total_pagar_mes)}</span>
@@ -291,9 +308,13 @@ export default function MiLiquidacion() {
                     {boletaActiva.items_detalle.map((item) => (
                       <div key={item.id} className="flex items-center justify-between rounded-lg px-2 py-2 text-sm">
                         <div className="flex min-w-0 items-center gap-2">
-                          <Badge color={item.tipo_calculo === 'fijo' ? 'purple' : item.tipo_calculo === 'variable' ? 'blue' : 'slate'}>
-                            {item.tipo_calculo}
-                          </Badge>
+                          {boletaActiva.matriz_calculo === 'cargo_fijo' && item.tipo_calculo !== 'informativo' ? (
+                            <Badge color="purple">cargo fijo</Badge>
+                          ) : (
+                            <Badge color={item.tipo_calculo === 'fijo' ? 'purple' : item.tipo_calculo === 'variable' ? 'blue' : 'slate'}>
+                              {item.tipo_calculo}
+                            </Badge>
+                          )}
                           <span className="truncate text-slate-400">{item.descripcion}</span>
                         </div>
                         <span className="ml-2 shrink-0 font-mono text-slate-300">{clp(item.monto_neto_clp)}</span>

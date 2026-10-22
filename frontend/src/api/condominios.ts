@@ -1,5 +1,6 @@
 import { api } from './client'
 import type { Modulo } from '../config/modulos'
+import type { MatrizCalculo } from '../config/matrices'
 
 export type PlanSuscripcion = 'basico' | 'pro' | 'premium'
 
@@ -17,6 +18,8 @@ export interface Condominio {
   dominios_sitio: string[]
   logo_url: string | null
   color_primario: string | null
+  /** Matriz de cálculo de la luz por defecto: la copian los períodos que se creen después */
+  matriz_calculo_luz: MatrizCalculo
 }
 
 export interface CondominioCreate {
@@ -28,6 +31,7 @@ export interface CondominioCreate {
   portal_url?: string | null
   dominios_sitio?: string[]
   color_primario?: string | null
+  matriz_calculo_luz?: MatrizCalculo
 }
 
 export type CondominioUpdate = Partial<Omit<CondominioCreate, 'rut_comunidad'>>

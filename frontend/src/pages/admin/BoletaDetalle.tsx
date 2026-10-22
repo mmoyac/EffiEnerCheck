@@ -12,7 +12,7 @@ import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
 import { Alert } from '../../components/ui/Alert'
 import { Spinner } from '../../components/ui/Spinner'
-import { clp, kwh, numero, periodoCorto, fecha, fechaHora } from '../../utils/format'
+import { clp, kwh, numero, periodoCorto, fecha, fechaHora, precioKwh } from '../../utils/format'
 import type { LecturaParcela, Parcela } from '../../types'
 import ModalEditDetalles, { CONCEPTOS_SUGERIDOS } from './ModalEditDetalles'
 import { FotoMedidorModal } from '../../components/FotoMedidorModal'
@@ -20,6 +20,8 @@ import { EstadoPagoLuz } from '../../components/EstadoPagoLuz'
 import { ImportarLecturasIniciales } from './ImportarLecturasIniciales'
 import { pasosDelPeriodo, type ClavePaso } from '../../utils/pasosPeriodo'
 import { esImagenVisible } from '../../utils/archivoBoleta'
+import { useRole } from '../../hooks/useAuth'
+import { MATRICES, nombreMatriz, type MatrizCalculo } from '../../config/matrices'
 
 type Tab = 'resumen' | 'lecturas' | 'liquidaciones' | 'boleta'
 
@@ -46,6 +48,7 @@ export default function BoletaDetalle() {
   const [editingAnterior, setEditingAnterior] = useState<number | null>(null)
   const [anteriorValue, setAnteriorValue] = useState('')
   const [importarOpen, setImportarOpen] = useState(false)
+  const esSuperAdmin = useRole() === 'super_admin'
 
   const { data: boleta, isLoading } = useQuery({
     queryKey: ['boleta', boletaId],
@@ -145,6 +148,13 @@ export default function BoletaDetalle() {
     onError: (e: unknown) => setActionError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error'),
   })
 
+  // Solo super_admin; descarta las liquidaciones calculadas (cambio matriz-calculo-luz)
+  const matrizMut = useMutation({
+    mutationFn: (m: MatrizCalculo) => boletasApi.cambiarMatriz(boletaId, m),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['boleta', boletaId] }); qc.invalidateQueries({ queryKey: ['liquidaciones', boletaId] }) },
+    onError: (e: unknown) => setActionError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Error al cambiar la matriz'),
+  })
+
   const cerrarLiqMut = useMutation({
     mutationFn: () => boletasApi.cerrarLiquidaciones(boletaId),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['boleta', boletaId] }); qc.invalidateQueries({ queryKey: ['boletas'] }) },
@@ -209,6 +219,16 @@ export default function BoletaDetalle() {
 
   const totalLiq = liquidaciones.reduce((s, l) => s + (l.total_pagar_mes ?? 0), 0)
   const pagadas = liquidaciones.filter((l) => l.pagado).length
+  // Matriz cargo_fijo: la liquidación tiene dos componentes (cargo fijo y consumo) y no hay prorrateo variable
+  const cargoFijo = boleta.matriz_calculo === 'cargo_fijo'
+  const kwhLiquidados = lecturas.reduce((s, l) => s + (liquidaciones.some((q) => q.parcela_id === l.parcela_id) ? l.kwh_consumidos : 0), 0)
+  const precioConsumo = kwhLiquidados > 0 ? liquidaciones.reduce((s, l) => s + (l.monto_energia_kwh ?? 0), 0) / kwhLiquidados : null
+  const cambiarMatriz = (m: MatrizCalculo) => {
+    if (m === boleta.matriz_calculo) return
+    if (liquidaciones.length > 0 && !confirm('Cambiar la matriz descarta las liquidaciones calculadas: tendrás que volver a calcular. ¿Continuar?')) return
+    setActionError('')
+    matrizMut.mutate(m)
+  }
   // Ítems que el OCR creó y nadie ha clasificado: bloquean la corroboración.
   const itemsPendientes = boleta.items_detalle.filter((i) => i.tipo_calculo === 'pendiente').length
 
@@ -439,6 +459,25 @@ export default function BoletaDetalle() {
           Revisa el desglose y corrobóralo para habilitar el cálculo. Cada período requiere que
           confirmes qué ítems entran al reparto, aunque vengan igual que el mes anterior.
         </Alert>
+      )}
+
+      {!inicial && (
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs text-slate-500">Matriz de cálculo</p>
+              <p className="font-semibold text-slate-200">{nombreMatriz(boleta.matriz_calculo)}</p>
+              <p className="text-xs text-slate-500">{MATRICES.find((m) => m.valor === boleta.matriz_calculo)?.detalle}</p>
+            </div>
+            {esSuperAdmin && !boleta.liquidaciones_cerradas && (
+              <select value={boleta.matriz_calculo} disabled={matrizMut.isPending}
+                onChange={(e) => cambiarMatriz(e.target.value as MatrizCalculo)}
+                className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-primary-500 focus:outline-none">
+                {MATRICES.map((m) => <option key={m.valor} value={m.valor}>{m.nombre}</option>)}
+              </select>
+            )}
+          </div>
+        </Card>
       )}
 
       {/* KPI strip */}
@@ -702,6 +741,7 @@ export default function BoletaDetalle() {
                 {boleta.boleta_visible_usuarios
                   ? <>{pagadas}/{liquidaciones.length} pagadas · los abonos se registran en <Link to="/cobranza" className="underline">Cobranza</Link></>
                   : <>{liquidaciones.length} liquidaciones · los pagos se registran después de publicar</>}
+                {cargoFijo && precioConsumo != null && <> · consumo a {precioKwh(precioConsumo)}/kWh</>}
               </p>
               <div className="flex items-center gap-3">
                 <p className="font-mono font-bold text-primary-400">{clp(totalLiq)}</p>
@@ -720,9 +760,9 @@ export default function BoletaDetalle() {
                 <thead>
                   <tr className="border-b border-slate-700 text-left text-xs uppercase tracking-wide text-slate-500">
                     <th className="px-5 py-3">Parcela</th>
-                    <th className="px-5 py-3 text-right">Energía</th>
-                    <th className="px-5 py-3 text-right">Variable</th>
-                    <th className="px-5 py-3 text-right">Fijo</th>
+                    <th className="px-5 py-3 text-right">{cargoFijo ? 'Consumo' : 'Energía'}</th>
+                    {!cargoFijo && <th className="px-5 py-3 text-right">Variable</th>}
+                    <th className="px-5 py-3 text-right">{cargoFijo ? 'Cargo fijo' : 'Fijo'}</th>
                     <th className="px-5 py-3 text-right font-bold">Total</th>
                     <th className="px-5 py-3 text-center">Pago</th>
                   </tr>
@@ -732,7 +772,7 @@ export default function BoletaDetalle() {
                     <tr key={liq.id} className="border-b border-slate-700/50">
                       <td className="px-5 py-3 font-medium text-slate-200">{nombreParcela(liq.parcela_id)}</td>
                       <td className="px-5 py-3 text-right font-mono text-slate-400">{clp(liq.monto_energia_kwh)}</td>
-                      <td className="px-5 py-3 text-right font-mono text-slate-400">{clp(liq.monto_prorrateo_variable)}</td>
+                      {!cargoFijo && <td className="px-5 py-3 text-right font-mono text-slate-400">{clp(liq.monto_prorrateo_variable)}</td>}
                       <td className="px-5 py-3 text-right font-mono text-slate-400">{clp(liq.monto_cuota_fija)}</td>
                       <td className="px-5 py-3 text-right font-mono font-bold text-slate-100">{clp(liq.total_pagar_mes)}</td>
                       <td className="px-5 py-3 text-center">
@@ -742,13 +782,13 @@ export default function BoletaDetalle() {
                     </tr>
                   ))}
                   {liquidaciones.length === 0 && (
-                    <tr><td colSpan={6} className="px-5 py-8 text-center text-slate-500">Sin liquidaciones. Usa "Calcular" para generarlas.</td></tr>
+                    <tr><td colSpan={cargoFijo ? 5 : 6} className="px-5 py-8 text-center text-slate-500">Sin liquidaciones. Usa "Calcular" para generarlas.</td></tr>
                   )}
                 </tbody>
                 {liquidaciones.length > 0 && (
                   <tfoot>
                     <tr className="border-t border-slate-600 bg-slate-700/30">
-                      <td className="px-5 py-3 font-semibold text-slate-300" colSpan={4}>TOTAL</td>
+                      <td className="px-5 py-3 font-semibold text-slate-300" colSpan={cargoFijo ? 3 : 4}>TOTAL</td>
                       <td className="px-5 py-3 text-right font-mono font-bold text-primary-400">{clp(totalLiq)}</td>
                       <td />
                     </tr>
@@ -764,12 +804,15 @@ export default function BoletaDetalle() {
                     <span className="min-w-0 truncate font-medium text-slate-200">Parcela {nombreParcela(liq.parcela_id)}</span>
                     <span className="shrink-0 font-mono font-bold text-slate-100">{clp(liq.total_pagar_mes)}</span>
                   </div>
-                  <dl className="grid grid-cols-3 gap-x-3 text-xs">
-                    {[
+                  <dl className={`grid gap-x-3 text-xs ${cargoFijo ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                    {(cargoFijo ? [
+                      { label: 'Consumo', value: liq.monto_energia_kwh },
+                      { label: 'Cargo fijo', value: liq.monto_cuota_fija },
+                    ] : [
                       { label: 'Energía', value: liq.monto_energia_kwh },
                       { label: 'Variable', value: liq.monto_prorrateo_variable },
                       { label: 'Fijo', value: liq.monto_cuota_fija },
-                    ].map(({ label, value }) => (
+                    ]).map(({ label, value }) => (
                       <div key={label} className="min-w-0">
                         <dt className="text-slate-500">{label}</dt>
                         <dd className="truncate font-mono text-slate-400">{clp(value)}</dd>

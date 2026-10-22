@@ -1,8 +1,10 @@
 from datetime import date
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import Boolean, Date, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, CheckConstraint, Date, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.core.matrices import CHECK_SQL, FIJO_Y_VARIABLE
 
 from .base import Base
 
@@ -15,6 +17,9 @@ if TYPE_CHECKING:
 
 class BoletaMaestra(Base):
     __tablename__ = "boletas_maestras"
+    __table_args__ = (
+        CheckConstraint(CHECK_SQL.format(col="matriz_calculo"), name="ck_boletas_maestras_matriz_calculo"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     condominio_id: Mapped[int] = mapped_column(ForeignKey("condominios.id"), nullable=False)
@@ -30,6 +35,11 @@ class BoletaMaestra(Base):
     # regular         → período facturado por la compañía (boleta, ítems, liquidaciones).
     # lectura_inicial → solo registra la lectura de partida de cada medidor; no se liquida ni se publica.
     tipo: Mapped[str] = mapped_column(String(20), nullable=False, default="regular", server_default="regular")
+    # Matriz de cálculo de la luz del período: copiada del condominio al crearlo; solo el super_admin la
+    # cambia, con el período abierto (core/matrices.py, cambio matriz-calculo-luz)
+    matriz_calculo: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=FIJO_Y_VARIABLE, server_default=FIJO_Y_VARIABLE
+    )
     # Candados de cierre de período
     lecturas_cerradas: Mapped[bool] = mapped_column(Boolean, default=False)
     liquidaciones_cerradas: Mapped[bool] = mapped_column(Boolean, default=False)

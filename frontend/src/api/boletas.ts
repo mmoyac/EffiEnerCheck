@@ -1,5 +1,6 @@
 import { api } from './client'
 import type { BoletaMaestra, BoletaMaestraCreate, ImportacionLecturasIniciales } from '../types'
+import type { MatrizCalculo } from '../config/matrices'
 
 export const boletasApi = {
   list: async (): Promise<BoletaMaestra[]> => {
@@ -66,6 +67,12 @@ export const boletasApi = {
   /** El admin corrobora el desglose: borrador → validada. Habilita el cálculo. */
   validarItems: async (id: number): Promise<BoletaMaestra> => {
     const { data } = await api.post<BoletaMaestra>(`/boletas/${id}/validar-items`)
+    return data
+  },
+
+  /** Solo super_admin: cambia la matriz del período abierto y descarta lo calculado */
+  cambiarMatriz: async (id: number, matriz_calculo: MatrizCalculo): Promise<BoletaMaestra> => {
+    const { data } = await api.put<BoletaMaestra>(`/boletas/${id}/matriz-calculo`, { matriz_calculo })
     return data
   },
 

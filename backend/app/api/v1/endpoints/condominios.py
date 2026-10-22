@@ -54,6 +54,7 @@ def _condominio_response(c: Condominio) -> CondominioResponse:
         dominios_sitio=sorted(d.dominio for d in c.dominios_sitio),
         logo_url=c.logo_url,
         color_primario=c.color_primario,
+        matriz_calculo_luz=c.matriz_calculo_luz,
     )
 
 
@@ -64,6 +65,7 @@ def _parametrizacion(c: Condominio) -> dict[str, Any]:
         "portal_url": c.portal_url,
         "dominios_sitio": sorted(d.dominio for d in c.dominios_sitio),
         "color_primario": c.color_primario,
+        "matriz_calculo_luz": c.matriz_calculo_luz,
     }
 
 
@@ -163,6 +165,8 @@ async def actualizar_condominio(
         await _validar_dominios_libres(dominios, condominio.id, db)
         _sincronizar_dominios(condominio, dominios)
     cambios.pop("dominios_sitio", None)
+    if cambios.get("matriz_calculo_luz", "") is None:
+        cambios.pop("matriz_calculo_luz")  # no admite null: omitirla deja la actual
     for campo, valor in cambios.items():
         setattr(condominio, campo, valor)
 
