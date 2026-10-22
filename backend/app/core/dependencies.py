@@ -110,6 +110,32 @@ def require_roles(*roles: str):
     return dependency
 
 
+def administra_rifas(user: Usuario) -> bool:
+    """
+    Administración del condominio, o un comunero con el permiso `administra_rifas` (cambio
+    admin-rifas). El permiso se lee de la cuenta en cada petición: quitarlo rige de inmediato.
+    Sin el módulo rifas contratado el permiso no vale (`modulos` lo deja get_current_user).
+    """
+    return user.rol.nombre in ("super_admin", "admin_condominio") or (
+        user.rol.nombre == "comunero" and user.administra_rifas and "rifas" in getattr(user, "modulos", ())
+    )
+
+
+def require_roles_o_admin_rifas(*roles: str):
+    """Como require_roles, pero admite además al comunero que administra rifas. Solo para rifas."""
+    async def dependency(
+        current_user: Annotated[Usuario, Depends(get_current_user)],
+    ) -> Usuario:
+        if current_user.rol.nombre not in roles and not administra_rifas(current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Acceso denegado. Roles permitidos: {', '.join(roles)} o quien administra rifas",
+            )
+        return current_user
+
+    return dependency
+
+
 # ---------------------------------------------------------------------------
 # Guardas pre-construidas (usar directamente con Depends)
 # ---------------------------------------------------------------------------
@@ -128,8 +154,12 @@ LectorRequired = require_roles("super_admin", "admin_condominio", "lector")
 # agregado aquí heredaría acceso a todo el condominio.
 AnyRoleRequired = require_roles("super_admin", "admin_condominio", "lector", "comunero")
 
-# Venta de rifas: administración y portería
-PorteriaRequired = require_roles("super_admin", "admin_condominio", "porteria")
+# Venta de rifas: administración, portería y el comunero que administra rifas
+PorteriaRequired = require_roles_o_admin_rifas("super_admin", "admin_condominio", "porteria")
+
+# Administración de rifas y de sus pagos en revisión: administración y el comunero con el permiso.
+# AdminRequired NO admite el permiso: no da acceso a nada fuera de rifas.
+RifaAdminRequired = require_roles_o_admin_rifas("super_admin", "admin_condominio")
 
 # Consulta de rifas: los cinco roles. Solo para endpoints de rifas.
 RifaAccesoRequired = require_roles(*ROLES)

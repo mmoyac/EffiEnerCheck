@@ -20,6 +20,17 @@ export function useIsLector() {
   return role === 'lector'
 }
 
+/**
+ * Administración, o un comunero con el permiso de administrar rifas (y el módulo contratado).
+ * Mismo criterio que `administra_rifas()` del backend.
+ */
+export function useAdministraRifas() {
+  const { user } = useAuthContext()
+  const rol = user?.rol?.nombre
+  if (rol === 'super_admin' || rol === 'admin_condominio') return true
+  return rol === 'comunero' && !!user?.administra_rifas && (user?.modulos ?? []).includes('rifas')
+}
+
 export function useIsComunero() {
   const role = useRole()
   return role === 'comunero'

@@ -28,6 +28,17 @@ Admin crea la rifa (premios, precio, cantidad de números, datos para transferir
 | Gasto común | Todos | Al cerrar la rifa genera una **imputación** por parcela para cargar en Comunidad Feliz. |
 | Pago en línea | Solo el comunero desde el portal | Se confirma sola cuando la pasarela confirma el pago. El comunero paga además la comisión de la pasarela. Ver [pagos-en-linea.md](pagos-en-linea.md). |
 
+## Quién administra las rifas
+
+La administración (`super_admin`, `admin_condominio`) y, si se lo dan, **un comunero con el permiso «Administra rifas»** (cambio `admin-rifas`). No es un rol: la cuenta sigue siendo `comunero`.
+
+- Lo activa la administración en **Usuarios** (casilla «Administra rifas», solo en cuentas comunero). Queda en la auditoría (`UPDATE_USER`) y rige de inmediato, también con la sesión abierta.
+- Con el permiso opera las rifas como la administración: crear y editar, vender a cualquier parcela (canal `administracion`), confirmar transferencias, anular, cerrar y reabrir, imputaciones, caja, CSV y vouchers. Ve las compras y teléfonos de todas las parcelas en las rifas. **No elimina rifas** (solo super admin).
+- Revisa los **pagos en línea en revisión solo de rifas** (`concepto = rifa_compra`): bloque «Pagos por revisar» al final de `/rifas`.
+- En lo demás sigue siendo comunero: su luz y sus compras filtradas a su parcela; una compra para su parcela va por el canal `portal`. Usuarios, parcelas, energía, cobranza y pasarelas le responden 403.
+- Sin el módulo `rifas` contratado, el permiso no vale.
+- Backend: guarda `RifaAdminRequired` (y `PorteriaRequired` también lo admite) y `administra_rifas()` en `core/dependencies.py`. `AdminRequired` **no** admite el permiso.
+
 ## Reglas
 
 | Regla | Detalle |
@@ -75,7 +86,7 @@ Auditoría: `CREATE_RIFA`, `UPDATE_RIFA`, `COMPRAR_RIFA`, `ANULAR_COMPRA_RIFA`, 
 | Ruta | Quién | Archivo |
 |------|-------|---------|
 | `/porteria` | Portería (`porteria@santalaura.cl`) | `pages/porteria/VentaRifa.tsx`: Vender, Buscar compra, Caja |
-| `/rifas`, `/rifas/:id` | Admin (sidebar «Rifas») | `pages/admin/Rifas.tsx`, `RifaDetalle.tsx`: Compras, Registrar venta, Gasto común, Caja |
+| `/rifas`, `/rifas/:id` | Admin (sidebar «Rifas») y el comunero con permiso («Administrar rifas» en su cabecera; vuelve con «Mi portal») | `pages/admin/Rifas.tsx`, `RifaDetalle.tsx`: Compras, Registrar venta, Gasto común, Caja. Quien no administra rifas es devuelto a su inicio |
 | `/mis-rifas`, `/mis-rifas/:id` | Comunero (aviso en `/liquidaciones` y enlace en la cabecera) | `pages/comunero/Rifas.tsx` |
 
 Componentes compartidos en `components/rifas/`: `NumeroGrid` (sobre 200 números pagina en rangos de 100), `CompraPanel`, `ParcelaBuscador`, `VoucherInput` (reduce las fotos a 1600 px JPEG antes de subirlas), `ComprobanteVenta` (portería y admin), `AgradecimientoCompra` (portal del comunero), `ComprasLista` y `CajaResumen`.

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CircleHelp, KeyRound, LogOut, Ticket, User } from 'lucide-react'
-import { useAuth, useModulo } from '../../hooks/useAuth'
+import { CircleHelp, ClipboardList, KeyRound, LogOut, Ticket, User } from 'lucide-react'
+import { useAdministraRifas, useAuth, useModulo } from '../../hooks/useAuth'
 import { CambiarClaveModal } from '../CambiarClaveModal'
 import { PLATAFORMA } from '../../config/marca'
 
@@ -16,6 +16,8 @@ const ROLE_LABELS: Record<string, string> = {
 export function Header() {
   const { user, logout } = useAuth()
   const conRifas = useModulo('rifas')
+  const administraRifas = useAdministraRifas()
+  const esComunero = user?.rol?.nombre === 'comunero'
   const [cambiarClave, setCambiarClave] = useState(false)
 
   return (
@@ -23,13 +25,24 @@ export function Header() {
       <div />
       <div className="flex items-center gap-4">
         {/* El comunero no tiene sidebar: su acceso a las rifas vive en la cabecera */}
-        {user?.rol?.nombre === 'comunero' && conRifas && (
+        {esComunero && conRifas && (
           <Link
             to="/mis-rifas"
             className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-100"
           >
             <Ticket className="h-4 w-4" />
             Rifas
+          </Link>
+        )}
+        {/* Comunero con permiso de administrar rifas: entra a la administración de rifas (cambio admin-rifas) */}
+        {esComunero && administraRifas && (
+          <Link
+            to="/rifas"
+            title="Administrar rifas"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-100"
+          >
+            <ClipboardList className="h-4 w-4" />
+            <span className="hidden sm:inline">Administrar rifas</span>
           </Link>
         )}
         <div className="flex items-center gap-2.5">

@@ -305,7 +305,7 @@
     rol: 'Administración',
     icono: 'maletin',
     titulo: 'En la administración',
-    resumen: 'La administración registra la compra desde su menú de Rifas, confirma los pagos por transferencia y revisa los pagos en línea.',
+    resumen: 'La administración (o el comunero con permiso «Administra rifas») registra la compra desde Rifas, confirma los pagos por transferencia y revisa los pagos en línea.',
     dispositivo: 'escritorio',
     pagos: MEDIOS_STAFF,
     pasos: [
@@ -323,6 +323,16 @@
             </div>`,
         }),
         toque: 'menu-rifas',
+      },
+      {
+        titulo: 'Si eres comunero con permiso',
+        texto: 'La administración puede darle a un comunero el permiso <b>Administra rifas</b>. Sigue viendo su portal de siempre, y en la cabecera aparece <b>Administrar rifas</b>, que lo lleva a estas mismas pantallas. Para volver, toca <b>Mi portal</b> en el menú. No ve nada más de la administración.',
+        pantalla: () => ui.celular({
+          rol: 'Comunero',
+          cabExtra: `<span class="s-chip">${ui.icono('ticket')} Rifas</span><span class="s-chip" data-t="administrar-rifas">Administrar rifas</span>`,
+          contenido: ui.misLiquidaciones(),
+        }),
+        toque: 'administrar-rifas',
       },
       {
         titulo: 'Elegir la rifa',
@@ -423,7 +433,7 @@
       },
       {
         titulo: 'Pagos por revisar',
-        texto: 'Si una pasarela aprueba un pago que no se puede aplicar (por ejemplo, porque esos números ya se vendieron), aparece en <b>Pagos por revisar</b>. También aparece si <b>anulas una compra ya pagada en línea</b>: anular libera los números pero <b>no devuelve el dinero</b>. Haz la devolución en el panel de la pasarela y toca <b>Marcar resuelto</b> con una nota.',
+        texto: 'Si una pasarela aprueba un pago que no se puede aplicar (por ejemplo, porque esos números ya se vendieron), aparece en <b>Pagos por revisar</b>. También aparece si <b>anulas una compra ya pagada en línea</b>: anular libera los números pero <b>no devuelve el dinero</b>. Haz la devolución en el panel de la pasarela y toca <b>Marcar resuelto</b> con una nota. El comunero que administra rifas ve estos pagos (solo los de rifas) al final de la lista de Rifas.',
         pantalla: () => ui.escritorio({
           activo: 'Pasarelas de pago',
           contenido: `<p class="s-h1">${ui.icono('alerta', 's-amarillo')} Pagos por revisar</p>

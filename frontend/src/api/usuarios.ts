@@ -10,6 +10,8 @@ interface UsuarioCreate {
   condominio_id?: number
   parcela_ids?: number[]
   telefono?: string | null
+  /** Solo comuneros: permiso de administrar las rifas */
+  administra_rifas?: boolean
 }
 
 export const usuariosApi = {

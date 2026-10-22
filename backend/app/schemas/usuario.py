@@ -18,6 +18,7 @@ class UsuarioCreate(BaseModel):
     condominio_id: int | None = None
     parcela_ids: list[int] = []  # IDs de parcelas asignadas (uno o más para comuneros)
     telefono: str | None = None
+    administra_rifas: bool = False   # solo comuneros (cambio admin-rifas)
 
     @field_validator("telefono", mode="before")
     @classmethod
@@ -38,6 +39,7 @@ class UsuarioUpdate(BaseModel):
     condominio_id: int | None = None
     parcela_ids: list[int] | None = None  # None = no cambiar; [] = quitar todas
     telefono: str | None = None
+    administra_rifas: bool | None = None
 
     @field_validator("telefono", mode="before")
     @classmethod
@@ -60,6 +62,7 @@ class UsuarioResponse(BaseModel):
     condominio_id: int | None
     ultimo_login: datetime | None
     telefono: str | None = None
+    administra_rifas: bool = False
     parcelas: list[ParcelaResponse] = []
     # Solo para calcular el estado: nunca sale en la respuesta
     password_hash: str | None = Field(default=None, exclude=True, repr=False)

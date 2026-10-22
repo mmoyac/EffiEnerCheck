@@ -26,6 +26,8 @@ export interface Usuario {
   ultimo_login: string | null
   parcelas: Parcela[]
   telefono: string | null
+  /** Permiso de un comunero para administrar las rifas (no es un rol) */
+  administra_rifas: boolean
   /** pendiente = todavía no crea su clave (no puede iniciar sesión) */
   estado: 'pendiente' | 'activa'
 }
@@ -76,10 +78,10 @@ export interface BoletaMaestra {
   estado: 'borrador' | 'validada' | 'publicada'
   /** lectura_inicial: solo registra la lectura de partida de cada medidor; no se liquida ni se publica */
   tipo: TipoPeriodo
-  lecturas_cerradas: boolean
-  liquidaciones_cerradas: boolean
   /** Matriz de cálculo del período (copiada del condominio; solo el super_admin la cambia) */
   matriz_calculo: MatrizCalculo
+  lecturas_cerradas: boolean
+  liquidaciones_cerradas: boolean
   total_kwh_compania: number | null
   monto_neto_electricidad_consumida: number | null
   monto_total_emision: number | null

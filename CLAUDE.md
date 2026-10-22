@@ -219,11 +219,14 @@ Los guards se aplican como dependencias FastAPI en cada endpoint:
 | `AdminRequired` | `super_admin`, `admin_condominio` |
 | `LectorRequired` | `super_admin`, `admin_condominio`, `lector` |
 | `AnyRoleRequired` | `super_admin`, `admin_condominio`, `lector`, `comunero` — **no** incluye `porteria` |
-| `PorteriaRequired` | `super_admin`, `admin_condominio`, `porteria` |
+| `PorteriaRequired` | `super_admin`, `admin_condominio`, `porteria` y el comunero que administra rifas |
+| `RifaAdminRequired` | `super_admin`, `admin_condominio` y el comunero con `administra_rifas`; solo rifas y su bandeja de pagos |
 | `RifaAccesoRequired` | los cinco roles; solo endpoints de consulta de rifas |
 | `TenantId` | extrae `condominio_id` del JWT; `super_admin` recibe `None` (acceso global) |
 
 En el frontend, las rutas están protegidas en `App.tsx` con `useRole()` y, las de un módulo, con `<ModuloRoute modulo="...">`. La pantalla de inicio por rol se define **una sola vez** en `config/inicio.ts` (`pantallaDeInicio(rol, modulos)`), con alternativas cuando la principal es de un módulo no contratado.
+
+> **Permiso «Administra rifas»** (`usuarios.administra_rifas`, cambio `admin-rifas`): un `comunero` con el permiso opera las rifas como la administración y sigue siendo comunero en todo lo demás. Es un permiso y no un rol porque esa persona es vecina: un rol aparte le quitaría su liquidación o la obligaría a tener dos cuentas. Solo lo admiten `RifaAdminRequired`, `PorteriaRequired` y `administra_rifas()`; **nunca** lo agregues a `AdminRequired`. Ver [docs/rifas.md](docs/rifas.md).
 
 > ⚠️ `porteria` (cuenta compartida de la portería, solo vende rifas) queda **fuera** de `AnyRoleRequired` a propósito: varios endpoints `AnyRoleRequired` solo filtran por parcela cuando el rol es `comunero`, así que un rol nuevo agregado ahí vería todo el condominio. Al crear un rol nuevo, define sus guardas explícitamente y su entrada en `config/inicio.ts`.
 
@@ -355,11 +358,11 @@ total_pagar   = monto_energia + prorrateo_var + cuota_fija
 
 **Diferencial por consumo** (cambio `diferencial-por-consumo`): el diferencial se prorratea según los kWh de cada parcela, junto con los ítems variables, igual que la planilla con que liquidaba la administración. Una parcela sin consumo paga solo la cuota fija. Si nadie registró consumo, el diferencial y los variables van a la cuota fija.
 
+**Matriz de cálculo** (cambio `matriz-calculo-luz`, `core/matrices.py`): cada período tiene `boletas_maestras.matriz_calculo`, copiada al crearlo de `condominios.matriz_calculo_luz`. Las define solo el `super_admin` (la del período con `PUT /boletas/{id}/matriz-calculo`, solo si no está cerrado; descarta las liquidaciones, auditoría `CAMBIAR_MATRIZ_CALCULO`). `fijo_y_variable` = las fórmulas de arriba. `cargo_fijo` = los ítems `variable` también van parejos (cargo fijo) y la energía con el diferencial se cobra por kWh a `(emisión − cargo fijo total) / Σ kWh remarcadores`; `monto_prorrateo_variable` queda en 0. Ambas cuadran al peso. Espejo en `frontend/src/config/matrices.ts`.
+
 El motor es **idempotente**: hace `DELETE FROM liquidaciones WHERE boleta_id = X` antes de insertar. Se puede llamar múltiples veces sin duplicar datos.
 
 El endpoint `POST /liquidaciones/calcular/{boleta_id}` puede ejecutarse con `lecturas_cerradas = False` (permite recalcular tras correcciones de lecturas).
-**Matriz de cálculo** (cambio `matriz-calculo-luz`, `core/matrices.py`): cada período tiene `boletas_maestras.matriz_calculo`, copiada al crearlo de `condominios.matriz_calculo_luz`. Las define solo el `super_admin` (la del período con `PUT /boletas/{id}/matriz-calculo`, solo si no está cerrado; descarta las liquidaciones, auditoría `CAMBIAR_MATRIZ_CALCULO`). `fijo_y_variable` = las fórmulas de arriba. `cargo_fijo` = los ítems `variable` también van parejos (cargo fijo) y la energía con el diferencial se cobra por kWh a `(emisión − cargo fijo total) / Σ kWh remarcadores`; `monto_prorrateo_variable` queda en 0. Ambas cuadran al peso. Espejo en `frontend/src/config/matrices.ts`.
-
 
 ---
 

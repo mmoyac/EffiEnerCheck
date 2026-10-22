@@ -43,6 +43,7 @@ Table usuarios {
   ultimo_login timestamp
   telefono varchar [note: '56XXXXXXXXX']
   clave_cambiada_en timestamptz [note: 'Los JWT emitidos antes dejan de valer']
+  administra_rifas boolean [default: false, note: 'Permiso de un comunero para administrar las rifas']
 }
 
 Table enlaces_acceso {
@@ -96,8 +97,8 @@ Table boletas_maestras {
   boleta_visible_usuarios boolean [default: false]
   estado varchar [note: 'borrador, validada, publicada']
   tipo varchar [default: 'regular', note: 'regular | lectura_inicial (lectura de partida; no se liquida)']
-  
   matriz_calculo varchar(20) [not null, default: 'fijo_y_variable', note: 'fijo_y_variable | cargo_fijo: copiada del condominio; solo super_admin la cambia con el período abierto']
+  
   // Control de flujo de cierre de período
   lecturas_cerradas boolean [default: false, note: 'Lector certifica que todas las lecturas están ingresadas']
   liquidaciones_cerradas boolean [default: false, note: 'Admin cierra el período; nada se puede modificar después']

@@ -19,7 +19,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.audit import registrar_auditoria
 from app.core.config import settings
-from app.core.dependencies import AdminRequired, AnyRoleRequired, TenantId, get_current_user, get_db
+from app.core.dependencies import AnyRoleRequired, RifaAdminRequired, TenantId, get_current_user, get_db
 from app.models.pago import IntencionPago, PasarelaPago
 from app.models.usuario import Usuario
 from app.schemas.pago import IntencionResponse, IntencionRevisionResponse, OpcionPagoResponse, ResolverRequest
@@ -27,6 +27,7 @@ from app.services.pagos import flujo
 from app.services.pagos.consumidores import consumidor
 from app.services.pagos.pasarelas import ahora, cotizar, pasarelas_ofrecibles
 from app.services.pagos.proveedores import REGISTRO
+from app.services.rifas_pago import CONCEPTO_RIFA
 
 router = APIRouter(prefix="/pagos", tags=["pagos"])
 log = logging.getLogger(__name__)
@@ -85,9 +86,14 @@ async def disponibles(
 # Administración: pagos en revisión
 # ---------------------------------------------------------------------------
 
+def _solo_rifas(user: Usuario) -> bool:
+    """El comunero que administra rifas solo ve y resuelve los pagos de rifas (cambio admin-rifas)."""
+    return user.rol.nombre not in ("super_admin", "admin_condominio")
+
+
 @router.get("/revision", response_model=list[IntencionRevisionResponse])
 async def en_revision(
-    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    current_user: Annotated[Usuario, Depends(RifaAdminRequired)],
     tenant_id: TenantId,
     db: DB,
     incluir_resueltas: bool = False,
@@ -101,6 +107,8 @@ async def en_revision(
     )
     if tenant_id is not None:
         stmt = stmt.where(IntencionPago.condominio_id == tenant_id)
+    if _solo_rifas(current_user):
+        stmt = stmt.where(IntencionPago.concepto == CONCEPTO_RIFA)
     if not incluir_resueltas:
         stmt = stmt.where(IntencionPago.resuelta_at.is_(None))
     return [
@@ -117,13 +125,14 @@ async def resolver(
     intencion_id: uuid.UUID,
     data: ResolverRequest,
     request: Request,
-    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    current_user: Annotated[Usuario, Depends(RifaAdminRequired)],
     tenant_id: TenantId,
     db: DB,
 ):
     """Marca resuelto un pago en revisión. El dinero se arregla por fuera (p. ej. devolución en el proveedor)."""
     i = await db.get(IntencionPago, intencion_id, with_for_update=True, populate_existing=True)
-    if i is None or (tenant_id is not None and i.condominio_id != tenant_id):
+    if (i is None or (tenant_id is not None and i.condominio_id != tenant_id)
+            or (_solo_rifas(current_user) and i.concepto != CONCEPTO_RIFA)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pago no encontrado")
     if i.estado != "EN_REVISION":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Este pago no está en revisión")

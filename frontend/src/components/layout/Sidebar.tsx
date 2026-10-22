@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, Users, MapPin,
-  FileText, Activity, Calculator, Shield, Ticket, CreditCard,
+  FileText, Activity, Calculator, Shield, Ticket, CreditCard, ChevronLeft,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { menusApi } from '../../api/menus'
-import { useAuth } from '../../hooks/useAuth'
+import { useAuth, useModulos, useRole } from '../../hooks/useAuth'
+import { pantallaDeInicio } from '../../config/inicio'
 import { IconoPlataforma, PLATAFORMA } from '../../config/marca'
 import { grupoDeMenu, ORDEN_GRUPOS } from '../../config/modulos'
 import type { MenuItem } from '../../types'
@@ -64,11 +65,16 @@ export function MarcaPortal() {
 }
 
 export function Sidebar() {
-  const { data: menus = [] } = useQuery({
+  const role = useRole()
+  const modulos = useModulos()
+  const { data: todos = [] } = useQuery({
     queryKey: ['menus'],
     queryFn: menusApi.me,
     staleTime: 1000 * 60 * 5,
   })
+  // El comunero solo llega aquí si administra rifas (cambio admin-rifas): ve Rifas y la vuelta a su portal
+  const esComunero = role === 'comunero'
+  const menus = esComunero ? todos.filter((m) => m.path === '/rifas') : todos
 
   // El backend ya filtra por rol y por módulos habilitados; aquí solo se agrupa
   const grupos = ORDEN_GRUPOS
@@ -82,6 +88,15 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+        {esComunero && (
+          <NavLink
+            to={pantallaDeInicio(role, modulos)}
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-100"
+          >
+            <ChevronLeft className="h-4 w-4 flex-shrink-0" />
+            Mi portal
+          </NavLink>
+        )}
         {grupos.map(({ grupo, items }) => (
           <div key={grupo}>
             <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{grupo}</p>

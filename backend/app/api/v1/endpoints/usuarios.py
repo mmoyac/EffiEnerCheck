@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.audit import registrar_auditoria
 from app.core.dependencies import AdminRequired, CurrentUser, SuperAdminRequired, get_db, modulos_del_condominio
+from app.models.rol import Rol
 from app.models.usuario import Usuario
 from app.services import correo, enlaces
 from app.services.claves import asignar_clave
@@ -18,6 +19,11 @@ router = APIRouter(prefix="/usuarios", tags=["usuarios"])
 
 DB = Annotated[AsyncSession, Depends(get_db)]
 PAUSA_ENTRE_CORREOS = 0.6   # segundos
+PERMISO_SOLO_COMUNERO = "Solo una cuenta de comunero puede administrar rifas"
+
+
+async def _es_rol_comunero(db: AsyncSession, rol_id: int) -> bool:
+    return (await db.execute(select(Rol.nombre).where(Rol.id == rol_id))).scalar_one_or_none() == "comunero"
 
 
 @router.get("/", response_model=list[UsuarioDetailResponse])
@@ -51,6 +57,8 @@ async def crear_usuario(
     existe = await db.execute(select(Usuario).where(Usuario.email == data.email))
     if existe.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El email ya está registrado")
+    if data.administra_rifas and not await _es_rol_comunero(db, data.rol_id):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=PERMISO_SOLO_COMUNERO)
 
     usuario = Usuario(
         nombre=data.nombre,
@@ -58,6 +66,7 @@ async def crear_usuario(
         rol_id=data.rol_id,
         condominio_id=data.condominio_id,
         telefono=data.telefono,
+        administra_rifas=data.administra_rifas,
     )
     if data.password is not None:   # sin clave: cuenta pendiente, se invita después
         asignar_clave(usuario, data.password)
@@ -78,7 +87,8 @@ async def crear_usuario(
         usuario_id=current_user.id,
         condominio_id=current_user.condominio_id,
         accion="CREATE_USER",
-        detalles={"nuevo_usuario_id": usuario.id, "email": usuario.email},
+        detalles={"nuevo_usuario_id": usuario.id, "email": usuario.email,
+                  "administra_rifas": usuario.administra_rifas},
     )
     await db.commit()
     result2 = await db.execute(
@@ -107,6 +117,15 @@ async def actualizar_usuario(
     cambios = data.model_dump(exclude_unset=True)
     parcela_ids = cambios.pop("parcela_ids", None)
 
+    # El permiso de administrar rifas es solo de comuneros: se rechaza en otro rol y se quita al cambiarlo
+    if cambios.get("administra_rifas") is None:
+        cambios.pop("administra_rifas", None)
+    if not await _es_rol_comunero(db, cambios.get("rol_id", usuario.rol_id)):
+        if cambios.get("administra_rifas"):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=PERMISO_SOLO_COMUNERO)
+        if usuario.administra_rifas:
+            cambios["administra_rifas"] = False
+
     nueva_clave = cambios.pop("password", None)
     if nueva_clave is not None:
         asignar_clave(usuario, nueva_clave)   # cierra las sesiones abiertas del usuario
@@ -130,7 +149,9 @@ async def actualizar_usuario(
         usuario_id=current_user.id,
         condominio_id=current_user.condominio_id,
         accion="UPDATE_USER",
-        detalles={"before": estado_anterior, "after": data.model_dump(exclude_unset=True, exclude={"password"})},
+        # `cambios` ya no trae la clave y sí el permiso quitado por cambio de rol
+        detalles={"before": estado_anterior,
+                  "after": cambios | ({"parcela_ids": parcela_ids} if parcela_ids is not None else {})},
     )
     await db.commit()
     result2 = await db.execute(

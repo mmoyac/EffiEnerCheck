@@ -45,8 +45,12 @@ def descripcion(rifa: Rifa, numeros: list[int]) -> str:
     return f"{nombre} – {etiqueta} {', '.join(map(str, sorted(numeros)))}"
 
 
+# Concepto de las intenciones de pago de las rifas (también filtra la bandeja de quien administra rifas)
+CONCEPTO_RIFA = "rifa_compra"
+
+
 class _ConsumidorRifa:
-    concepto = "rifa_compra"
+    concepto = CONCEPTO_RIFA
 
     async def _compra_y_rifa(self, db: AsyncSession, intencion: IntencionPago) -> tuple[CompraRifa | None, Rifa | None]:
         compra = await db.get(CompraRifa, intencion.referencia_id, populate_existing=True)

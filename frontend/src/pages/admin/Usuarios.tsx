@@ -13,7 +13,7 @@ import { Alert } from '../../components/ui/Alert'
 import { Spinner } from '../../components/ui/Spinner'
 import { fecha } from '../../utils/format'
 import { formatearTelefono, normalizarTelefono } from '../../utils/telefono'
-import { useAuth, useRole } from '../../hooks/useAuth'
+import { useAuth, useModulo, useRole } from '../../hooks/useAuth'
 import { mensajeInvitacion, urlWhatsApp } from '../../utils/whatsapp'
 import { mensajeError } from '../../utils/errores'
 import type { Invitacion, Usuario } from '../../types'
@@ -37,6 +37,8 @@ const ROLES = [
 
 // Roles que pueden ser vecinos de una parcela: comunero (4) y admin del condominio (2)
 const ROLES_CON_PARCELA = ['2', '4']
+// Solo un comunero puede tener el permiso de administrar rifas
+const ROL_COMUNERO = '4'
 
 interface FormState {
   nombre: string
@@ -46,10 +48,12 @@ interface FormState {
   rol_id: string
   condominio_id: string
   parcela_ids: number[]
+  administra_rifas: boolean
 }
 
 const EMPTY_FORM: FormState = {
   nombre: '', email: '', telefono: '', password: '', rol_id: '2', condominio_id: '', parcela_ids: [],
+  administra_rifas: false,
 }
 
 function UsuarioForm({
@@ -59,6 +63,7 @@ function UsuarioForm({
   parcelas,
   isSuperAdmin,
   isEdit,
+  conRifas,
 }: {
   form: FormState
   onChange: (patch: Partial<FormState>) => void
@@ -66,6 +71,8 @@ function UsuarioForm({
   parcelas: { id: number; condominio_id: number; numero_parcela: string; propietario_nombre: string | null }[]
   isSuperAdmin: boolean
   isEdit: boolean
+  /** El condominio tiene el módulo de rifas: se ofrece el permiso de administrarlas */
+  conRifas: boolean
 }) {
   const parcelasFiltradas = form.condominio_id
     ? parcelas.filter((p) => p.condominio_id === Number(form.condominio_id))
@@ -117,6 +124,7 @@ function UsuarioForm({
             onChange={(e) => onChange({
               rol_id: e.target.value,
               ...(ROLES_CON_PARCELA.includes(e.target.value) ? {} : { parcela_ids: [] }),
+              ...(e.target.value === ROL_COMUNERO ? {} : { administra_rifas: false }),
             })}
             className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 focus:border-primary-500 focus:outline-none"
           >
@@ -177,6 +185,24 @@ function UsuarioForm({
           </div>
         </div>
       )}
+
+      {conRifas && form.rol_id === ROL_COMUNERO && (
+        <label className="flex items-start gap-2 rounded-lg border border-slate-600 bg-slate-800 p-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.administra_rifas}
+            onChange={(e) => onChange({ administra_rifas: e.target.checked })}
+            className="mt-1 accent-primary-500"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-slate-200">Administra rifas</span>
+            <span className="block text-xs text-slate-500">
+              Opera las rifas como la administración (ventas, cobros, cierre) y ve las compras y teléfonos de
+              todas las parcelas en ellas. En lo demás sigue siendo comunero.
+            </span>
+          </span>
+        </label>
+      )}
     </div>
   )
 }
@@ -186,6 +212,7 @@ export default function Usuarios() {
   const { user: me } = useAuth()
   const role = useRole()
   const isSuperAdmin = role === 'super_admin'
+  const conRifas = useModulo('rifas')
 
   const [createOpen, setCreateOpen] = useState(false)
   const [editUser, setEditUser] = useState<Usuario | null>(null)
@@ -285,6 +312,7 @@ export default function Usuarios() {
       rol_id: String(u.rol_id),
       condominio_id: u.condominio_id ? String(u.condominio_id) : '',
       parcela_ids: u.parcelas.map((p) => p.id),
+      administra_rifas: u.administra_rifas,
     })
     setEditUser(u)
     setError('')
@@ -302,6 +330,7 @@ export default function Usuarios() {
       rol_id: Number(createForm.rol_id),
       condominio_id: createForm.condominio_id ? Number(createForm.condominio_id) : (me?.condominio_id ?? undefined),
       parcela_ids: createForm.parcela_ids,
+      administra_rifas: createForm.rol_id === ROL_COMUNERO && createForm.administra_rifas,
     })
   }
 
@@ -317,6 +346,7 @@ export default function Usuarios() {
       rol_id: Number(editForm.rol_id),
       condominio_id: editForm.condominio_id ? Number(editForm.condominio_id) : null,
       parcela_ids: editForm.parcela_ids,
+      administra_rifas: editForm.rol_id === ROL_COMUNERO && editForm.administra_rifas,
     }
     if (editForm.password) payload.password = editForm.password
     updateMut.mutate({ id: editUser.id, data: payload })
@@ -329,7 +359,12 @@ export default function Usuarios() {
   )
 
   // Fragmentos compartidos por la tabla (escritorio) y la lista (celular)
-  const rolBadge = (u: Usuario) => <Badge color={ROLE_COLOR[u.rol?.nombre] ?? 'slate'}>{u.rol?.nombre}</Badge>
+  const rolBadge = (u: Usuario) => (
+    <span className="inline-flex flex-wrap gap-1">
+      <Badge color={ROLE_COLOR[u.rol?.nombre] ?? 'slate'}>{u.rol?.nombre}</Badge>
+      {u.administra_rifas && <Badge color="purple">Admin. rifas</Badge>}
+    </span>
+  )
   const cuentaBadge = (u: Usuario) => u.estado === 'pendiente'
     ? <Badge color="yellow">Pendiente</Badge>
     : <Badge color="green">Activa</Badge>
@@ -471,6 +506,7 @@ export default function Usuarios() {
             parcelas={parcelas}
             isSuperAdmin={isSuperAdmin}
             isEdit={false}
+            conRifas={conRifas}
           />
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => { setCreateOpen(false); setError('') }}>Cancelar</Button>
@@ -490,6 +526,7 @@ export default function Usuarios() {
             parcelas={parcelas}
             isSuperAdmin={isSuperAdmin}
             isEdit
+            conRifas={conRifas}
           />
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => { setEditUser(null); setError('') }}>Cancelar</Button>

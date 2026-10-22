@@ -11,6 +11,7 @@ import { Button } from '../../components/ui/Button'
 import { Spinner } from '../../components/ui/Spinner'
 import { Alert } from '../../components/ui/Alert'
 import { RifaFormModal } from './RifaFormModal'
+import { PagosPorRevisar } from '../../components/pagos/PagosPorRevisar'
 import { clp, fecha } from '../../utils/format'
 import { useRole } from '../../hooks/useAuth'
 import type { RifaCreate } from '../../types'
@@ -18,7 +19,10 @@ import type { RifaCreate } from '../../types'
 export default function Rifas() {
   const qc = useQueryClient()
   const navigate = useNavigate()
-  const isSuperAdmin = useRole() === 'super_admin'
+  const role = useRole()
+  const isSuperAdmin = role === 'super_admin'
+  // La administración revisa los pagos en /pasarelas; el comunero que administra rifas, aquí
+  const esComunero = role === 'comunero'
   const [creando, setCreando] = useState(false)
   const [error, setError] = useState('')
 
@@ -126,6 +130,8 @@ export default function Rifas() {
           </div>
         </Card>
       )}
+
+      {esComunero && <PagosPorRevisar />}
 
       <RifaFormModal
         open={creando}

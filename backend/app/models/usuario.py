@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -32,6 +32,9 @@ class Usuario(Base):
     telefono: Mapped[Optional[str]] = mapped_column(String)
     # Último establecimiento o cambio de clave: los JWT emitidos antes dejan de valer
     clave_cambiada_en: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # Permiso de un comunero para administrar las rifas (cambio admin-rifas). No es un rol: sigue
+    # siendo comunero en todo lo demás. Solo lo puede tener un comunero.
+    administra_rifas: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     rol: Mapped["Rol"] = relationship("Rol", back_populates="usuarios")
     condominio: Mapped[Optional["Condominio"]] = relationship(

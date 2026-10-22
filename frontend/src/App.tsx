@@ -1,8 +1,8 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { ModuloRoute } from './components/layout/ModuloRoute'
-import { useAuth, useModulos, useRole } from './hooks/useAuth'
+import { useAdministraRifas, useAuth, useModulos, useRole } from './hooks/useAuth'
 import { pantallaDeInicio } from './config/inicio'
 import { Spinner } from './components/ui/Spinner'
 
@@ -43,6 +43,13 @@ function SinAcceso() {
       </button>
     </div>
   )
+}
+
+/** Administración de rifas: admins y el comunero con el permiso (cambio admin-rifas) */
+function RifasAdminRoute() {
+  const administra = useAdministraRifas()
+  if (!administra) return <Navigate to="/" replace />
+  return <Outlet />
 }
 
 const esAdmin = (role: string | null | undefined) => role === 'super_admin' || role === 'admin_condominio'
@@ -107,8 +114,10 @@ export default function App() {
             <Route path="/cobranza" element={<CobranzaRouter />} />
           </Route>
           <Route element={<ModuloRoute modulo="rifas" />}>
-            <Route path="/rifas" element={<Rifas />} />
-            <Route path="/rifas/:id" element={<RifaDetalle />} />
+            <Route element={<RifasAdminRoute />}>
+              <Route path="/rifas" element={<Rifas />} />
+              <Route path="/rifas/:id" element={<RifaDetalle />} />
+            </Route>
           </Route>
         </Route>
       </Route>

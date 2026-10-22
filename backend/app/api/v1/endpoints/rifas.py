@@ -26,11 +26,12 @@ from sqlalchemy.orm import selectinload
 
 from app.core.audit import registrar_auditoria
 from app.core.dependencies import (
-    AdminRequired,
     PorteriaRequired,
     RifaAccesoRequired,
+    RifaAdminRequired,
     SuperAdminRequired,
     TenantId,
+    administra_rifas,
     get_db,
 )
 from app.models.pago import IntencionPago
@@ -63,8 +64,6 @@ router = APIRouter(prefix="/rifas", tags=["rifas"])
 
 DB = Annotated[AsyncSession, Depends(get_db)]
 
-ADMIN_ROLES = ("super_admin", "admin_condominio")
-STAFF_ROLES = (*ADMIN_ROLES, "porteria")
 
 # Hora local para la caja y los CSV
 ZONA_HORARIA = ZoneInfo("America/Santiago")
@@ -84,12 +83,13 @@ VOUCHER_MAX_BYTES = 10 * 1024 * 1024
 # ---------------------------------------------------------------------------
 
 def _es_admin(user: Usuario) -> bool:
-    return user.rol.nombre in ADMIN_ROLES
+    """Administración, o el comunero con permiso de administrar rifas."""
+    return administra_rifas(user)
 
 
 def _es_staff(user: Usuario) -> bool:
-    """Administración o portería: ven todas las compras de la rifa."""
-    return user.rol.nombre in STAFF_ROLES
+    """Quien administra rifas o la portería: ven todas las compras de la rifa."""
+    return _es_admin(user) or user.rol.nombre == "porteria"
 
 
 def _orden_natural(numero_parcela: str) -> tuple[int, str]:
@@ -364,7 +364,7 @@ async def list_rifas(
 async def crear_rifa(
     data: RifaCreate,
     request: Request,
-    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    current_user: Annotated[Usuario, Depends(RifaAdminRequired)],
     tenant_id: TenantId,
     db: DB,
 ):
@@ -407,7 +407,7 @@ async def actualizar_rifa(
     rifa_id: int,
     data: RifaUpdate,
     request: Request,
-    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    current_user: Annotated[Usuario, Depends(RifaAdminRequired)],
     tenant_id: TenantId,
     db: DB,
 ):
@@ -842,7 +842,7 @@ async def confirmar_pago(
     rifa_id: int,
     compra_id: int,
     request: Request,
-    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    current_user: Annotated[Usuario, Depends(RifaAdminRequired)],
     tenant_id: TenantId,
     db: DB,
 ):
@@ -943,7 +943,7 @@ async def ver_voucher(
 async def cerrar_rifa(
     rifa_id: int,
     request: Request,
-    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    current_user: Annotated[Usuario, Depends(RifaAdminRequired)],
     tenant_id: TenantId,
     db: DB,
 ):
@@ -996,7 +996,7 @@ async def cerrar_rifa(
 async def reabrir_rifa(
     rifa_id: int,
     request: Request,
-    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    current_user: Annotated[Usuario, Depends(RifaAdminRequired)],
     tenant_id: TenantId,
     db: DB,
 ):
@@ -1034,7 +1034,7 @@ async def marcar_imputacion(
     imputacion_id: int,
     data: MarcarImputacionRequest,
     request: Request,
-    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    current_user: Annotated[Usuario, Depends(RifaAdminRequired)],
     tenant_id: TenantId,
     db: DB,
 ):
@@ -1090,7 +1090,7 @@ _CANAL_TEXTO = {"portal": "Portal", "porteria": "Portería", "administracion": "
 @router.get("/{rifa_id}/imputaciones.csv")
 async def exportar_imputaciones(
     rifa_id: int,
-    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    current_user: Annotated[Usuario, Depends(RifaAdminRequired)],
     tenant_id: TenantId,
     db: DB,
 ):
@@ -1121,7 +1121,7 @@ async def exportar_imputaciones(
 @router.get("/{rifa_id}/export.csv")
 async def exportar_csv(
     rifa_id: int,
-    current_user: Annotated[Usuario, Depends(AdminRequired)],
+    current_user: Annotated[Usuario, Depends(RifaAdminRequired)],
     tenant_id: TenantId,
     db: DB,
 ):
